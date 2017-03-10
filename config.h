@@ -5,13 +5,14 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 2
-#define THREAD_CNT 4
-#define REM_THREAD_CNT THREAD_CNT
-#define SEND_THREAD_CNT THREAD_CNT
-#define CORE_CNT 8
+#define NODE_CNT 1
+#define THREAD_CNT 10
+#define REM_THREAD_CNT 5//THREAD_CNT
+#define SEND_THREAD_CNT 5//THREAD_CNT
+#define CORE_CNT 20 
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT NODE_CNT
+//#define PART_CNT NODE_CNT
+#define PART_CNT 1
 #define CLIENT_NODE_CNT NODE_CNT
 #define CLIENT_THREAD_CNT 4
 #define CLIENT_REM_THREAD_CNT 2
@@ -98,7 +99,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-#define CC_ALG TIMESTAMP
+//#define CC_ALG TIMESTAMP
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -162,9 +164,10 @@
 // SKEW_METHOD: 
 //    ZIPF: use ZIPF_THETA distribution
 //    HOT: use ACCESS_PERC of the accesses go to DATA_PERC of the data
-#define SKEW_METHOD ZIPF
+#define SKEW_METHOD HOT//ZIPF
 #define DATA_PERC 100
-#define ACCESS_PERC 0.03
+//#define ACCESS_PERC 0.03
+#define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
 #define SYNTH_TABLE_SIZE 65536
 #define ZIPF_THETA 0.3
@@ -351,7 +354,7 @@ enum PPSTxnType {PPS_ALL = 0,
 
 #define SEED 0
 #define SHMEM_ENV false
-#define ENVIRONMENT_EC2 true
+#define ENVIRONMENT_EC2 false
 
 #endif
 
