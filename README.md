@@ -22,8 +22,8 @@ DBMS BENCHMARK
   ddbms is a OLTP database benchmark with the following features.
   
   1. Seven different concurrency control algorithms are supported.
-	NO_WAIT[1]		: no wait two phase locking
-	WAIT_DIE[1]		: wait and die two phase locking
+	NO\_WAIT[1]		: no wait two phase locking
+	WAIT\_DIE[1]		: wait and die two phase locking
 	TIMESTAMP[1]	: basic T/O
 	MVCC[2]			: multi-version T/O
 	OCC[3]			: optimistic concurrency control (MaaT)
@@ -47,70 +47,70 @@ DBMS BENCHMARK
 
 dbms benchmark has the following parameters in the config file. Parameters with a * sign should not be changed.
 
-  CORE_CNT		: number of cores modeled in the system.
-  NODE_CNT		: number of computation nodes modeled in the system
-  PART_CNT		: number of logical partitions in the system; Should equal CORE_CNT * NODE_CNT
-  THREAD_CNT	: number of worker threads 
-  REM_THREAD_CNT	: number of message receiver threads 
-  SEND_THREAD_CNT	: number of message sender threads 
-  TPORT_TYPE : communication protocol (TCP, IPC)
-  ENVIRONMENT_EC2 : true if running on Amazon EC2
+-  CORE\_CNT		: number of cores modeled in the system.
+-  NODE\_CNT		: number of computation nodes modeled in the system
+-  PART\_CNT		: number of logical partitions in the system; Should equal CORE\_CNT * NODE\_CNT
+- THREAD\_CNT	: number of worker threads 
+-  REM\_THREAD\_CNT	: number of message receiver threads 
+-  SEND\_THREAD\_CNT	: number of message sender threads 
+-  TPORT\_TYPE : communication protocol (TCP, IPC)
+-  ENVIRONMENT\_EC2 : true if running on Amazon EC2
 
-  PAGE_SIZE		: memory page size
-  CL_SIZE		: cache line size
+-  PAGE\_SIZE		: memory page size
+-  CL\_SIZE		: cache line size
 
-  DONE_TIMER : number of nanoseconds to run experiment
-  WARMUP_TIMER		: number of nanoseconds to run for warmup
-  SEQ_BATCH_TIMER : number of nanoseconds between CALVIN batches
-  WORKLOAD		: workload supported (TPCC, YCSB, or PPS)
-  CC_ALG		: concurrency control algorithm (WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, or MAAT)
-  ISOLATION_LEVEL : system isolation level (SERIALIZABLE, READ_COMMITTED, READ_UNCOMMITTED, or NOLOCK)
+-  DONE\_TIMER : number of nanoseconds to run experiment
+-  WARMUP\_TIMER		: number of nanoseconds to run for warmup
+-  SEQ\_BATCH\_TIMER : number of nanoseconds between CALVIN batches
+-  WORKLOAD		: workload supported (TPCC, YCSB, or PPS)
+-  CC\_ALG		: concurrency control algorithm (WAIT\_DIE, NO\_WAIT, TIMESTAMP, MVCC, CALVIN, or MAAT)
+-  ISOLATION\_LEVEL : system isolation level (SERIALIZABLE, READ\_COMMITTED, READ\_UNCOMMITTED, or NOLOCK)
   
-  THREAD_ALLOC	: per thread allocator. 
-  * MEM_PAD		: enable memory padding to avoid false sharing.
-  MEM_ALLIGN	: allocated blocks are alligned to MEM_ALLIGN bytes
+-  THREAD\_ALLOC	: per thread allocator. 
+-  \* MEM\_PAD		: enable memory padding to avoid false sharing.
+-  MEM\_ALLIGN	: allocated blocks are alligned to MEM\_ALLIGN bytes
 
-  * ROLL_BACK		: roll back the modifications if a transaction aborts.
+-  \* ROLL\_BACK		: roll back the modifications if a transaction aborts.
   
-  ENABLE_LATCH  : enable latching in btree index
-  * CENTRAL_INDEX : centralized index structure
-  * CENTRAL_MANAGER	: centralized lock/timestamp manager
-  INDEX_STRCT	: data structure for index. 
-  BTREE_ORDER	: fanout of each B-tree node
+-  ENABLE\_LATCH  : enable latching in btree index
+-  \* CENTRAL\_INDEX : centralized index structure
+-  \* CENTRAL\_MANAGER	: centralized lock/timestamp manager
+-  INDEX\_STRCT	: data structure for index. 
+-  BTREE\_ORDER	: fanout of each B-tree node
 
-  TS_TWR		: enable Thomas Write Rule (TWR) in TIMESTAMP
-  HIS_RECYCLE_LEN	: in MVCC, history will be recycled if they are too long.
-  MAX_WRITE_SET	: the max size of a write set in OCC.
+-  TS\_TWR		: enable Thomas Write Rule (TWR) in TIMESTAMP
+-  HIS\_RECYCLE\_LEN	: in MVCC, history will be recycled if they are too long.
+-  MAX\_WRITE\_SET	: the max size of a write set in OCC.
 
-  MAX_ROW_PER_TXN	: max number of rows touched per transaction.
-  QUERY_INTVL	: the rate at which database queries come
-  MAX_TXN_PER_PART	: maximum transactions to run per partition.
+-  MAX\_ROW\_PER\_TXN	: max number of rows touched per transaction.
+-  QUERY\_INTVL	: the rate at which database queries come
+-  MAX\_TXN\_PER\_PART	: maximum transactions to run per partition.
   
   // for YCSB Benchmark
-  SYNTH_TABLE_SIZE	: table size
-  ZIPF_THETA	: theta in zipfian distribution (rows accessed follow zipfian distribution)
-  READ_PERC		:
-  WRITE_PERC	:
-  SCAN_PERC		: percentage of read/write/scan queries. they should add up to 1.
-  SCAN_LEN		: number of rows touched per scan query.
-  PART_PER_TXN	: number of logical partitions to touch per transaction
-  PERC_MULTI_PART	: percentage of multi-partition transactions
-  REQ_PER_QUERY	: number of queries per transaction
-  FIRST_PART_LOCAL	: with this being true, the first touched partition is always the local partition.
+-  SYNTH\_TABLE\_SIZE	: table size
+-  ZIPF\_THETA	: theta in zipfian distribution (rows accessed follow zipfian distribution)
+-  READ\_PERC		:
+-  WRITE\_PERC	:
+-  SCAN\_PERC		: percentage of read/write/scan queries. they should add up to 1.
+-  SCAN\_LEN		: number of rows touched per scan query.
+-  PART\_PER\_TXN	: number of logical partitions to touch per transaction
+-  PERC\_MULTI\_PART	: percentage of multi-partition transactions
+-  REQ\_PER\_QUERY	: number of queries per transaction
+  FIRST\_PART\_LOCAL	: with this being true, the first touched partition is always the local partition.
   
   // for TPCC Benchmark
-  NUM_WH		: number of warehouses being modeled.
-  PERC_PAYMENT	: percentage of payment transactions.
-  DIST_PER_WH	: number of districts in one warehouse
-  MAX_ITEMS		: number of items modeled.
-  CUST_PER_DIST	: number of customers per district
-  ORD_PER_DIST	: number of orders per district
-  FIRSTNAME_LEN	: length of first name
-  MIDDLE_LEN	: length of middle name
-  LASTNAME_LEN	: length of last name
+-  NUM\_WH		: number of warehouses being modeled.
+-  PERC\_PAYMENT	: percentage of payment transactions.
+-  DIST\_PER\_WH	: number of districts in one warehouse
+-  MAX\_ITEMS		: number of items modeled.
+-  CUST\_PER\_DIST	: number of customers per district
+-  ORD\_PER\_DIST	: number of orders per district
+-  FIRSTNAME\_LEN	: length of first name
+-  MIDDLE\_LEN	: length of middle name
+-  LASTNAME\_LEN	: length of last name
 
   // for PPS Benchmark
-	MAX_PPS_PART_KEY : number of parts in the parts table
-	MAX_PPS_PRODUCT_KEY :  number of products in the products table
-	MAX_PPS_SUPPLIER_KEY :  number of suppliers in the suppliers table
-	MAX_PPS_PARTS_PER : number of parts per product or supplier
+-	MAX\_PPS\_PART\_KEY : number of parts in the parts table
+-	MAX\_PPS\_PRODUCT\_KEY :  number of products in the products table
+-	MAX\_PPS\_SUPPLIER\_KEY :  number of suppliers in the suppliers table
+-	MAX\_PPS\_PARTS\_PER : number of parts per product or supplier

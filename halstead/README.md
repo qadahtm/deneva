@@ -11,8 +11,8 @@ To request resources from Halstead, use ssh and your Career credintials to login
 cluser. On the front-end machine, run the following command to request 2 nodes with all 
 of their cores and memory resources. 
 
-```ssh $ qsub -I -l 
-nodes=2:ppn=20:A,walltime=02:00:00,naccesspolicy=singleuser 
+```sh 
+$ qsub -I -lnodes=2:ppn=20:A,walltime=02:00:00,naccesspolicy=singleuser 
 ```
 
 The above command will request 2 nodes with 20 cores, and you will have these 2 nodes 
