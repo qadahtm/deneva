@@ -6,17 +6,23 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 10
-#define REM_THREAD_CNT 5//THREAD_CNT
-#define SEND_THREAD_CNT 5//THREAD_CNT
-#define CORE_CNT 20 
+#define THREAD_CNT 5 
+#define REM_THREAD_CNT 1//THREAD_CNT
+#define SEND_THREAD_CNT 1//THREAD_CNT
+#define CORE_CNT 8
 // PART_CNT should be at least NODE_CNT
-//#define PART_CNT NODE_CNT
-#define PART_CNT 1
-#define CLIENT_NODE_CNT NODE_CNT
-#define CLIENT_THREAD_CNT 4
-#define CLIENT_REM_THREAD_CNT 2
-#define CLIENT_SEND_THREAD_CNT 2
+#define PART_CNT NODE_CNT
+
+// TQ: since we have 20 cores per node on halstead
+// With a single node used for client requests, 
+// it is better to assign 5 threads for each client per node.
+// Assigning more threads for each client processes
+// seems to lower the number of transactions submitted
+// to the server
+#define CLIENT_NODE_CNT 1//4
+#define CLIENT_THREAD_CNT 12 
+#define CLIENT_REM_THREAD_CNT 4
+#define CLIENT_SEND_THREAD_CNT 8
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -164,23 +170,26 @@
 // SKEW_METHOD: 
 //    ZIPF: use ZIPF_THETA distribution
 //    HOT: use ACCESS_PERC of the accesses go to DATA_PERC of the data
-#define SKEW_METHOD HOT//ZIPF
+#define SKEW_METHOD ZIPF
 #define DATA_PERC 100
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-#define SYNTH_TABLE_SIZE 65536
-#define ZIPF_THETA 0.3
+//#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 1048576
+#define SYNTH_TABLE_SIZE 16777216 // 16M recs 
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define WRITE_PERC 0.0
 #define TXN_WRITE_PERC 0.0
 #define TUP_WRITE_PERC 0.0
 #define SCAN_PERC           0
 #define SCAN_LEN          20
-#define PART_PER_TXN PART_CNT
-#define PERC_MULTI_PART     MPR 
+#define PART_PER_TXN 1//PART_CNT
+#define PERC_MULTI_PART 1//MPR 
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 #define CREATE_TXN_FILE false
-#define STRICT_PPT 0
+#define STRICT_PPT 1//0
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
 // small tpcc schemas shrink the table size.

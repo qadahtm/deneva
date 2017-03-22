@@ -1,0 +1,12 @@
+#! /bin/sh
+if [ "$#" -ne 3 ]; then
+  echo "Illegal number of parameters, exiting."
+  exit  
+fi
+echo "Output directory: $1"
+echo "Number of clients: $3"
+e=$(($2+$3-1))
+for i in `seq $2 $e`; do
+  echo "running: ./runcl -nid$i -o $1/c$i.out &"
+  #eval "./runcl -nid$i -o $1/c$i.out &"
+done

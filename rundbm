@@ -1,0 +1,15 @@
+#! /bin/sh
+if [ "$#" -ne 6 ]; then
+  echo "Illegal number of parameters, exiting."
+  exit  
+fi
+echo "Output directory: $1"
+echo "Number of servers: $3"
+e=$(($2+$3-1))
+for i in `seq $2 $e`; do
+  cmd="./rundb -nid$i -o $1/s$i.out &"
+  cmd_numactl="numactl -m $4 -N $5 -C $6 ./rundb -nid$i -o $1/s$i.out &"
+  cmd_taskset="taskset -c 0-7 ./rundb -nid$i -o $1/s$i.out &"
+  echo "running: $cmd_numactl"
+  #eval $cmd
+done

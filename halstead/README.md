@@ -49,3 +49,45 @@ TBD
 ## Running Deneva
 Refer to the README.md at the root directory. I will add details specific to halstead 
 here if any
+
+For generating ifconfig.txt, we need to have IP addresses in them. Hostnames do not 
+work. Also, IP addresses for servers should be listed first and clients later. Working 
+on a python script that automatically generate this file for Halstead is in-progress.
+
+### Server-side configuration
+The key config parameters are:
+- NODE_CNT: Number of server nodes
+- THREAD_CNT: number of worker threads
+- REM_THREAD_CNT: number of message receiver threads, usually is set to THREAD_CNT
+- SEND_THREAD_CNT: number of message sender threads, usually is set to THREAD_CNT
+- CORE_CNT: number of cores in the node. e.g. in VLDB'17 paper this is set to 8
+
+### Client-side configuration
+
+Client processes need to be able to submit transactions such that the servers are 
+saturated and operating at their maximum capacity. 
+
+The configuration parameters are:
+- CLIENT_NODE_CNT : number of client processes (they can reside on the same physical node) 
+- CLIENT_THREAD_CNT : number of threads assigned for each client
+- CLIENT_REM_THREAD_CNT : number of message receiver threads
+- CLIENT_SEND_THREAD_CNT : number of message sender therads
+
+There is a requirement for total thread counts to less than or equal to THREAD_CNT + 
+REM_THREAD_CNT + SEND_THREAD_CNT + 1 (for an abort thread, this is 
+harcoded in `system/global.cpp`)
+
+Here is an example of running 1 server process and 4 client processes.
+The key config parameters are:
+- NODE_CNT: Number of server nodes
+
+Example ifconfig.txt:
+```
+172.18.48.235
+172.18.49.149
+172.18.49.149
+172.18.49.149
+172.18.49.149
+```
+Ssh to the server node, got to the 
+
