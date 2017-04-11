@@ -51,7 +51,8 @@ int main(int argc, char* argv[])
 	parser(argc, argv);
     assert(g_node_id >= g_node_cnt);
     //assert(g_client_node_cnt <= g_node_cnt);
-
+    //TQ: adding 2 more threads, one for parent an another one is spawned (see what it is for)
+    assert(g_core_cnt == (g_total_client_thread_cnt+2));
 	uint64_t seed = get_sys_clock();
 	srand(seed);
 	printf("Random seed: %ld\n",seed);
@@ -142,6 +143,7 @@ int main(int argc, char* argv[])
   fflush(stdout);
 
 #if CREATE_TXN_FILE
+  printf("Generating transactions only ... exitting! ");
   return(0);
 #endif
 
@@ -155,33 +157,49 @@ int main(int argc, char* argv[])
 	cpu_set_t cpus;
 	// spawn and run txns again.
 	starttime = get_server_clock();
-  simulation->run_starttime = starttime;
+    simulation->run_starttime = starttime;
 
-  uint64_t id = 0;
+    uint64_t id = 0;
+    CPU_ZERO(&cpus);
+    CPU_SET(cpu_cnt, &cpus);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
+    cpu_cnt++;
 	for (uint64_t i = 0; i < thd_cnt; i++) {
 		CPU_ZERO(&cpus);
-#if TPORT_TYPE_IPC
-        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
-#elif !SET_AFFINITY
-        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
-#else
+//#if TPORT_TYPE_IPC
+//        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
+//#elif !SET_AFFINITY
+//        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
+//#else
         CPU_SET(cpu_cnt, &cpus);
-#endif
-		cpu_cnt = (cpu_cnt + 1) % g_servers_per_client;
-    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-    client_thds[i].init(id,g_node_id,m_wl);
+//#endif
+//    cpu_cnt = (cpu_cnt + 1) % g_servers_per_client;
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        client_thds[i].init(id,g_node_id,m_wl);
 		pthread_create(&p_thds[id++], &attr, run_thread, (void *)&client_thds[i]);
+        pthread_setname_np(p_thds[id-1], "worker");
+        cpu_cnt++;
     }
 
 	for (uint64_t j = 0; j < rthd_cnt ; j++) {
-    input_thds[j].init(id,g_node_id,m_wl);
-		pthread_create(&p_thds[id++], NULL, run_thread, (void *)&input_thds[j]);
-  }
+        input_thds[j].init(id,g_node_id,m_wl);
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu_cnt, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+		pthread_create(&p_thds[id++], &attr, run_thread, (void *)&input_thds[j]);
+        pthread_setname_np(p_thds[id-1], "receiver");
+        cpu_cnt++;
+    }
 
 	for (uint64_t i = 0; i < sthd_cnt; i++) {
-    output_thds[i].init(id,g_node_id,m_wl);
-		pthread_create(&p_thds[id++], NULL, run_thread, (void *)&output_thds[i]);
-  }
+        output_thds[i].init(id,g_node_id,m_wl);
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu_cnt, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+		pthread_create(&p_thds[id++], &attr, run_thread, (void *)&output_thds[i]);
+        pthread_setname_np(p_thds[id-1], "sender");
+        cpu_cnt++;
+    }
 	for (uint64_t i = 0; i < all_thd_cnt; i++) 
 		pthread_join(p_thds[i], NULL);
 

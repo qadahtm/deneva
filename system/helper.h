@@ -47,6 +47,18 @@
     fflush(stdout); \
   }
 
+#define DEBUG_Q(...) \
+  if(DEBUG_QUECC) { \
+    fprintf(stdout,__VA_ARGS__); \
+    fflush(stdout); \
+  }
+
+#define DEBUG_WL(...) \
+  if(DEBUG_WLOAD) { \
+    fprintf(stdout,__VA_ARGS__); \
+    fflush(stdout); \
+  }
+
 #define PRINT_LATENCY(...) \
   if(DEBUG_LATENCY && warmup_done) { \
     fprintf(stdout,__VA_ARGS__); \

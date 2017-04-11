@@ -5,11 +5,11 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 1
+#define NODE_CNT 1//2
 #define THREAD_CNT 5 
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 8
+#define CORE_CNT 10
 // PART_CNT should be at least NODE_CNT
 #define PART_CNT NODE_CNT
 
@@ -19,10 +19,10 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 1//4
-#define CLIENT_THREAD_CNT 12 
-#define CLIENT_REM_THREAD_CNT 4
-#define CLIENT_SEND_THREAD_CNT 8
+#define CLIENT_NODE_CNT 1//2//4
+#define CLIENT_THREAD_CNT 4
+#define CLIENT_REM_THREAD_CNT 2
+#define CLIENT_SEND_THREAD_CNT 2
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -106,7 +106,7 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
 //#define CC_ALG TIMESTAMP
-#define CC_ALG NO_WAIT
+#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -162,7 +162,13 @@
 // max number of rows touched per transaction
 #define MAX_ROW_PER_TXN       64
 #define QUERY_INTVL         1UL
-#define MAX_TXN_PER_PART 500000
+/**
+ * MAX_TXN_PER_PART indicate the maximum number of "unique" transactions instances to be
+ * generated per partition during client setup, which will be stored in an in-memory vector.
+ * During the run phase, client worker threads will take one transaction at a time and send it to the server
+ * If this number is exhausted during the run, client threads will loop over from the start.
+ */
+#define MAX_TXN_PER_PART 500000 * 5
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -174,20 +180,21 @@
 #define DATA_PERC 100
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
-#define INIT_PARALLELISM 8
+#define INIT_PARALLELISM 20//8
 //#define SYNTH_TABLE_SIZE 65536
-//#define SYNTH_TABLE_SIZE 1048576
-#define SYNTH_TABLE_SIZE 16777216 // 16M recs 
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
-#define WRITE_PERC 0.0
-#define TXN_WRITE_PERC 0.0
-#define TUP_WRITE_PERC 0.0
+#define SYNTH_TABLE_SIZE 1048576
+//#define SYNTH_TABLE_SIZE 16777216 // 16M recs 
+#define ZIPF_THETA 0.7//0.3 0.0 -> Uniform
+#define WRITE_PERC 0.5
+#define TXN_WRITE_PERC 0.5
+#define TUP_WRITE_PERC 0.5
 #define SCAN_PERC           0
 #define SCAN_LEN          20
 #define PART_PER_TXN 1//PART_CNT
 #define PERC_MULTI_PART 1//MPR 
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
+// Use this to only generate transactions
 #define CREATE_TXN_FILE false
 #define STRICT_PPT 1//0
 // ==== [TPCC] ====
@@ -281,6 +288,11 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_TIMELINE        false
 #define DEBUG_BREAKDOWN       false
 #define DEBUG_LATENCY       false
+
+// For QueCC
+#define DEBUG_QUECC false
+// FOr Workload Debugging
+#define DEBUG_WLOAD true
 
 /***********************************************/
 // MODES

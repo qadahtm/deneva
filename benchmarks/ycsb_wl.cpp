@@ -127,6 +127,7 @@ void YCSBWorkload::init_table_parallel() {
 	pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
 	for (UInt32 i = 0; i < g_init_parallelism - 1; i++) {
 		pthread_create(&p_thds[i], NULL, threadInitTable, this);
+		pthread_setname_np(p_thds[i], "wl");
 	}
 	threadInitTable(this);
 

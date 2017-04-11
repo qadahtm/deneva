@@ -249,6 +249,10 @@ int main(int argc, char* argv[])
 #if SET_AFFINITY
   uint64_t cpu_cnt = 0;
   cpu_set_t cpus;
+  CPU_ZERO(&cpus);
+  CPU_SET(cpu_cnt, &cpus);
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
+  cpu_cnt++;
 #endif
   // spawn and run txns again.
   starttime = get_server_clock();
@@ -265,48 +269,79 @@ int main(int argc, char* argv[])
       assert(id >= 0 && id < wthd_cnt);
       worker_thds[i].init(id,g_node_id,m_wl);
       pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
+      pthread_setname_np(p_thds[id-1], "s_worker");
 	}
 	for (uint64_t j = 0; j < rthd_cnt ; j++) {
+#if SET_AFFINITY
+      CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+#endif
 	    assert(id >= wthd_cnt && id < wthd_cnt + rthd_cnt);
 	    input_thds[j].init(id,g_node_id,m_wl);
-	    pthread_create(&p_thds[id++], NULL, run_thread, (void *)&input_thds[j]);
+	    pthread_create(&p_thds[id++], &attr, run_thread, (void *)&input_thds[j]);
+        pthread_setname_np(p_thds[id-1], "s_receiver");
 	}
 
 
 	for (uint64_t j = 0; j < sthd_cnt; j++) {
+#if SET_AFFINITY
+        CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+#endif
 	    assert(id >= wthd_cnt + rthd_cnt && id < wthd_cnt + rthd_cnt + sthd_cnt);
 	    output_thds[j].init(id,g_node_id,m_wl);
-	    pthread_create(&p_thds[id++], NULL, run_thread, (void *)&output_thds[j]);
+	    pthread_create(&p_thds[id++], &attr, run_thread, (void *)&output_thds[j]);
+        pthread_setname_np(p_thds[id-1], "s_sender");
 	  }
 #if LOGGING
+    #if SET_AFFINITY
+      CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+    #endif
     log_thds[0].init(id,g_node_id,m_wl);
-    pthread_create(&p_thds[id++], NULL, run_thread, (void *)&log_thds[0]);
+    pthread_create(&p_thds[id++], &attr, run_thread, (void *)&log_thds[0]);
+    pthread_setname_np(p_thds[id-1], "s_logger");
 #endif
 
 #if CC_ALG != CALVIN
+    #if SET_AFFINITY
+      CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+    #endif
   abort_thds[0].init(id,g_node_id,m_wl);
-  pthread_create(&p_thds[id++], NULL, run_thread, (void *)&abort_thds[0]);
+  pthread_create(&p_thds[id++], &attr, run_thread, (void *)&abort_thds[0]);
+    pthread_setname_np(p_thds[id-1], "aborter");
 #endif
 
 #if CC_ALG == CALVIN
 #if SET_AFFINITY
-		CPU_ZERO(&cpus);
+    CPU_ZERO(&cpus);
     CPU_SET(cpu_cnt, &cpus);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-		cpu_cnt++;
+    cpu_cnt++;
 #endif
+    calvin_lock_thds[0].init(id,g_node_id,m_wl);
+    pthread_create(&p_thds[id++], &attr, run_thread, (void *)&calvin_lock_thds[0]);
+    pthread_setname_np(p_thds[id-1], "calvin_sched");
 
-  calvin_lock_thds[0].init(id,g_node_id,m_wl);
-  pthread_create(&p_thds[id++], &attr, run_thread, (void *)&calvin_lock_thds[0]);
 #if SET_AFFINITY
-		CPU_ZERO(&cpus);
+	CPU_ZERO(&cpus);
     CPU_SET(cpu_cnt, &cpus);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-		cpu_cnt++;
+    cpu_cnt++;
 #endif
 
   calvin_seq_thds[0].init(id,g_node_id,m_wl);
   pthread_create(&p_thds[id++], &attr, run_thread, (void *)&calvin_seq_thds[0]);
+    pthread_setname_np(p_thds[id-1], "calvin_seq");
 #endif
 
 

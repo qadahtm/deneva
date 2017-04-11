@@ -50,11 +50,14 @@ BaseQuery * YCSBQueryGenerator::create_query(Workload * h_wl, uint64_t home_part
 }
 
 void YCSBQuery::print() {
-  
+#if CREATE_TXN_FILE
+    printf("YCSB_TXN{");
   for(uint64_t i = 0; i < requests.size(); i++) {
-    printf("%d %ld, ",requests[i]->acctype,requests[i]->key);
+      if (i != 0) printf(":");
+    printf("%d,%ld",requests[i]->acctype,requests[i]->key);
   }
-  printf("\n");
+  printf("}\n");
+#endif
   /*
     printf("YCSBQuery: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld\n"
         ,GET_NODE_ID(requests[0]->key)
@@ -328,7 +331,7 @@ BaseQuery * YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wo
         }
     }
 		ycsb_request * req = (ycsb_request*) mem_allocator.alloc(sizeof(ycsb_request));
-		if (r_twr < g_txn_read_perc || r < g_tup_read_perc) 
+		if (r_twr < g_txn_read_perc || r < g_tup_read_perc)
 			req->acctype = RD;
 		else
 			req->acctype = WR;
@@ -370,7 +373,7 @@ BaseQuery * YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wo
     query->partitions.add(*it);
   }
 
-  //query->print();
+  query->print();
   return query;
 
 }

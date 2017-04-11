@@ -45,17 +45,18 @@ Client_query_queue::init(Workload * h_wl) {
     query_cnt[id] = (uint64_t*)mem_allocator.align_alloc(sizeof(uint64_t));
   }
   next_tid = 0;
-
+    /*
     pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
     for (UInt32 i = 0; i < g_init_parallelism - 1; i++) {
       pthread_create(&p_thds[i], NULL, initQueriesHelper, this);
+      pthread_setname_np(p_thds[i], "clientquery");
     }
-
+    */
     initQueriesHelper(this);
-
+    /*
     for (uint32_t i = 0; i < g_init_parallelism - 1; i++) {
       pthread_join(p_thds[i], NULL);
-    }
+    }*/
 
 
 }
@@ -73,11 +74,17 @@ Client_query_queue::initQueriesParallel() {
 	request_cnt = g_max_txn_per_part + 4;
 	
     uint32_t final_request;
+
+#if CREATE_TXN_FILE
+    // TQ; single threaded generation
+  final_request = request_cnt;
+#else
     if (tid == g_init_parallelism-1) {
         final_request = request_cnt;
     } else {
         final_request = request_cnt / g_init_parallelism * (tid+1);
     }
+#endif
 
 #if WORKLOAD == YCSB	
     YCSBQueryGenerator * gen = new YCSBQueryGenerator;
@@ -94,11 +101,31 @@ Client_query_queue::initQueriesParallel() {
     }
   }
 #else
+
+  UInt32 gq_cnt = 0;
+#if CREATE_TXN_FILE
+  DEBUG_WL("single threaded generation ...\n")
+  for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
+    // SINGLE thread
+//    for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+    for (UInt32 query_id = 0; query_id < final_request; query_id ++) {
+      queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+      gq_cnt++;
+    }
+  }
+#else
   for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
     for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
       queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+      gq_cnt++;
     }
   }
+#endif
+  DEBUG_WL("final_request = %d\n", final_request)
+  DEBUG_WL("request_cnt = %lu\n", request_cnt)
+  DEBUG_WL("g_init_parallelism = %d\n", g_init_parallelism)
+  DEBUG_WL("g_servers_per_client = %d\n", g_servers_per_client)
+  DEBUG_WL("Client: tid(%d): generated query count = %d\n", tid, gq_cnt);
 #endif
 
 }

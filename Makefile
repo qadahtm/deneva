@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-Wall -g -gdwarf-3 -std=c++0x 
+CFLAGS=-Wall -g -gdwarf-3 -std=c++0x
 #CFLAGS += -fsanitize=address -fno-omit-frame-pointer 
 #JEMALLOC=./jemalloc-4.0.3
 JEMALLOC=../deps/jemalloc-4.5.0
