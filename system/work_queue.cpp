@@ -216,7 +216,7 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
       INC_STATS(thd_id,work_queue_old_cnt,1);
     }
     msg->wq_time = queue_time;
-    //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
+    DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
     DEBUG("Work Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
     DEBUG_M("QWorkQueue::dequeue work_queue_entry free\n");
     mem_allocator.free(entry,sizeof(work_queue_entry));

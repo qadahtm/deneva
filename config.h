@@ -53,7 +53,7 @@
 #define FIN_BY_TIME true
 #define MAX_TXN_IN_FLIGHT 100
 
-#define SERVER_GENERATE_QUERIES false
+#define SERVER_GENERATE_QUERIES true
 
 /***********************************************/
 // Memory System
@@ -168,7 +168,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART 500000 * 5
+#define MAX_TXN_PER_PART 500000// * 5
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -180,7 +180,7 @@
 #define DATA_PERC 100
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
-#define INIT_PARALLELISM 20//8
+#define INIT_PARALLELISM 8
 //#define SYNTH_TABLE_SIZE 65536
 #define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs 
@@ -196,6 +196,7 @@
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
+#define SINGLE_THREAD_WL_GEN true
 #define STRICT_PPT 1//0
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory

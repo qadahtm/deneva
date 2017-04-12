@@ -32,6 +32,7 @@
 #include "sequencer.h"
 #include "logger.h"
 #include "maat.h"
+#include "../config.h"
 
 mem_alloc mem_allocator;
 Stats stats;
