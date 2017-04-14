@@ -45,19 +45,23 @@ Client_query_queue::init(Workload * h_wl) {
     query_cnt[id] = (uint64_t*)mem_allocator.align_alloc(sizeof(uint64_t));
   }
   next_tid = 0;
-    /*
+
+#if CREATE_TXN_FILE
+  // single threaded generation to ensure output is not malformed
+  initQueriesHelper(this);
+#else
     pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
     for (UInt32 i = 0; i < g_init_parallelism - 1; i++) {
       pthread_create(&p_thds[i], NULL, initQueriesHelper, this);
       pthread_setname_np(p_thds[i], "clientquery");
     }
-    */
+
     initQueriesHelper(this);
-    /*
+
     for (uint32_t i = 0; i < g_init_parallelism - 1; i++) {
       pthread_join(p_thds[i], NULL);
-    }*/
-
+    }
+#endif
 
 }
 
@@ -76,7 +80,7 @@ Client_query_queue::initQueriesParallel() {
     uint32_t final_request;
 
 #if CREATE_TXN_FILE
-    // TQ; single threaded generation
+    // TQ: single threaded generation
   final_request = request_cnt;
 #else
     if (tid == g_init_parallelism-1) {

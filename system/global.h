@@ -237,8 +237,8 @@ enum RC { RCOK=0, Commit, Abort, WAIT, WAIT_REM, ERROR, FINISH, NONE };
 enum RemReqType {INIT_DONE=0,
     RLK,
     RULK,
-    CL_QRY,
-    RQRY,
+    CL_QRY, //TQ: Message type for Client Query or transaction
+    RQRY, //TQ: Remote Query
     RQRY_CONT,
     RFIN,
     RLK_RSP,
@@ -254,7 +254,7 @@ enum RemReqType {INIT_DONE=0,
     RPASS,
     RFWD,
     RDONE,
-    CL_RSP,
+    CL_RSP, //TQ: Client response
     LOG_MSG,
     LOG_MSG_RSP,
     LOG_FLUSHED,
