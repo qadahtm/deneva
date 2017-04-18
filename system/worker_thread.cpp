@@ -251,6 +251,14 @@ RC WorkerThread::run() {
       }
       txn_man->register_thread(this);
     }
+    // TQ:
+    // fix for CALVIN
+    // need to set the return id in the txn_man
+        // However, this still does not allow CALVIN to run proparly
+//#if SERVER_GENERATE_QUERIES
+//    msg->mcopy_to_txn(txn_man);
+//#endif
+
 
     process(msg);
 
@@ -574,6 +582,7 @@ RC WorkerThread::process_rfwd(Message * msg) {
 RC WorkerThread::process_calvin_rtxn(Message * msg) {
 
   DEBUG("START %ld %f %lu\n",txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),txn_man->txn_stats.starttime);
+
   assert(ISSERVERN(txn_man->return_id));
   txn_man->txn_stats.local_wait_time += get_sys_clock() - txn_man->txn_stats.wait_starttime;
   // Execute

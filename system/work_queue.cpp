@@ -20,6 +20,7 @@
 #include "message.h"
 #include "client_query.h"
 #include <boost/lockfree/queue.hpp>
+#include <boost/random.hpp>
 
 void QWorkQueue::init() {
 
@@ -33,6 +34,16 @@ void QWorkQueue::init() {
     sched_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
 
+  // QUECC planners
+  plan_queue = new boost::lockfree::queue<work_queue_entry* > * [g_plan_thread_cnt];
+  for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+    plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
+  }
+}
+
+uint32_t QWorkQueue::get_random_planner_id() {
+  boost::random::uniform_int_distribution<> dist(0, max_planner_index);
+  return (uint32_t) dist(rng);
 }
 
 void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
@@ -61,7 +72,7 @@ Message * QWorkQueue::sequencer_dequeue(uint64_t thd_id) {
   Message * msg = NULL;
   work_queue_entry * entry = NULL;
   bool valid = seq_queue->pop(entry);
-  
+
   if(valid) {
     msg = entry->msg;
     assert(msg);
@@ -150,6 +161,20 @@ Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
 
 }
 
+void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
+    uint32_t planner_id = get_random_planner_id();
+    work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
+    entry->msg = msg;
+    entry->rtype = msg->rtype;
+    entry->txn_id = msg->txn_id;
+    entry->batch_id = msg->batch_id;
+    entry->starttime = get_sys_clock();
+    assert(ISSERVER);
+    DEBUG("Planner(%d) Enqueue (%ld,%ld) %d\n",planner_id,entry->txn_id,entry->batch_id,entry->rtype);
+//    while(!plan_queue[planner_id]->push(entry) && !simulation->is_done()) {}
+    INC_STATS(thd_id,plan_txn_cnts[planner_id],1);
+}
+
 
 void QWorkQueue::enqueue(uint64_t thd_id, Message * msg,bool busy) {
   uint64_t starttime = get_sys_clock();
@@ -204,6 +229,7 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
   if(valid) {
     msg = entry->msg;
     assert(msg);
+    DEBUG("%ld WQdequeue %ld\n",thd_id,entry->txn_id);
     //printf("%ld WQdequeue %ld\n",thd_id,entry->txn_id);
     uint64_t queue_time = get_sys_clock() - entry->starttime;
     INC_STATS(thd_id,work_queue_wait_time,queue_time);
@@ -216,7 +242,7 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
       INC_STATS(thd_id,work_queue_old_cnt,1);
     }
     msg->wq_time = queue_time;
-    //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
+    DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
     DEBUG("Work Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
     DEBUG_M("QWorkQueue::dequeue work_queue_entry free\n");
     mem_allocator.free(entry,sizeof(work_queue_entry));

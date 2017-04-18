@@ -34,6 +34,10 @@ void Stats_thd::init(uint64_t thd_id) {
   worker_process_cnt_by_type= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * NO_MSG);
   DEBUG_M("Stats_thd::init worker_process_time_by_type alloc\n");
   worker_process_time_by_type= (double *) mem_allocator.align_alloc(sizeof(double) * NO_MSG);
+// QueCC
+    DEBUG_M("Stats_thd::init plan_txn_cnts alloc\n");
+    plan_txn_cnts= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
+
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
 
@@ -194,6 +198,24 @@ void Stats_thd::clear() {
   sched_epoch_cnt=0;
   sched_epoch_diff=0;
 
+  // QueCC
+  for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
+    plan_txn_cnts[i] =0;
+  }
+  plan_batch_cnt =0;
+  plan_full_batch_cnt=0;
+  plan_ack_time=0;
+  plan_batch_time=0;
+  plan_process_cnt=0;
+  plan_complete_cnt=0;
+  plan_process_time=0;
+  plan_prep_time=0;
+  plan_idle_time=0;
+  plan_queue_wait_time=0;
+  plan_queue_cnt=0;
+  plan_queue_enq_cnt=0;
+  plan_queue_enqueue_time=0;
+  plan_queue_dequeue_time=0;
 
   //OCC
   occ_validate_time=0;
@@ -856,6 +878,15 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,sched_epoch_cnt
   ,sched_epoch_diff /BILLION
   );
+
+    // QueCC print
+  for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
+    fprintf(outf,
+            ",plan_cnt_type%ld=%ld"
+            ,i
+            ,plan_txn_cnts[i]
+    );
+  }
   //OCC
   fprintf(outf,
   ",occ_validate_time=%f"
@@ -1334,6 +1365,26 @@ void Stats_thd::combine(Stats_thd * stats) {
   sched_txn_table_time+=stats->sched_txn_table_time;
   sched_epoch_cnt+=stats->sched_epoch_cnt;
   sched_epoch_diff+=stats->sched_epoch_diff;
+
+    // QueCC
+    for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
+        plan_txn_cnts[i] +=stats->plan_txn_cnts[i];
+    }
+    plan_batch_cnt += stats->plan_batch_cnt;
+    plan_full_batch_cnt+=stats->plan_full_batch_cnt;
+    plan_ack_time+=stats->plan_ack_time;
+    plan_batch_time+=stats->plan_batch_time;
+    plan_process_cnt+=stats->plan_process_cnt;
+    plan_complete_cnt+=stats->plan_complete_cnt;
+    plan_process_time+=stats->plan_process_time;
+    plan_prep_time+=stats->plan_prep_time;
+    plan_idle_time+=stats->plan_idle_time;
+    plan_queue_wait_time+=stats->plan_queue_wait_time;
+    plan_queue_cnt+=stats->plan_queue_cnt;
+    plan_queue_enq_cnt+=stats->plan_queue_enq_cnt;
+    plan_queue_enqueue_time+=stats->plan_queue_enqueue_time;
+    plan_queue_dequeue_time+=stats->plan_queue_dequeue_time;
+
   //OCC
   occ_validate_time+=stats->occ_validate_time;
   occ_cs_wait_time+=stats->occ_cs_wait_time;

@@ -5,7 +5,7 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 1//2
+#define NODE_CNT 1
 #define THREAD_CNT 5 
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
@@ -19,7 +19,7 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 1//2//4
+#define CLIENT_NODE_CNT 1//4
 #define CLIENT_THREAD_CNT 4
 #define CLIENT_REM_THREAD_CNT 2
 #define CLIENT_SEND_THREAD_CNT 2
@@ -54,6 +54,8 @@
 #define MAX_TXN_IN_FLIGHT 100
 
 #define SERVER_GENERATE_QUERIES false
+
+
 
 /***********************************************/
 // Memory System
@@ -106,7 +108,7 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
 //#define CC_ALG TIMESTAMP
-#define CC_ALG CALVIN
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -145,7 +147,10 @@
 // [VLL] 
 #define TXN_QUEUE_SIZE_LIMIT    THREAD_CNT
 // [CALVIN]
-#define SEQ_THREAD_CNT 4 
+#define SEQ_THREAD_CNT 4
+// [QUECC]
+#define PLAN_THREAD_CNT 4
+
 
 /***********************************************/
 // Logging
@@ -163,12 +168,12 @@
 #define MAX_ROW_PER_TXN       64
 #define QUERY_INTVL         1UL
 /**
- * MAX_TXN_PER_PART indicate the maximum number of "unique" transactions instances to be
+ * TQ: MAX_TXN_PER_PART indicate the maximum number of "unique" transactions instances to be
  * generated per partition during client setup, which will be stored in an in-memory vector.
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART 500000 * 5
+#define MAX_TXN_PER_PART 500000
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -180,7 +185,7 @@
 #define DATA_PERC 100
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
-#define INIT_PARALLELISM 20//8
+#define INIT_PARALLELISM 8
 //#define SYNTH_TABLE_SIZE 65536
 #define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs 
@@ -282,7 +287,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_TIMESTAMP       false
 #define DEBUG_SYNTH         false
 #define DEBUG_ASSERT        false
-#define DEBUG_DISTR false
+#define DEBUG_DISTR true
 #define DEBUG_ALLOC false
 #define DEBUG_RACE false
 #define DEBUG_TIMELINE        false
@@ -329,6 +334,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define CALVIN      10
 #define MAAT      11
 #define WDL           12
+#define QUECC 13
 // TIMESTAMP allocation method.
 #define TS_MUTEX          1
 #define TS_CAS            2
@@ -372,6 +378,8 @@ enum PPSTxnType {PPS_ALL = 0,
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 #define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 5 * BILLION // ~5 seconds
+//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

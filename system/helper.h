@@ -65,6 +65,10 @@
     fflush(stdout); \
   }
 
+/***********************************************/
+// Codebase Analysis Helpers
+/***********************************************/
+#define TXN_SAMPLE 10000 // for tracing transaction execution
 
 /************************************************/
 // atomic operations

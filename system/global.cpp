@@ -156,6 +156,9 @@ UInt64 g_his_recycle_len = HIS_RECYCLE_LEN;
 // CALVIN
 UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 
+// QUECC
+UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
+
 double g_mpr = MPR;
 double g_mpitem = MPIR;
 

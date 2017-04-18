@@ -229,6 +229,9 @@ extern double g_perc_updatepart;
 // CALVIN
 extern UInt32 g_seq_thread_cnt;
 
+// QUECC
+extern UInt32 g_plan_thread_cnt;
+
 // Replication
 extern UInt32 g_repl_type;
 extern UInt32 g_repl_cnt;

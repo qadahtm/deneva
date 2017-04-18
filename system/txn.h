@@ -118,6 +118,11 @@ public:
    Manipulates/manages Transaction (contains txn-specific data)
    Maintains BaseQuery (contains input args, info about query)
    */
+/*
+ * TQ:
+ * This can be used for the concept of TransactionContext
+ */
+
 class TxnManager
 {
 public:

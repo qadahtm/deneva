@@ -189,6 +189,23 @@ public:
   uint64_t sched_epoch_cnt;
   double sched_epoch_diff;
 
+    // QueCC
+    uint64_t * plan_txn_cnts;
+    uint64_t plan_batch_cnt;
+    uint64_t plan_full_batch_cnt;
+    double plan_ack_time;
+    double plan_batch_time;
+    uint64_t plan_process_cnt;
+    uint64_t plan_complete_cnt;
+    double plan_process_time;
+    double plan_prep_time;
+    double plan_idle_time;
+    double plan_queue_wait_time;
+    uint64_t plan_queue_cnt;
+    uint64_t plan_queue_enq_cnt;
+    double plan_queue_enqueue_time;
+    double plan_queue_dequeue_time;
+
   // OCC
   double occ_validate_time;
   double occ_cs_wait_time;

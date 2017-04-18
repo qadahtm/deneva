@@ -145,4 +145,3 @@ uint64_t myrand::next() {
 	seed = (seed * 1103515247UL + 12345UL) % (1UL<<63);
 	return (seed / 65537) % RAND_MAX;
 }
-

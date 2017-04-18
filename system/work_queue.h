@@ -22,6 +22,7 @@
 #include "helper.h"
 #include <queue>
 #include <boost/lockfree/queue.hpp>
+#include <boost/random.hpp>
 //#include "message.h"
 
 class BaseQuery;
@@ -76,10 +77,15 @@ public:
   void enqueue(uint64_t thd_id,Message * msg,bool busy); 
   Message * dequeue(uint64_t thd_id);
   void sched_enqueue(uint64_t thd_id, Message * msg); 
-  Message * sched_dequeue(uint64_t thd_id); 
-  void sequencer_enqueue(uint64_t thd_id, Message * msg); 
-  Message * sequencer_dequeue(uint64_t thd_id); 
+  Message * sched_dequeue(uint64_t thd_id);
+  void sequencer_enqueue(uint64_t thd_id, Message * msg);
+  Message * sequencer_dequeue(uint64_t thd_id);
+    // TQ: QUECC
+    uint32_t get_random_planner_id();
+    void plan_enqueue(uint64_t thd_id, Message * msg);
+    Message * plan_dequeue(uint64_t thd_id);
 
+//------
   uint64_t get_cnt() {return get_wq_cnt() + get_rem_wq_cnt() + get_new_wq_cnt();}
   uint64_t get_wq_cnt() {return 0;}
   //uint64_t get_wq_cnt() {return work_queue.size();}
@@ -89,15 +95,19 @@ public:
   //uint64_t get_rem_wq_cnt() {return remote_op_queue.size();}
   //uint64_t get_new_wq_cnt() {return new_query_queue.size();}
 
+
 private:
   boost::lockfree::queue<work_queue_entry* > * work_queue;
   boost::lockfree::queue<work_queue_entry* > * new_txn_queue;
   boost::lockfree::queue<work_queue_entry* > * seq_queue;
   boost::lockfree::queue<work_queue_entry* > ** sched_queue;
+  boost::lockfree::queue<work_queue_entry* > ** plan_queue;
   uint64_t sched_ptr;
   BaseQuery * last_sched_dq;
   uint64_t curr_epoch;
 
+    boost::random::mt19937 rng;         // produces randomness out of thin air
+    uint32_t max_planner_index = g_plan_thread_cnt-1;
 };
 
 

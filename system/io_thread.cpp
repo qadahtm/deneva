@@ -145,7 +145,6 @@ RC InputThread::server_recv_loop() {
     starttime = get_sys_clock();
 
 		msgs = tport_man.recv_msg(get_thd_id());
-
     INC_STATS(_thd_id,mtx[28], get_sys_clock() - starttime);
     starttime = get_sys_clock();
 
@@ -170,6 +169,14 @@ RC InputThread::server_recv_loop() {
         continue;
       }
 #endif
+
+//#if CC_ALG == QUECC
+      if((msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
+        work_queue.plan_enqueue(get_thd_id(),msg);
+        msgs->erase(msgs->begin());
+        continue;
+      }
+//#endif
       work_queue.enqueue(get_thd_id(),msg,false);
       msgs->erase(msgs->begin());
     }
