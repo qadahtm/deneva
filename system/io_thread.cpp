@@ -171,11 +171,11 @@ RC InputThread::server_recv_loop() {
 #endif
 
 //#if CC_ALG == QUECC
-      if((msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
+//      if((msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
         work_queue.plan_enqueue(get_thd_id(),msg);
-        msgs->erase(msgs->begin());
-        continue;
-      }
+//        msgs->erase(msgs->begin());
+//        continue;
+//      }
 //#endif
       work_queue.enqueue(get_thd_id(),msg,false);
       msgs->erase(msgs->begin());

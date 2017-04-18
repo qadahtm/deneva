@@ -879,10 +879,10 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,sched_epoch_diff /BILLION
   );
 
-    // QueCC print
+    // QueCC
   for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
     fprintf(outf,
-            ",plan_cnt_type%ld=%ld"
+            ",plan%ld_txn_cnt=%ld"
             ,i
             ,plan_txn_cnts[i]
     );

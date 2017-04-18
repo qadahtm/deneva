@@ -287,7 +287,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_TIMESTAMP       false
 #define DEBUG_SYNTH         false
 #define DEBUG_ASSERT        false
-#define DEBUG_DISTR true
+#define DEBUG_DISTR false
 #define DEBUG_ALLOC false
 #define DEBUG_RACE false
 #define DEBUG_TIMELINE        false
@@ -376,10 +376,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 5 * BILLION // ~5 seconds
-//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+#define DONE_TIMER 1 * 5 * BILLION // ~5 seconds
+#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false
