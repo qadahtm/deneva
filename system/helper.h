@@ -70,6 +70,14 @@
 /***********************************************/
 #define TXN_SAMPLE 10000 // for tracing transaction execution
 
+/***********************************************/
+// Multicore helpers
+/***********************************************/
+#define NEVER_INLINE  __attribute__((noinline))
+#define ALWAYS_INLINE __attribute__((always_inline))
+#define UNUSED __attribute__((unused))
+#define COMPILER_MEMORY_FENCE asm volatile("" ::: "memory")
+
 /************************************************/
 // atomic operations
 /************************************************/

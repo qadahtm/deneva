@@ -670,17 +670,19 @@ uint64_t TxnManager::decr_lr() {
 }
 
 uint64_t TxnManager::incr_rsp(int i) {
-    //ATOM_ADD(this->rsp_cnt,i);
-    uint64_t result;
-    sem_wait(&rsp_mutex);
-    result = ++this->rsp_cnt;
-    sem_post(&rsp_mutex);
-    return result;
+//    ATOM_ADD(this->rsp_cnt,i);
+    return ATOM_ADD_FETCH(this->rsp_cnt, i);
+//    uint64_t result;
+//    sem_wait(&rsp_mutex);
+//    result = ++this->rsp_cnt;
+//    sem_post(&rsp_mutex);
+//    return result;
 }
 
 uint64_t TxnManager::decr_rsp(int i) {
     //ATOM_SUB(this->rsp_cnt,i);
     uint64_t result;
+    // TQ: thread can sleeps because spinning may be long
     sem_wait(&rsp_mutex);
     result = --this->rsp_cnt;
     sem_post(&rsp_mutex);

@@ -38,6 +38,7 @@
 #include "work_queue.h"
 #include "maat.h"
 #include "client_query.h"
+#include "quecc_thread.h"
 
 void network_test();
 void network_test_recv();
@@ -53,6 +54,11 @@ LogThread * log_thds;
 CalvinLockThread * calvin_lock_thds;
 CalvinSequencerThread * calvin_seq_thds;
 #endif
+
+//#if CC_ALG == QUECC
+PlannerThread * planner_thds;
+ExecutionThread * execution_thds;
+//#endif
 
 // defined in parser.cpp
 void parser(int argc, char * argv[]);
@@ -204,6 +210,10 @@ int main(int argc, char* argv[])
 #if CC_ALG == CALVIN
     all_thd_cnt += 2; // sequencer + scheduler thread
 #endif
+
+//#if CC_ALG == QUECCC
+    all_thd_cnt += (g_plan_thread_cnt); // TODO(tq): we need to exclude workers and include exectors
+//#endif
     assert(all_thd_cnt == g_this_total_thread_cnt);
 	
     pthread_t * p_thds =
@@ -220,6 +230,11 @@ int main(int argc, char* argv[])
     calvin_lock_thds = new CalvinLockThread[1];
     calvin_seq_thds = new CalvinSequencerThread[1];
 #endif
+
+//#if CC_ALG == QUECCC
+    execution_thds = new ExecutionThread[wthd_cnt];
+    planner_thds = new PlannerThread[g_plan_thread_cnt];
+//#endif
 	// query_queue should be the last one to be initialized!!!
 	// because it collects txn latency
 	//if (WORKLOAD != TEST) {
@@ -343,6 +358,38 @@ int main(int argc, char* argv[])
   pthread_create(&p_thds[id++], &attr, run_thread, (void *)&calvin_seq_thds[0]);
     pthread_setname_np(p_thds[id-1], "calvin_seq");
 #endif
+
+    // creating threads for QUECC
+//#if CC_ALG == QUECC
+    DEBUG_Q("Initilizing Quecc threads\n");
+    for (uint64_t j = 0; j < g_plan_thread_cnt; j++) {
+#if SET_AFFINITY
+      CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+#endif
+        planner_thds[j].init(id,g_node_id,m_wl);
+        planner_thds[j]._planner_id = j;
+        pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
+        pthread_setname_np(p_thds[id-1], "s_planner");
+    }
+    DEBUG_Q("DONE: Initilizing Quecc threads\n");
+    DEBUG_Q("total thread count = %ld, ids = %ld\n", all_thd_cnt, id);
+
+//    for (uint64_t j = 0; j < wthd_cnt; j++) {
+//#if SET_AFFINITY
+//      CPU_ZERO(&cpus);
+//      CPU_SET(cpu_cnt, &cpus);
+//      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+//      cpu_cnt++;
+//#endif
+//        execution_thds[j].init(id,g_node_id,m_wl);
+//        execution_thds[j]._executor_id = j;
+//        pthread_create(&p_thds[id++], &attr, run_thread, (void *)&execution_thds[j]);
+//        pthread_setname_np(p_thds[id-1], "s_exec");
+//    }
+//#endif
 
 
 	for (uint64_t i = 0; i < all_thd_cnt ; i++) 

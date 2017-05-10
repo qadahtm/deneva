@@ -150,7 +150,8 @@
 #define SEQ_THREAD_CNT 4
 // [QUECC]
 #define PLAN_THREAD_CNT 4
-
+#define BATCH_SIZE 10000
+#define BATCH_MAP_LENGTH 20 // width of map is PLAN_THREAD_CNT
 
 /***********************************************/
 // Logging
@@ -295,7 +296,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD true
 

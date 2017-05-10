@@ -206,7 +206,12 @@ RC YCSBTxnManager::run_txn_state() {
 
     return rc;
 }
-
+/**
+ * TQ: Finds the pointer to the value associated with a a key
+ * @param req
+ * @param row_local
+ * @return
+ */
 RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     RC rc = RCOK;
     int part_id = _wl->key_to_part(req->key);
@@ -227,7 +232,10 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
     if (acctype == RD || acctype == SCAN) {
         int fid = 0;
         char *data = row_local->get_data();
+        //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is no used
         uint64_t fval __attribute__ ((unused));
+        // TQ: perform the actual read by
+        // However this only reads 8 bytes of the data
         fval = *(uint64_t *) (&data[fid * 100]);
 #if ISOLATION_LEVEL == READ_COMMITTED || ISOLATION_LEVEL == READ_UNCOMMITTED
         // Release lock after read
@@ -238,6 +246,8 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
         assert(acctype == WR);
         int fid = 0;
         char *data = row_local->get_data();
+        //TQ: here the we are zeroing the first 8 bytes
+        // 100 below is the number of bytes for each field
         *(uint64_t *) (&data[fid * 100]) = 0;
 #if YCSB_ABORT_MODE
         if(data[0] == 'a')
@@ -286,9 +296,12 @@ RC YCSBTxnManager::run_calvin_txn() {
             case CALVIN_SERVE_RD:
                 // Phase 3: Serve remote reads
                 // If there is any abort logic, relevant reads need to be sent to all active nodes...
+
+                // TQ: checks a if this node is a participant (a participant node performs read operations)
                 if (query->participant_nodes[g_node_id] == 1) {
                     rc = send_remote_reads();
                 }
+                // TQ: checks if this node is an active node (an active node performs write operations)
                 if (query->active_nodes[g_node_id] == 1) {
                     this->phase = CALVIN_COLLECT_RD;
                     if (calvin_collect_phase_done()) {
@@ -324,6 +337,35 @@ RC YCSBTxnManager::run_calvin_txn() {
     txn_stats.wait_starttime = get_sys_clock();
     return rc;
 }
+
+RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
+    RC rc = RCOK;
+    uint64_t starttime = get_sys_clock();
+    DEBUG("(%ld,%ld) Run QueCC txn\n", txn->txn_id, txn->batch_id);
+
+    //TQ: dirty code: using a char buffer to store ycsb_request
+    ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
+
+    // get pointer to record in row
+    rc = run_ycsb_0(req, row);
+    assert(rc == RCOK);
+
+    // perfrom access
+    rc = run_ycsb_1(req->acctype, row);
+    assert(rc == RCOK);
+
+    // TQ: declare this operation as executed
+    // since we only have a single operation, we just increment by one
+    incr_rsp(1);
+
+    uint64_t curr_time = get_sys_clock();
+    txn_stats.process_time += curr_time - starttime;
+    txn_stats.process_time_short += curr_time - starttime;
+    txn_stats.wait_starttime = get_sys_clock();
+    return rc;
+}
+
+
 
 RC YCSBTxnManager::run_ycsb() {
     RC rc = RCOK;

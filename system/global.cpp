@@ -32,6 +32,7 @@
 #include "sequencer.h"
 #include "logger.h"
 #include "maat.h"
+#include "pthread_mac.h"
 
 mem_alloc mem_allocator;
 Stats stats;
@@ -157,7 +158,9 @@ UInt64 g_his_recycle_len = HIS_RECYCLE_LEN;
 UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 
 // QUECC
-UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
+const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
+UInt32 g_batch_size = BATCH_SIZE;
+const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;
 
 double g_mpr = MPR;
 double g_mpitem = MPIR;

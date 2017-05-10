@@ -932,6 +932,11 @@ inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, 
 	return RCOK;
 }
 
+RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
+    RC rc = RCOK;
+    // not implemented yet
+    return rc;
+}
 
 RC TPCCTxnManager::run_calvin_txn() {
   RC rc = RCOK;

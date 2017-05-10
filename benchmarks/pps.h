@@ -125,7 +125,10 @@ private:
 	volatile RC _rc;
   row_t * row;
 
-  uint64_t parts_processed_count;
+	// For QueCC
+	RC run_quecc_txn(exec_queue_entry * exec_qe);
+
+	uint64_t parts_processed_count;
 
   void next_pps_state();
   RC run_txn_state();

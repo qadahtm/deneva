@@ -86,6 +86,7 @@ public:
 	bool ** delivering;
 //	bool volatile ** delivering;
 
+
 private:
 	uint64_t num_wh;
 	void init_tab_item(int id);
@@ -134,6 +135,9 @@ private:
 	TPCCWorkload * _wl;
 	volatile RC _rc;
   row_t * row;
+
+	// For QueCC
+	RC run_quecc_txn(exec_queue_entry * exec_qe);
 
   uint64_t next_item_id;
 

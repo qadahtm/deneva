@@ -22,6 +22,7 @@
 #include "semaphore.h"
 #include "array.h"
 //#include "wl.h"
+#include "quecc_thread.h"
 
 class Workload;
 class Thread;
@@ -138,6 +139,9 @@ public:
     virtual RC      run_txn() = 0;
     virtual RC      run_txn_post_wait() = 0;
     virtual RC      run_calvin_txn() = 0;
+    // For QueCC
+    virtual RC      run_quecc_txn(exec_queue_entry * exec_qe) = 0;
+
     virtual RC      acquire_locks() = 0;
     void            register_thread(Thread * h_thd);
     uint64_t        get_thd_id();

@@ -172,7 +172,18 @@ RC InputThread::server_recv_loop() {
 
 //#if CC_ALG == QUECC
 //      if((msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
-        work_queue.plan_enqueue(get_thd_id(),msg);
+//      DEBUG_Q("Enqueue to planning layer\n")
+#if WORKLOAD == YCSB
+      //TQ: there is no need to make a copy if we are only using QUECC
+      YCSBClientQueryMessage * cmsg = (YCSBClientQueryMessage *) msg;
+      YCSBClientQueryMessage * msg2 = (YCSBClientQueryMessage *) Message::create_message(msg->rtype);
+      msg2->txn_id = cmsg->txn_id;
+      msg2->batch_id = cmsg->batch_id;
+      msg2->return_node_id = cmsg->return_node_id;
+      msg2->requests.copy((cmsg)->requests);
+//      DEBUG_Q("Copied msg2 with %ld requests from cmsg with %ld requests\n", msg2->requests.size(), cmsg->requests.size());
+      work_queue.plan_enqueue(get_thd_id(),msg2);
+#endif
 //        msgs->erase(msgs->begin());
 //        continue;
 //      }

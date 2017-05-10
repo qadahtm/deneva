@@ -173,12 +173,14 @@ void WorkerThread::abort() {
 
 TxnManager * WorkerThread::get_transaction_manager(Message * msg) {
 #if CC_ALG == CALVIN
-  TxnManager * local_txn_man = txn_table.get_transaction_manager(get_thd_id(),msg->get_txn_id(),msg->get_batch_id());
+    TxnManager * local_txn_man = txn_table.get_transaction_manager(get_thd_id(),msg->get_txn_id(),msg->get_batch_id());
 #else
-  TxnManager * local_txn_man = txn_table.get_transaction_manager(get_thd_id(),msg->get_txn_id(),0);
+    TxnManager * local_txn_man = txn_table.get_transaction_manager(get_thd_id(),msg->get_txn_id(),0);
 #endif
-  return local_txn_man;
+    return local_txn_man;
 }
+
+
 
 RC WorkerThread::run() {
   tsetup();
@@ -186,12 +188,77 @@ RC WorkerThread::run() {
 
   uint64_t ready_starttime;
   uint64_t idle_starttime = 0;
+  uint64_t wbatch_id = 0;
+  uint64_t wplanner_id = 0;
 
 	while(!simulation->is_done()) {
     txn_man = NULL;
     heartbeat();
 
     progress_stats();
+
+//#if CC_ALG == QUECC
+
+      // we should spin here if pointer is not set
+      Array<exec_queue_entry> * exec_q = work_queue.batch_map[wplanner_id][_thd_id][wbatch_id];
+
+//      DEBUG_Q("Pointer for map slot [%d][%ld][%ld] is %ld, going to spin if 0\n", 0, _thd_id, wbatch_id, exec_q_ptr);
+      if (((uint64_t) exec_q) != 0){
+        DEBUG_Q("Pointer for map slot [%ld][%ld][%ld] is %ld, batch partition size = %ld txns\n",
+                _thd_id, wplanner_id, wbatch_id, ((uint64_t) exec_q), exec_q->size());
+
+
+//      DEBUG_Q("Processing batch partition from planner[%ld]\n", wplanner_id);
+          for (uint64_t i = 0; i < exec_q->size(); ++i) {
+              exec_queue_entry exec_qe = exec_q->get(i);
+
+              txn_man = txn_table.get_transaction_manager(get_thd_id(),exec_qe.tctx->txn_id,wbatch_id);
+//              txn_man->txn_stats.clear_short();
+              txn_man->register_thread(this);
+
+              DEBUG("START %ld %f %lu\n",txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),txn_man->txn_stats.starttime);
+
+              assert(ISSERVERN(txn_man->return_id));
+              txn_man->txn_stats.local_wait_time += get_sys_clock() - txn_man->txn_stats.wait_starttime;
+              txn_man->run_quecc_txn(&exec_qe);
+
+              // TQ: we are committing now, which is done one by one.
+              // Since there is not logging this is okay
+              // TODO(tq): consider committing as a batch with logging enabled
+              // Hardcoding for 10 operations
+              // Execution thrad that will execute the last operation will commit
+              if (txn_man->get_rsp_cnt() == 10){
+                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.tctx->txn_id, get_thd_id());
+                  commit();
+              }
+
+          }
+          DEBUG_Q("Batch partition processing complete with %ld txns processed\n", exec_q->size());
+
+
+
+        // go to the next batch partition prepared by the next planner
+        wplanner_id++;
+          if (wplanner_id == g_plan_thread_cnt){
+              wbatch_id++;
+              wplanner_id = 0;
+          }
+      }
+      else {
+        if(idle_starttime ==0)
+          idle_starttime = get_sys_clock();
+      }
+//        continue;
+
+//      while ( exec_q_ptr == 0) {
+//        atomic_thread_fence(std::memory_order_acquire);
+//        exec_q_ptr = (uint64_t) work_queue.batch_map[0][_thd_id][wbatch_id];
+//      }
+//      DEBUG_Q("Got a pointer to %ld\n", exec_q_ptr);
+      // We need to continue so that other stuff don't happen
+//      continue;
+//#else
+
 
     Message * msg = work_queue.dequeue(get_thd_id());
 
@@ -251,14 +318,6 @@ RC WorkerThread::run() {
       }
       txn_man->register_thread(this);
     }
-    // TQ:
-    // fix for CALVIN
-    // need to set the return id in the txn_man
-        // However, this still does not allow CALVIN to run proparly
-//#if SERVER_GENERATE_QUERIES
-//    msg->mcopy_to_txn(txn_man);
-//#endif
-
 
     process(msg);
 
@@ -275,7 +334,7 @@ RC WorkerThread::run() {
     msg->release();
 #endif
     INC_STATS(get_thd_id(),worker_release_msg_time,get_sys_clock() - ready_starttime);
-
+//#endif // if QueCCC
 	}
   printf("FINISH %ld:%ld\n",_node_id,_thd_id);
   fflush(stdout);
@@ -594,7 +653,6 @@ RC WorkerThread::process_calvin_rtxn(Message * msg) {
   return RCOK;
 
 }
-
 
 bool WorkerThread::is_cc_new_timestamp() {
   return (CC_ALG == MVCC || CC_ALG == TIMESTAMP);

@@ -44,6 +44,9 @@ public:
 //	char table_name[80];
 	access_t acctype; 
 	uint64_t key;
+	// TQ: here the value consist only of 1 byte but this actually should be 100 * 10 bytes
+	// because a value consist of 10 fields each with 100 bytes each
+    // TODO(tq) fix this to 10 fields with 100 bytes each (or somehow read from schmea)
 	char value;
 	// only for (qtype == SCAN)
 	//UInt32 scan_len;

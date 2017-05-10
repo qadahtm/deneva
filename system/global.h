@@ -49,6 +49,10 @@
 #include "sim_manager.h"
 //#include "maat.h"
 
+#ifdef __APPLE__
+#include "pthread_mac.h"
+#endif
+
 using namespace std;
 
 class mem_alloc;
@@ -230,7 +234,10 @@ extern double g_perc_updatepart;
 extern UInt32 g_seq_thread_cnt;
 
 // QUECC
-extern UInt32 g_plan_thread_cnt;
+extern const UInt32 g_plan_thread_cnt;
+extern UInt32 g_batch_size;
+// for circular array buffer for batch completeiton time
+extern const UInt32 g_batch_map_length;
 
 // Replication
 extern UInt32 g_repl_type;

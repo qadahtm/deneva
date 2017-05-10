@@ -24,6 +24,7 @@
 #include <boost/lockfree/queue.hpp>
 #include <boost/random.hpp>
 //#include "message.h"
+#include "quecc_thread.h"
 
 class BaseQuery;
 class Workload;
@@ -81,10 +82,26 @@ public:
   void sequencer_enqueue(uint64_t thd_id, Message * msg);
   Message * sequencer_dequeue(uint64_t thd_id);
     // TQ: QUECC
-    uint32_t get_random_planner_id();
+    uint64_t get_random_planner_id();
     void plan_enqueue(uint64_t thd_id, Message * msg);
-    Message * plan_dequeue(uint64_t thd_id);
+    Message * plan_dequeue(uint64_t thd_id, uint64_t planner_id);
 
+    // QueCC batch management
+//    void mrange_enqueue(uint64_t thd_id, mrange_entry * entry);
+    void batch_enqueue(uint64_t thd_id, exec_queue_entry * entry);
+    batch_queue_entry * batch_dequeue(uint64_t thd_id, uint32_t planner_id);
+
+    // we use 'active_batch_idx' to represent the currently executing batch in the batch_list
+    // there should be only a single active batch at a time
+    // changing/incrementing the batch index will be done by
+    // the execution thread that is processing the last "operation"
+    // the other execution threads will be spinning
+    uint64_t active_batch_idx;
+    uint64_t last_inserted_batch_idx;
+
+    // TQ: Should be a circular array
+    Array<batch_queue_entry *> batch_list;
+    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
 //------
   uint64_t get_cnt() {return get_wq_cnt() + get_rem_wq_cnt() + get_new_wq_cnt();}
   uint64_t get_wq_cnt() {return 0;}
@@ -101,7 +118,14 @@ private:
   boost::lockfree::queue<work_queue_entry* > * new_txn_queue;
   boost::lockfree::queue<work_queue_entry* > * seq_queue;
   boost::lockfree::queue<work_queue_entry* > ** sched_queue;
+    // TQ: QueCC
   boost::lockfree::queue<work_queue_entry* > ** plan_queue;
+  boost::lockfree::queue<batch_queue_entry* > ** batch_queue;
+    Array<Array<uint64_t> *> * batch_completion_map;
+    uint64_t *** batch_completion_table;
+    uint64_t current_batch_id;
+    //*******************/
+
   uint64_t sched_ptr;
   BaseQuery * last_sched_dq;
   uint64_t curr_epoch;

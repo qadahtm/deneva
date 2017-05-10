@@ -80,6 +80,9 @@ public:
 
     RC run_calvin_txn();
 
+    // For QueCC
+    RC run_quecc_txn(exec_queue_entry * exec_qe);
+
     void copy_remote_requests(YCSBQueryMessage *msg);
 
 private:

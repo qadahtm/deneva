@@ -36,14 +36,36 @@ void QWorkQueue::init() {
 
   // QUECC planners
   plan_queue = new boost::lockfree::queue<work_queue_entry* > * [g_plan_thread_cnt];
+  batch_queue = new boost::lockfree::queue<batch_queue_entry* > * [g_plan_thread_cnt];
+    //TODO(tq): change this to pure array and be cache-aware
+//  batch_completion_map = new Array<Array<uint64_t> *>();
+//  batch_completion_map->init(g_plan_thread_cnt);
+
+    for (uint64_t i=0; i < g_plan_thread_cnt; i++){
+        for (uint64_t j=0; j < g_thread_cnt; j++){
+            for (uint64_t k=0; k< g_batch_map_length; k++){
+                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
+            }
+        }
+    }
+    DEBUG_Q("Initialize batch_map\n");
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
     plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
+//    batch_queue[i] = new boost::lockfree::queue<batch_queue_entry* > (0);
+//      Array<uint64_t> * plan_batches = new Array<uint64_t>();
+//      plan_batches->init(g_batch_map_length);
+//      for (uint64_t j = 0; j < g_batch_map_length; j++){
+//          plan_batches->add(0);
+//      }
+//      batch_completion_map->add(plan_batches);
   }
+
+    current_batch_id = 0;
 }
 
-uint32_t QWorkQueue::get_random_planner_id() {
+uint64_t QWorkQueue::get_random_planner_id() {
   boost::random::uniform_int_distribution<> dist(0, max_planner_index);
-  return (uint32_t) dist(rng);
+  return (uint64_t) dist(rng);
 }
 
 void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
@@ -162,7 +184,7 @@ Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
 }
 
 void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
-    uint32_t planner_id = get_random_planner_id();
+    uint64_t planner_id = get_random_planner_id();
     work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
     entry->msg = msg;
     entry->rtype = msg->rtype;
@@ -170,9 +192,62 @@ void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
     entry->batch_id = msg->batch_id;
     entry->starttime = get_sys_clock();
     assert(ISSERVER);
-    DEBUG("Planner(%d) Enqueue (%ld,%ld) %d\n",planner_id,entry->txn_id,entry->batch_id,entry->rtype);
-//    while(!plan_queue[planner_id]->push(entry) && !simulation->is_done()) {}
+//    DEBUG_Q("Enqueue work for Planner(%ld) (%ld,%ld) %d\n",planner_id,entry->txn_id,entry->batch_id,entry->rtype);
+    // insert into planner's queue
+    while(!plan_queue[planner_id]->push(entry) && !simulation->is_done()) {}
     INC_STATS(thd_id,plan_txn_cnts[planner_id],1);
+}
+// need a mapping between thread ids and planner ids
+Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
+  uint64_t starttime = get_sys_clock();
+  assert(ISSERVER);
+  Message * msg = NULL;
+  work_queue_entry * entry = NULL;
+
+//    DEBUG_Q("thread %ld, planner_%d, poping from queue\n", thd_id, planner_id);
+
+  bool valid = plan_queue[planner_id]->pop(entry);
+
+  if(valid) {
+    msg = entry->msg;
+    assert(msg);
+//    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
+    uint64_t queue_time = get_sys_clock() - entry->starttime;
+    INC_STATS(thd_id,plan_queue_wait_time,queue_time);
+    INC_STATS(thd_id,plan_queue_cnt,1);
+    //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
+//    DEBUG_M("PlanQueue::dequeue work_queue_entry free\n");
+    mem_allocator.free(entry,sizeof(work_queue_entry));
+    INC_STATS(thd_id,plan_queue_dequeue_time,get_sys_clock() - starttime);
+  }
+//    else {
+//      DEBUG_Q("Invalid message Dequeued\n");
+//  }
+
+  return msg;
+
+}
+
+void QWorkQueue::batch_enqueue(uint64_t thd_id, exec_queue_entry * entry) {
+  assert(ISSERVER);
+  DEBUG_Q("Enqueue batch_%ld for Planner_%ld for mrange_%ld\n", entry->batch_id, entry->planner_id, entry->mrange_id);
+  // insert into batch queue
+//  while(!batch_queue[entry->planner_id]->push(entry) && !simulation->is_done()) {}
+
+
+}
+
+batch_queue_entry * QWorkQueue::batch_dequeue(uint64_t thd_id, uint32_t planner_id) {
+  assert(ISSERVER);
+  batch_queue_entry * entry = NULL;
+    bool valid = batch_queue[planner_id]->pop(entry);
+
+//  batch_queue[planner_id]
+    if (valid){
+        DEBUG_Q("Dequeue batch_%ld for Planner_(%d,%d)\n", entry->batch_id,planner_id, entry->planner_id);
+    }
+
+    return entry;
 }
 
 
