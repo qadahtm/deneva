@@ -50,6 +50,7 @@ uint64_t AbortQueue::enqueue(uint64_t thd_id, uint64_t txn_id, uint64_t abort_cn
 }
 
 void AbortQueue::process(uint64_t thd_id) {
+//  DEBUG_Q("AQ Abrting %ld\n",thd_id);
   if(queue.empty())
     return;
   abort_entry * entry;

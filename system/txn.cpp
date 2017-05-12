@@ -776,6 +776,7 @@ void TxnManager::cleanup(RC rc) {
 }
 
 RC TxnManager::get_lock(row_t *row, access_t type) {
+
     if (calvin_locked_rows.contains(row)) {
         return RCOK;
     }

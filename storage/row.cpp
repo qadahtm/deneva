@@ -56,8 +56,8 @@ void row_t::init_manager(row_t * row) {
   return;
 #endif
   DEBUG_M("row_t::init_manager alloc \n");
-#if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN
-    manager = (Row_lock *) mem_allocator.align_alloc(sizeof(Row_lock));
+#if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC
+	manager = (Row_lock *) mem_allocator.align_alloc(sizeof(Row_lock));
 #elif CC_ALG == TIMESTAMP
     manager = (Row_ts *) mem_allocator.align_alloc(sizeof(Row_ts));
 #elif CC_ALG == MVCC
@@ -201,8 +201,16 @@ RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
     return rc;
 #endif
 #if ISOLATION_LEVEL == NOLOCK
-    row = this;
+	row = this;
     return rc;
+#endif
+
+#if CC_ALG == QUECC
+	// For QueCC no locking needed
+	// This line is added just to compile
+	// row is not accessed here.
+	assert(false);
+	goto end;
 #endif
   /*
 #if ISOLATION_LEVEL == READ_UNCOMMITTED

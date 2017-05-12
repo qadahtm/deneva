@@ -149,6 +149,7 @@ RC PlannerThread::run() {
         exec_q->init(exec_queue_capacity);
         exec_queues->add(exec_q);
     }
+    uint64_t total_msg_processed_cnt = 0;
     uint64_t total_access_cnt = 0;
     uint64_t  batch_id = 0;
     uint64_t planner_txn_id = txn_prefix_planner_base;
@@ -184,7 +185,7 @@ RC PlannerThread::run() {
         }
         batch_cnt++;
         if (batch_cnt == planner_batch_size){
-            DEBUG_Q("Batch complete\n")
+//            DEBUG_Q("Batch complete\n")
             // a batch is ready to be delivered to the the execution threads.
             // we will have a batch queue for each of the planners and they are scanned in known order
             // by execution threads
@@ -198,9 +199,10 @@ RC PlannerThread::run() {
 //                uint64_t exe_q_ptr = (uint64_t) work_queue.batch_map[_planner_id][i][batch_id];
 //                DEBUG_Q("old value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, exe_q_ptr);
 //                DEBUG_Q("new value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, (uint64_t) exec_queues->get(i));
-                while (!ATOM_CAS(work_queue.batch_map[_planner_id][i][batch_id], 0, exec_queues->get(i))) {}
-//                atomic_thread_fence(std::memory_order_release);
-//                DEBUG_Q("Batch_%ld enqueue range_%ld\n", batch_id, i);
+                uint64_t slot_num = (batch_id % g_batch_map_length);
+                while (!ATOM_CAS(work_queue.batch_map[_planner_id][i][slot_num], 0, exec_queues->get(i))) {}
+                atomic_thread_fence(std::memory_order_release);
+//                DEBUG_Q("Batch_%ld for range_%ld ready! b_slot = %ld\n", batch_id, slot_num, i);
             }
 
 
@@ -254,7 +256,10 @@ RC PlannerThread::run() {
                     entry->batch_id = batch_id;
                     entry->mrange_id = idx;
                     entry->planner_id = _planner_id;
+
                     entry->starttime = get_sys_clock();
+                    entry->return_node_id = msg->return_node_id;
+
                     // for now, assume only one request per entry
                     entry->ycsb_req_index = j;
 
@@ -276,6 +281,10 @@ RC PlannerThread::run() {
                     // entry is a sturct, need to double check if this works
                     mrange->add(*entry);
                 }
+                // Free message, as there is no need for it anymore
+                total_msg_processed_cnt++;
+                msg->release();
+
                 // increment for next ransaction
                 planner_txn_id++;
 #endif
@@ -301,7 +310,7 @@ RC PlannerThread::run() {
         INC_STATS(_thd_id,mtx[32],get_sys_clock() - prof_starttime);
         prof_starttime = get_sys_clock();
     }
-    DEBUG_Q("Planner_%ld: Total access cnt = %ld\n", _planner_id, total_access_cnt);
+    DEBUG_Q("Planner_%ld: Total access cnt = %ld, and proceeded %ld msgs\n", _planner_id, total_access_cnt, total_msg_processed_cnt);
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
         DEBUG_Q("Planner_%ld: Access cnt for bucket_%ld = %ld\n",_planner_id, i, mrange_cnts.get(i));
     }

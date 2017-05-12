@@ -215,14 +215,21 @@ RC YCSBTxnManager::run_txn_state() {
 RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     RC rc = RCOK;
     int part_id = _wl->key_to_part(req->key);
+#if CC_ALG != QUECC
     access_t type = req->acctype;
+#endif
     itemid_t *m_item;
 
     m_item = index_read(_wl->the_index, req->key, part_id);
 
-    row_t *row = ((row_t *) m_item->location);
 
+#if CC_ALG == QUECC
+    // just access row, no need to go throught lock manager path
+    row_local = ((row_t *) m_item->location);
+#else
+    row_t *row = ((row_t *) m_item->location);
     rc = get_row(row, type, row_local);
+#endif
 
     return rc;
 
@@ -243,6 +250,9 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
 #endif
 
     } else {
+        if (acctype != WR){
+            DEBUG_Q("Access type must be %d == %d\n", WR, acctype);
+        }
         assert(acctype == WR);
         int fid = 0;
         char *data = row_local->get_data();

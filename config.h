@@ -51,7 +51,8 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 
 #define FIN_BY_TIME true
-#define MAX_TXN_IN_FLIGHT 100
+// Max allowed number of transactions
+#define MAX_TXN_IN_FLIGHT 20000
 
 #define SERVER_GENERATE_QUERIES false
 
@@ -108,7 +109,7 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
 //#define CC_ALG TIMESTAMP
-#define CC_ALG NO_WAIT
+#define CC_ALG QUECC//NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -150,8 +151,9 @@
 #define SEQ_THREAD_CNT 4
 // [QUECC]
 #define PLAN_THREAD_CNT 4
-#define BATCH_SIZE 10000
-#define BATCH_MAP_LENGTH 20 // width of map is PLAN_THREAD_CNT
+// This relates to MAX_TXN_IN_FLIGHT
+#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.5
+#define BATCH_MAP_LENGTH 200 // width of map is PLAN_THREAD_CNT
 
 /***********************************************/
 // Logging
@@ -377,10 +379,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 5 * BILLION // ~5 seconds
-#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
+#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 20 * BILLION // ~20 seconds
+//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

@@ -34,6 +34,7 @@ struct exec_queue_entry {
     uint64_t batch_id;
     uint64_t planner_id;
     uint64_t mrange_id;
+    uint64_t return_node_id;
     transaction_context * tctx;
 //    RemReqType rtype;
     uint64_t starttime;

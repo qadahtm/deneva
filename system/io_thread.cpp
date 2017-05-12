@@ -140,6 +140,8 @@ RC InputThread::server_recv_loop() {
   uint64_t starttime;
 
   std::vector<Message*> * msgs;
+  // Counter for number of messages enqueued to planning layer
+  uint64_t planner_msg_cnt = 0;
 	while (!simulation->is_done()) {
     heartbeat();
     starttime = get_sys_clock();
@@ -175,26 +177,33 @@ RC InputThread::server_recv_loop() {
 //      DEBUG_Q("Enqueue to planning layer\n")
 #if WORKLOAD == YCSB
       //TQ: there is no need to make a copy if we are only using QUECC
-      YCSBClientQueryMessage * cmsg = (YCSBClientQueryMessage *) msg;
-      YCSBClientQueryMessage * msg2 = (YCSBClientQueryMessage *) Message::create_message(msg->rtype);
-      msg2->txn_id = cmsg->txn_id;
-      msg2->batch_id = cmsg->batch_id;
-      msg2->return_node_id = cmsg->return_node_id;
-      msg2->requests.copy((cmsg)->requests);
+//      YCSBClientQueryMessage * cmsg = (YCSBClientQueryMessage *) msg;
+//      YCSBClientQueryMessage * msg2 = (YCSBClientQueryMessage *) Message::create_message(msg->rtype);
+//      msg2->txn_id = cmsg->txn_id;
+//      msg2->batch_id = cmsg->batch_id;
+//      msg2->return_node_id = cmsg->return_node_id;
+//      msg2->requests.copy((cmsg)->requests);
 //      DEBUG_Q("Copied msg2 with %ld requests from cmsg with %ld requests\n", msg2->requests.size(), cmsg->requests.size());
-      work_queue.plan_enqueue(get_thd_id(),msg2);
+//      work_queue.plan_enqueue(get_thd_id(),msg2);
+      work_queue.plan_enqueue(get_thd_id(),msg);
+      planner_msg_cnt++;
 #endif
 //        msgs->erase(msgs->begin());
 //        continue;
 //      }
 //#endif
-      work_queue.enqueue(get_thd_id(),msg,false);
+
+      // TODO uncomment the following when QueCC is ready
+//      work_queue.enqueue(get_thd_id(),msg,false);
       msgs->erase(msgs->begin());
     }
     delete msgs;
     INC_STATS(_thd_id,mtx[29], get_sys_clock() - starttime);
 
 	}
+
+  DEBUG_Q("Total messages enq. to planners = %ld\n",planner_msg_cnt);
+
   printf("FINISH %ld:%ld\n",_node_id,_thd_id);
   fflush(stdout);
   return FINISH;
