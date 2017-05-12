@@ -108,8 +108,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-//#define CC_ALG TIMESTAMP
-#define CC_ALG QUECC//NO_WAIT
+#define CC_ALG NO_WAIT
+//#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 

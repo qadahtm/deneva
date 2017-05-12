@@ -191,10 +191,12 @@ RC WorkerThread::run() {
 
     uint64_t ready_starttime;
     uint64_t idle_starttime = 0;
+
+#if CC_ALG == QUECC
     uint64_t wbatch_id = 0;
     uint64_t wplanner_id = 0;
     uint64_t batch_slot = 0;
-
+#endif
     while (!simulation->is_done()) {
         txn_man = NULL;
         heartbeat();
