@@ -323,6 +323,7 @@ void Stats_thd::print_client(FILE * outf, bool prog) {
     tput = txn_cnt / (total_runtime / BILLION);
   fprintf(outf,
       "total_runtime=%f"
+              ",inf_msgs=%ld"
       ",tput=%f"
       ",txn_cnt=%ld"
       ",txn_sent_cnt=%ld"
@@ -330,6 +331,7 @@ void Stats_thd::print_client(FILE * outf, bool prog) {
       ",txn_run_avg_time=%f"
       ",cl_send_intv=%f"
       ,total_runtime/BILLION
+          ,client_man.inflight_msgs.load()
       ,tput
       ,txn_cnt
       ,txn_sent_cnt
@@ -466,6 +468,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   if(single_part_txn_cnt > 0)
     single_part_txn_avg_time = single_part_txn_run_time / single_part_txn_cnt;
   fprintf(outf,
+          ",inf_msgs=%ld"
   ",tput=%f"
   ",txn_cnt=%ld"
   ",remote_txn_cnt=%ld"
@@ -490,6 +493,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ",record_write_cnt=%ld"
   ",parts_touched=%ld"
   ",avg_parts_touched=%f"
+          ,work_queue.inflight_msg.load()
   ,tput
   ,txn_cnt
   ,remote_txn_cnt

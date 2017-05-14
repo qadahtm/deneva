@@ -6,10 +6,10 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 5 
+#define THREAD_CNT 5
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 10
+#define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
 #define PART_CNT NODE_CNT
 
@@ -52,7 +52,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions
-#define MAX_TXN_IN_FLIGHT 20000
+#define MAX_TXN_IN_FLIGHT 1000000
 
 #define SERVER_GENERATE_QUERIES false
 
@@ -108,8 +108,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-#define CC_ALG NO_WAIT
-//#define CC_ALG QUECC
+//#define CC_ALG NO_WAIT
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -152,8 +152,9 @@
 // [QUECC]
 #define PLAN_THREAD_CNT 4
 // This relates to MAX_TXN_IN_FLIGHT
-#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.5
-#define BATCH_MAP_LENGTH 200 // width of map is PLAN_THREAD_CNT
+#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
+#define BATCH_MAP_LENGTH 100000 // width of map is PLAN_THREAD_CNT
+#define BATCH_COMP_TIMEOUT 10 * 1000000UL
 
 /***********************************************/
 // Logging
@@ -176,7 +177,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART 500000
+#define MAX_TXN_PER_PART 5000000
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -192,7 +193,7 @@
 //#define SYNTH_TABLE_SIZE 65536
 #define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs 
-#define ZIPF_THETA 0.7//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
@@ -379,10 +380,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 20 * BILLION // ~20 seconds
-//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+#define DONE_TIMER 1 * 60 * BILLION // ~60 seconds
+#define WARMUP_TIMER 1 * 30 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

@@ -29,6 +29,8 @@ public:
   RC  server_recv_loop();
   void  check_for_init_done();
   void setup();
+	// Counter for number of messages enqueued to planning layer
+	uint64_t planner_msg_cnt = 0;
 };
 
 class OutputThread : public Thread {

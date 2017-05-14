@@ -33,193 +33,216 @@
 
 void InputThread::setup() {
 
-  std::vector<Message*> * msgs;
-  while(!simulation->is_setup_done()) {
-    msgs = tport_man.recv_msg(get_thd_id());
-    if(msgs == NULL)
-      continue;
-    while(!msgs->empty()) {
-      Message * msg = msgs->front();
-      if(msg->rtype == INIT_DONE) {
-        printf("Received INIT_DONE from node %ld\n",msg->return_node_id);
-        fflush(stdout);
-        simulation->process_setup_msg();
-      } else {
-        assert(ISSERVER || ISREPLICA);
-        //printf("Received Msg %d from node %ld\n",msg->rtype,msg->return_node_id);
+    std::vector<Message *> *msgs;
+    while (!simulation->is_setup_done()) {
+        msgs = tport_man.recv_msg(get_thd_id());
+        if (msgs == NULL)
+            continue;
+        while (!msgs->empty()) {
+            Message *msg = msgs->front();
+            if (msg->rtype == INIT_DONE) {
+                printf("Received INIT_DONE from node %ld\n", msg->return_node_id);
+                fflush(stdout);
+                simulation->process_setup_msg();
+            } else {
+                assert(ISSERVER || ISREPLICA);
+                //printf("Received Msg %d from node %ld\n",msg->rtype,msg->return_node_id);
 #if CC_ALG == CALVIN
-      if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
-        work_queue.sequencer_enqueue(get_thd_id(),msg);
-        msgs->erase(msgs->begin());
-        continue;
-      }
-      if( msg->rtype == RDONE || msg->rtype == CL_QRY) {
-        assert(ISSERVERN(msg->get_return_id()));
-        work_queue.sched_enqueue(get_thd_id(),msg);
-        msgs->erase(msgs->begin());
-        continue;
-      }
+                if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
+                  work_queue.sequencer_enqueue(get_thd_id(),msg);
+                  msgs->erase(msgs->begin());
+                  continue;
+                }
+                if( msg->rtype == RDONE || msg->rtype == CL_QRY) {
+                  assert(ISSERVERN(msg->get_return_id()));
+                  work_queue.sched_enqueue(get_thd_id(),msg);
+                  msgs->erase(msgs->begin());
+                  continue;
+                }
 #endif
-        work_queue.enqueue(get_thd_id(),msg,false);
-      }
-      msgs->erase(msgs->begin());
+#if CC_ALG == QUECC
+//      DEBUG_Q("Enqueue to planning layer\n")
+#if WORKLOAD == YCSB
+                if (msg->rtype == CL_QRY) {
+                    work_queue.plan_enqueue(get_thd_id(), msg);
+                    planner_msg_cnt++;
+                    msgs->erase(msgs->begin());
+                    continue;
+                }
+#endif
+
+#endif // CC_ALG == QUECC
+                work_queue.enqueue(get_thd_id(), msg, false);
+            }
+            msgs->erase(msgs->begin());
+        }
+        delete msgs;
     }
-    delete msgs;
-  }
 }
 
 RC InputThread::run() {
-  tsetup();
-  printf("Running InputThread %ld\n",_thd_id);
+    tsetup();
+    printf("Running InputThread %ld\n", _thd_id);
 
-  if(ISCLIENT) {
-    client_recv_loop();
-  } else {
-    server_recv_loop();
-  }
+    if (ISCLIENT) {
+        client_recv_loop();
+    } else {
+        server_recv_loop();
+    }
 
-  return FINISH;
+    return FINISH;
 
 }
 
 RC InputThread::client_recv_loop() {
-	int rsp_cnts[g_servers_per_client];
-	memset(rsp_cnts, 0, g_servers_per_client * sizeof(int));
+    DEBUG_Q("servers to track %d\n", g_servers_per_client);
+    int rsp_cnts[g_servers_per_client];
+    memset(rsp_cnts, 0, g_servers_per_client * sizeof(int));
 
-	run_starttime = get_sys_clock();
-  uint64_t return_node_offset;
-  uint64_t inf;
+    run_starttime = get_sys_clock();
+    uint64_t return_node_offset;
+    uint64_t inf;
 
-  std::vector<Message*> * msgs;
+    std::vector<Message *> *msgs;
 
-	while (!simulation->is_done()) {
-    heartbeat();
-    uint64_t starttime = get_sys_clock();
-		msgs = tport_man.recv_msg(get_thd_id());
-    INC_STATS(_thd_id,mtx[28], get_sys_clock() - starttime);
-    starttime = get_sys_clock();
-    //while((m_query = work_queue.get_next_query(get_thd_id())) != NULL) {
-    //Message * msg = work_queue.dequeue();
-    if(msgs == NULL)
-      continue;
-    while(!msgs->empty()) {
-      Message * msg = msgs->front();
-			assert(msg->rtype == CL_RSP);
-      return_node_offset = msg->return_node_id - g_server_start_node;
-      assert(return_node_offset < g_servers_per_client);
-      rsp_cnts[return_node_offset]++;
-      INC_STATS(get_thd_id(),txn_cnt,1);
-      uint64_t timespan = get_sys_clock() - ((ClientResponseMessage*)msg)->client_startts; 
-      INC_STATS(get_thd_id(),txn_run_time, timespan);
-      if (warmup_done) {
-        INC_STATS_ARR(get_thd_id(),client_client_latency, timespan);
-      }
-      //INC_STATS_ARR(get_thd_id(),all_lat,timespan);
-      inf = client_man.dec_inflight(return_node_offset);
-      DEBUG("Recv %ld from %ld, %ld -- %f\n",((ClientResponseMessage*)msg)->txn_id,msg->return_node_id,inf,float(timespan)/BILLION);
-      assert(inf >=0);
-      // delete message here
-      msgs->erase(msgs->begin());
+    while (!simulation->is_done()) {
+        heartbeat();
+        uint64_t starttime = get_sys_clock();
+        msgs = tport_man.recv_msg(get_thd_id());
+        INC_STATS(_thd_id, mtx[28], get_sys_clock() - starttime);
+        starttime = get_sys_clock();
+        //while((m_query = work_queue.get_next_query(get_thd_id())) != NULL) {
+        //Message * msg = work_queue.dequeue();
+        if (msgs == NULL)
+            continue;
+        while (!msgs->empty()) {
+            Message *msg = msgs->front();
+            assert(msg->rtype == CL_RSP);
+            return_node_offset = msg->return_node_id - g_server_start_node;
+            assert(return_node_offset < g_servers_per_client);
+            rsp_cnts[return_node_offset]++;
+            INC_STATS(get_thd_id(), txn_cnt, 1);
+            uint64_t timespan = get_sys_clock() - ((ClientResponseMessage *) msg)->client_startts;
+            INC_STATS(get_thd_id(), txn_run_time, timespan);
+            if (warmup_done) {
+                INC_STATS_ARR(get_thd_id(), client_client_latency, timespan);
+            }
+            //INC_STATS_ARR(get_thd_id(),all_lat,timespan);
+            inf = client_man.dec_inflight(return_node_offset);
+            client_man.inflight_msgs.fetch_sub(1);
+            DEBUG("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
+                  float(timespan)/BILLION);
+            assert(inf >= 0);
+            // delete message here
+            msgs->erase(msgs->begin());
+
+//            if (simulation->is_warmup_done()){
+//                DEBUG_Q("Thread_%ld:Txn_%ld , batch %ld committed at node_offset %ld, commit_txn_cnt = %d, stat_txn_cnt = %ld, inf = %d \n",
+//                        _thd_id, msg->txn_id, msg->batch_id, return_node_offset, rsp_cnts[return_node_offset],
+//                        stats._stats[_thd_id]->txn_cnt, client_man.get_inflight(return_node_offset));
+//            }
+        }
+        delete msgs;
+        INC_STATS(_thd_id, mtx[29], get_sys_clock() - starttime);
+
     }
-    delete msgs;
-    INC_STATS(_thd_id,mtx[29], get_sys_clock() - starttime);
 
-	}
-
-  printf("FINISH %ld:%ld\n",_node_id,_thd_id);
-  fflush(stdout);
-  return FINISH;
+    printf("FINISH %ld:%ld\n", _node_id, _thd_id);
+    fflush(stdout);
+    return FINISH;
 }
 
 RC InputThread::server_recv_loop() {
 
-	myrand rdm;
-	rdm.init(get_thd_id());
-	RC rc = RCOK;
-	assert (rc == RCOK);
-  uint64_t starttime;
+    myrand rdm;
+    rdm.init(get_thd_id());
+    RC rc = RCOK;
+    assert(rc == RCOK);
+    uint64_t starttime;
 
-  std::vector<Message*> * msgs;
-  // Counter for number of messages enqueued to planning layer
-  uint64_t planner_msg_cnt = 0;
-	while (!simulation->is_done()) {
-    heartbeat();
-    starttime = get_sys_clock();
+    std::vector<Message *> *msgs;
 
-		msgs = tport_man.recv_msg(get_thd_id());
-    INC_STATS(_thd_id,mtx[28], get_sys_clock() - starttime);
-    starttime = get_sys_clock();
+    while (!simulation->is_done()) {
+        heartbeat();
+        starttime = get_sys_clock();
 
-    if(msgs == NULL)
-      continue;
-    while(!msgs->empty()) {
-      Message * msg = msgs->front();
-      if(msg->rtype == INIT_DONE) {
-        msgs->erase(msgs->begin());
-        continue;
-      }
+        msgs = tport_man.recv_msg(get_thd_id());
+        INC_STATS(_thd_id, mtx[28], get_sys_clock() - starttime);
+        starttime = get_sys_clock();
+
+        if (msgs == NULL)
+            continue;
+        while (!msgs->empty()) {
+            Message *msg = msgs->front();
+            if (msg->rtype == INIT_DONE) {
+                msgs->erase(msgs->begin());
+                continue;
+            }
 #if CC_ALG == CALVIN
-      if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
-        work_queue.sequencer_enqueue(get_thd_id(),msg);
-        msgs->erase(msgs->begin());
-        continue;
-      }
-      if( msg->rtype == RDONE || msg->rtype == CL_QRY) {
-        assert(ISSERVERN(msg->get_return_id()));
-        work_queue.sched_enqueue(get_thd_id(),msg);
-        msgs->erase(msgs->begin());
-        continue;
-      }
+            if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
+              work_queue.sequencer_enqueue(get_thd_id(),msg);
+              msgs->erase(msgs->begin());
+              continue;
+            }
+            if( msg->rtype == RDONE || msg->rtype == CL_QRY) {
+              assert(ISSERVERN(msg->get_return_id()));
+              work_queue.sched_enqueue(get_thd_id(),msg);
+              msgs->erase(msgs->begin());
+              continue;
+            }
 #endif
 
 #if CC_ALG == QUECC
 //      DEBUG_Q("Enqueue to planning layer\n")
 #if WORKLOAD == YCSB
-      work_queue.plan_enqueue(get_thd_id(),msg);
-      planner_msg_cnt++;
+            if (msg->rtype == CL_QRY) {
+                work_queue.plan_enqueue(get_thd_id(), msg);
+                planner_msg_cnt++;
+                work_queue.inflight_msg.fetch_add(1);
+                msgs->erase(msgs->begin());
+                continue;
+            }
 #endif
 
-#else
-      work_queue.enqueue(get_thd_id(),msg,false);
-#endif
+#endif // CC_ALG == QUECC
+            work_queue.enqueue(get_thd_id(), msg, false);
+            msgs->erase(msgs->begin());
 
-      msgs->erase(msgs->begin());
+        }
+        delete msgs;
+        INC_STATS(_thd_id, mtx[29], get_sys_clock() - starttime);
 
     }
-    delete msgs;
-    INC_STATS(_thd_id,mtx[29], get_sys_clock() - starttime);
 
-	}
+    DEBUG_Q("Total messages enq. to planners = %ld\n", planner_msg_cnt);
 
-  DEBUG_Q("Total messages enq. to planners = %ld\n",planner_msg_cnt);
-
-  printf("FINISH %ld:%ld\n",_node_id,_thd_id);
-  fflush(stdout);
-  return FINISH;
+    printf("FINISH %ld:%ld\n", _node_id, _thd_id);
+    fflush(stdout);
+    return FINISH;
 }
 
 void OutputThread::setup() {
-  DEBUG_M("OutputThread::setup MessageThread alloc\n");
-  messager = (MessageThread *) mem_allocator.alloc(sizeof(MessageThread));
-  messager->init(_thd_id);
-	while (!simulation->is_setup_done()) {
-    messager->run();
-  }
+    DEBUG_M("OutputThread::setup MessageThread alloc\n");
+    messager = (MessageThread *) mem_allocator.alloc(sizeof(MessageThread));
+    messager->init(_thd_id);
+    while (!simulation->is_setup_done()) {
+        messager->run();
+    }
 }
 
 RC OutputThread::run() {
 
-  tsetup();
-  printf("Running OutputThread %ld\n",_thd_id);
+    tsetup();
+    printf("Running OutputThread %ld\n", _thd_id);
 
-	while (!simulation->is_done()) {
-    heartbeat();
-    messager->run();
-  }
+    while (!simulation->is_done()) {
+        heartbeat();
+        messager->run();
+    }
 
-  printf("FINISH %ld:%ld\n",_node_id,_thd_id);
-  fflush(stdout);
-  return FINISH;
+    printf("FINISH %ld:%ld\n", _node_id, _thd_id);
+    fflush(stdout);
+    return FINISH;
 }
 
 

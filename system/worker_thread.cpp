@@ -32,6 +32,10 @@
 #include "message.h"
 #include "abort_queue.h"
 #include "maat.h"
+#include "ycsb.h"
+#include "index_base.h"
+#include "index_hash.h"
+#include "index_btree.h"
 
 void WorkerThread::setup() {
 
@@ -188,14 +192,15 @@ TxnManager *WorkerThread::get_transaction_manager(Message *msg) {
 RC WorkerThread::run() {
     tsetup();
     printf("Running WorkerThread %ld\n", _thd_id);
-
+#if CC_ALG != QUECC
     uint64_t ready_starttime;
+#endif
     uint64_t idle_starttime = 0;
-
 #if CC_ALG == QUECC
     uint64_t wbatch_id = 0;
     uint64_t wplanner_id = 0;
     uint64_t batch_slot = 0;
+    Array<exec_queue_entry> *exec_q = NULL;
 #endif
     while (!simulation->is_done()) {
         txn_man = NULL;
@@ -208,86 +213,153 @@ RC WorkerThread::run() {
         // we should spin here if pointer is not set
         // a fence is needed here to make sure we are reading an up to date value
         // TODO(tq): do we actually need it?
-        atomic_thread_fence(std::memory_order_acquire);
-
-        Array<exec_queue_entry> *exec_q = work_queue.batch_map[wplanner_id][_thd_id][batch_slot];
+//        atomic_thread_fence(std::memory_order_acquire);
+//        exec_q = work_queue.batch_map[wplanner_id][_thd_id][batch_slot];
+        exec_q = work_queue.batch_map[wplanner_id][_thd_id][batch_slot].load();
 
 //      DEBUG_Q("Pointer for map slot [%d][%ld][%ld] is %ld, going to spin if 0\n", 0, _thd_id, wbatch_id, exec_q_ptr);
         if (((uint64_t) exec_q) != 0) {
-//            DEBUG_Q("Pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,  batch partition size = %ld txns\n",
+//            DEBUG_Q("Pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,  batch partition size = %ld entries\n",
 //                    _thd_id, wplanner_id, batch_slot, ((uint64_t) exec_q), wbatch_id,
 //                    exec_q->size());
-
 
 //            DEBUG_Q("Processing batch partition from planner[%ld]\n", wplanner_id);
             for (uint64_t i = 0; i < exec_q->size(); ++i) {
                 exec_queue_entry exec_qe = exec_q->get(i);
+//                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
+                assert(exec_qe.batch_id == wbatch_id);
+//                uint64_t txid = exec_qe.txn_id;
+//                transaction_context * txn_ctx = exec_qe.txn_ctx;
 
-                txn_man = txn_table.get_transaction_manager(get_thd_id(), exec_qe.tctx->txn_id, wbatch_id);
-                txn_man->register_thread(this);
 
-                ready_starttime = get_sys_clock();
-                txn_man->set_ready();
-                INC_STATS(get_thd_id(),worker_activate_txn_time,get_sys_clock() - ready_starttime);
+//                txn_man = txn_table.get_transaction_manager(get_thd_id(), txid, wbatch_id);
+//                txn_man->register_thread(this);
 
-                DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
-                      txn_man->txn_stats.starttime);
+//                ready_starttime = get_sys_clock();
+//                txn_man->set_ready();
+//                INC_STATS(get_thd_id(),worker_activate_txn_time,get_sys_clock() - ready_starttime);
 
-                txn_man->return_id = exec_qe.return_node_id;
+//                DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
+//                      txn_man->txn_stats.starttime);
 
-                txn_man->run_quecc_txn(&exec_qe);
+//                txn_man->return_id = exec_qe.return_node_id;
+
+//                txn_man->run_quecc_txn(&exec_qe);
+
+                row_t *quecc_row;
+//                uint64_t starttime = get_sys_clock();
+
+                //TQ: dirty code: using a char buffer to store ycsb_request
+                ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
+
+                // get pointer to record in row
+                YCSBWorkload *my_wl = (YCSBWorkload *) this->_wl;
+                int part_id = my_wl->key_to_part(req->key);
+
+                itemid_t *item;
+                INDEX *index = my_wl->the_index;
+                index->index_read(req->key, item, part_id, _thd_id);
+
+                // just access row, no need to go through lock manager path
+                quecc_row = ((row_t *) item->location);
+
+                // perfrom access
+                if (req->acctype == RD || req->acctype == SCAN) {
+                    int fid = 0;
+                    char *data = quecc_row->get_data();
+                    //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is no used
+                    uint64_t fval __attribute__ ((unused));
+                    // TQ: perform the actual read by
+                    // However this only reads 8 bytes of the data
+                    fval = *(uint64_t *) (&data[fid * 100]);
+
+                } else {
+                    if (req->acctype != WR) {
+                        DEBUG_Q("Access type must be %d == %d\n", WR, req->acctype);
+                    }
+                    assert(req->acctype == WR);
+                    int fid = 0;
+                    char *data = quecc_row->get_data();
+                    //TQ: here the we are zeroing the first 8 bytes
+                    // 100 below is the number of bytes for each field
+                    *(uint64_t *) (&data[fid * 100]) = 0;
+                }
+
+                // TQ: declare this operation as executed
+                // since we only have a single operation, we just increment by one
+//                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
+//    incr_rsp(1);
+                assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
+                uint64_t comp_cnt = ATOM_ADD_FETCH(exec_qe.txn_ctx->completion_cnt, 1);
 
                 // TQ: we are committing now, which is done one by one.
                 // Since there is no logging this is okay
                 // TODO(tq): consider committing as a batch with logging enabled
                 // TODO(tq): Hardcoding for 10 operations, use a paramter instead
                 // Execution thrad that will execute the last operation will commit
-                if (txn_man->get_rsp_cnt() == 10) {
-//                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.tctx->txn_id, get_thd_id());
+                if (comp_cnt == 10) {
+//                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
 //                          txn_man->return_id, exec_qe.return_node_id, g_node_id);
                     // set client_id for creating response
-                    txn_man->client_id = exec_qe.return_node_id;
+//                    txn_man->client_id = exec_qe->return_node_id;
+//                    DEBUG_Q("thread_%ld: Committing with txn(%ld,%ld,%ld)\n", _thd_id, wbatch_id, exec_qe.txn_id,
+//                            exec_qe.req_id);
+//TODO(tq): collect stats
+                    // Committing
+                    // Sending response to client a
+//#if !SERVER_GENERATE_QUERIES
+                    Message * rsp_msg = Message::create_message(CL_RSP);
+                    rsp_msg->txn_id = exec_qe.txn_id;
+                    rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
+                    ((ClientResponseMessage *) rsp_msg)->client_startts = exec_qe.txn_ctx->client_startts;
+//                    ((ClientResponseMessage *) rsp_msg)->batch_id = wbatch_id;
+                    rsp_msg->lat_work_queue_time = 0;
+                    rsp_msg->lat_msg_queue_time = 0;
+                    rsp_msg->lat_cc_block_time = 0;
+                    rsp_msg->lat_cc_time = 0;
+                    rsp_msg->lat_process_time = 0;
+                    rsp_msg->lat_network_time = 0;
+                    rsp_msg->lat_other_time = 0;
 
+                    msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
+                    work_queue.inflight_msg.fetch_sub(1);
+//#endif
                     // we always commit
                     //TODO(tq): how to handle logic-induced aborts
-                    commit();
                 }
 
-
             }
-//            DEBUG_Q("Batch partition processing complete with %ld txns processed\n", exec_q->size());
+//            DEBUG_Q("For batch %ld , batch partition processing complete with %ld entries processed at map slot [%ld][%ld][%ld] \n",
+//                    wbatch_id, exec_q->size(), _thd_id, wplanner_id, batch_slot);
             // relaese
             exec_q->release();
             // reset map slot to 0
             // Maybe we need to do a CAS because planners may be trying to write to it
-            work_queue.batch_map[wplanner_id][_thd_id][batch_slot] = 0;
-
-            atomic_thread_fence(std::memory_order_release);
-
+//            while(!ATOM_CAS(work_queue.batch_map[wplanner_id][_thd_id][batch_slot], (uint64_t) exec_q, 0)) {};
+//            atomic_thread_fence(std::memory_order_release);
+//            work_queue.batch_map[wplanner_id][_thd_id][batch_slot].store((Array<exec_queue_entry> *) 0, boost::memory_order_seq_cst);
+            Array<exec_queue_entry> * desired = (Array<exec_queue_entry> *) 0;
+            while(!work_queue.batch_map[wplanner_id][_thd_id][batch_slot].compare_exchange_strong(
+                    exec_q, desired)){
+                DEBUG_Q("failing to RESET map slot \n");
+            }
             // go to the next batch partition prepared by the next planner
             wplanner_id++;
             if (wplanner_id == g_plan_thread_cnt) {
                 wbatch_id++;
+                batch_slot =  wbatch_id % g_batch_map_length;
                 wplanner_id = 0;
+//                DEBUG_Q("** Completed batch %ld, and moving to next batch %ld at [%ld][%ld][%ld] \n",
+//                        wbatch_id-1, wbatch_id, _thd_id, wplanner_id, batch_slot);
+
             }
-        } else {
-            if (idle_starttime == 0)
-                idle_starttime = get_sys_clock();
         }
 
-//        continue;
+            if (idle_starttime == 0)
+                idle_starttime = get_sys_clock();
 
-//      while ( exec_q_ptr == 0) {
-//        atomic_thread_fence(std::memory_order_acquire);
-//        exec_q_ptr = (uint64_t) work_queue.batch_map[0][_thd_id][wbatch_id];
-//      }
-//      DEBUG_Q("Got a pointer to %ld\n", exec_q_ptr);
-        // We need to continue so that other stuff don't happen
-//      continue;
 #else
-
-
         Message * msg = work_queue.dequeue(get_thd_id());
         if(!msg) {
           if(idle_starttime ==0)

@@ -23,6 +23,7 @@
 #include <queue>
 #include <boost/lockfree/queue.hpp>
 #include <boost/random.hpp>
+#include <boost/atomic.hpp>
 //#include "message.h"
 #include "quecc_thread.h"
 
@@ -86,10 +87,10 @@ public:
     void plan_enqueue(uint64_t thd_id, Message * msg);
     Message * plan_dequeue(uint64_t thd_id, uint64_t planner_id);
 
-    // QueCC batch map
-
-    // TQ: Should be a circular array with respect the  length dim.
-    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
+    // QueCC batch slot map
+//    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
+    atomic<Array<exec_queue_entry> *> batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
+    atomic<int64_t> inflight_msg;
 //------
   uint64_t get_cnt() {return get_wq_cnt() + get_rem_wq_cnt() + get_new_wq_cnt();}
   uint64_t get_wq_cnt() {return 0;}

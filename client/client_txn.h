@@ -19,6 +19,7 @@
 
 #include "global.h"
 #include "semaphore.h"
+#include <boost/atomic.hpp>
 
 class Inflight_entry {
  public:
@@ -28,6 +29,7 @@ class Inflight_entry {
      int32_t get_inflight();
  private:
      volatile int32_t num_inflight_txns;
+//    boost::atomic_int32_t num_inflight_txns;
      sem_t mutex;
 };
 
@@ -37,6 +39,7 @@ class Client_txn {
      int32_t inc_inflight(uint32_t node_id);
      int32_t dec_inflight(uint32_t node_id);
      int32_t get_inflight(uint32_t node_id);
+    atomic<int64_t> inflight_msgs;
  private:
      Inflight_entry ** inflight_txns;
 };

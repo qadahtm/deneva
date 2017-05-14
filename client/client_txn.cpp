@@ -23,6 +23,7 @@ void Inflight_entry::init() {
 }
 
 int32_t Inflight_entry::inc_inflight() {
+//    return ATOM_ADD_FETCH(num_inflight_txns, 1);
     int32_t result;
     sem_wait(&mutex);
     if (num_inflight_txns < g_inflight_max) {
@@ -35,12 +36,13 @@ int32_t Inflight_entry::inc_inflight() {
 }
 
 int32_t Inflight_entry::dec_inflight() {
+//    return ATOM_SUB_FETCH(num_inflight_txns, 1);
     int32_t result;
     sem_wait(&mutex);
     if(num_inflight_txns > 0) {
       result = --num_inflight_txns;
     }
-    //assert(num_inflight_txns >= 0);
+    assert(num_inflight_txns >= 0);
     sem_post(&mutex);
     return result;
 }
@@ -62,6 +64,7 @@ void Client_txn::init() {
             (Inflight_entry *) mem_allocator.alloc(sizeof(Inflight_entry));
         inflight_txns[i]->init();
     }
+    inflight_msgs.store(0);
 }
 
 int32_t Client_txn::inc_inflight(uint32_t node_id) {

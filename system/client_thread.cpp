@@ -68,8 +68,15 @@ RC ClientThread::run() {
 		if (iters == UINT64_MAX)
 			iters = 0;
 #if LOAD_METHOD == LOAD_MAX
-		if ((inf_cnt = client_man.inc_inflight(next_node)) < 0)
-			continue;
+//      uint64_t s_cntr = 0;
+//      uint64_t s_bound = 100000;
+		if ((inf_cnt = client_man.inc_inflight(next_node)) < 0){
+//            if (s_cntr % s_bound == 0){
+//                DEBUG_Q("Thread_%ld, No sending any more inf=%d\n", _thd_id, inf_cnt);
+//            }
+//            s_cntr++;
+            continue;
+        }
 
 		m_query = client_query_queue.get_next_query(next_node,_thd_id);
     if(last_send_time > 0) {
@@ -99,6 +106,7 @@ RC ClientThread::run() {
     msg_queue.enqueue(get_thd_id(),msg,next_node_id);
 		num_txns_sent++;
 		txns_sent[next_node]++;
+      client_man.inflight_msgs.fetch_add(1);
     INC_STATS(get_thd_id(),txn_sent_cnt,1);
 
 	}

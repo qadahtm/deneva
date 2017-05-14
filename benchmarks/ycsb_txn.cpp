@@ -222,7 +222,7 @@ RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
 
     m_item = index_read(_wl->the_index, req->key, part_id);
 
-
+// not used anymore
 #if CC_ALG == QUECC
     // just access row, no need to go throught lock manager path
     row_local = ((row_t *) m_item->location);
@@ -351,7 +351,6 @@ RC YCSBTxnManager::run_calvin_txn() {
 RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
     uint64_t starttime = get_sys_clock();
-    DEBUG("(%ld,%ld) Run QueCC txn\n", txn->txn_id, txn->batch_id);
 
     //TQ: dirty code: using a char buffer to store ycsb_request
     ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
@@ -363,10 +362,6 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     // perfrom access
     rc = run_ycsb_1(req->acctype, row);
     assert(rc == RCOK);
-
-    // TQ: declare this operation as executed
-    // since we only have a single operation, we just increment by one
-    incr_rsp(1);
 
     uint64_t curr_time = get_sys_clock();
     txn_stats.process_time += curr_time - starttime;

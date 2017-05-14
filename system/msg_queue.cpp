@@ -45,6 +45,9 @@ void MessageQueue::init() {
 void MessageQueue::enqueue(uint64_t thd_id, Message * msg,uint64_t dest) {
   DEBUG("MQ Enqueue %ld\n",dest)
   assert(dest < g_total_node_cnt);
+//  if(dest != g_node_id && ISSERVERN(g_node_id)){
+//    DEBUG_Q("dest = %ld , g_node_id = %d \n",dest, g_node_id);
+//  }
   assert(dest != g_node_id);
   DEBUG_M("MessageQueue::enqueue msg_entry alloc\n");
   msg_entry * entry = (msg_entry*) mem_allocator.alloc(sizeof(struct msg_entry));

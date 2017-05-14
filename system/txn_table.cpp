@@ -60,7 +60,8 @@ void TxnTable::dump() {
 
 bool TxnTable::is_matching_txn_node(txn_node_t t_node, uint64_t txn_id, uint64_t batch_id){
   assert(t_node);
-#if CC_ALG == CALVIN
+#if CC_ALG == CALVIN || CC_ALG == QUECC
+//  DEBUG_Q("Matching based txn_id and batch_id\n");
     return (t_node->txn_man->get_txn_id() == txn_id && t_node->txn_man->get_batch_id() == batch_id); 
 #else
     return (t_node->txn_man->get_txn_id() == txn_id); 
@@ -185,7 +186,9 @@ void TxnTable::release_transaction_manager(uint64_t thd_id, uint64_t txn_id, uin
   INC_STATS(thd_id,mtx[8],get_sys_clock()-mtx_starttime);
 
   txn_node_t t_node = pool[pool_id]->head;
-
+if (t_node == NULL){
+  DEBUG_Q("t_node == NULL\n");
+}
 #if CC_ALG == MVCC
   uint64_t min_ts = UINT64_MAX;
   txn_node_t saved_t_node = NULL;
@@ -219,7 +222,7 @@ void TxnTable::release_transaction_manager(uint64_t thd_id, uint64_t txn_id, uin
 #endif
 
   // unset modify bit for this pool: txn_id % pool_size
-  ATOM_CAS(pool[pool_id]->modify,true,false);
+  bool res __attribute__((unused)) = ATOM_CAS(pool[pool_id]->modify,true,false);
 
   prof_starttime = get_sys_clock();
   assert(t_node);

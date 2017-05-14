@@ -41,11 +41,13 @@ void QWorkQueue::init() {
     for (uint64_t i=0; i < g_plan_thread_cnt; i++){
         for (uint64_t j=0; j < g_thread_cnt; j++){
             for (uint64_t k=0; k< g_batch_map_length; k++){
-                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
+//                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
+              (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
             }
         }
     }
-    DEBUG_Q("Initialize batch_map\n");
+    inflight_msg.store(0);
+    DEBUG_Q("Initialized batch_map\n");
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
     plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
@@ -218,7 +220,7 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
 
 
 void QWorkQueue::enqueue(uint64_t thd_id, Message * msg,bool busy) {
-  if (CC_ALG == QUECC){
+  if (CC_ALG == QUECC && msg->rtype == CL_QRY){
     DEBUG_Q("With QueCC, enq. to workQ should not happen\n");
     assert(false);
   }

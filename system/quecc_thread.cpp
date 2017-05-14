@@ -24,82 +24,7 @@
 #include "work_queue.h"
 #include "quecc_thread.h"
 
-void ExecutionThread::setup() {
-}
-
-RC ExecutionThread::run() {
-    tsetup();
-
-//    RC rc = RCOK;
-//    TxnManager * txn_man;
-//    uint64_t prof_starttime = get_sys_clock();
-//    uint64_t idle_starttime = 0;
-//
-
-//    while(!simulation->is_done()) {
-//        txn_man = NULL;
-
-
-
-//        // for now, we will fix each executor thread to a specific queue
-//        Message * msg = work_queue.sched_dequeue(_thd_id);
-//
-//        if(!msg) {
-//            if(idle_starttime == 0)
-//                idle_starttime = get_sys_clock();
-//            continue;
-//        }
-//        if(idle_starttime > 0) {
-//            INC_STATS(_thd_id,sched_idle_time,get_sys_clock() - idle_starttime);
-//            idle_starttime = 0;
-//        }
-//
-//        prof_starttime = get_sys_clock();
-//        assert(msg->get_rtype() == CL_QRY);
-//        assert(msg->get_txn_id() != UINT64_MAX);
-//
-//        txn_man = txn_table.get_transaction_manager(get_thd_id(),msg->get_txn_id(),msg->get_batch_id());
-//        while(!txn_man->unset_ready()) { }
-//        assert(ISSERVERN(msg->get_return_id()));
-//        txn_man->txn_stats.starttime = get_sys_clock();
-//
-//        txn_man->txn_stats.lat_network_time_start = msg->lat_network_time;
-//        txn_man->txn_stats.lat_other_time_start = msg->lat_other_time;
-//
-//        msg->copy_to_txn(txn_man);
-//        txn_man->register_thread(this);
-//        assert(ISSERVERN(txn_man->return_id));
-//
-//        INC_STATS(get_thd_id(),sched_txn_table_time,get_sys_clock() - prof_starttime);
-//        prof_starttime = get_sys_clock();
-//
-//        rc = RCOK;
-//        // Acquire locks
-//        if (!txn_man->isRecon()) {
-//            rc = txn_man->acquire_locks();
-//        }
-//
-//        if(rc == RCOK) {
-//            work_queue.enqueue(_thd_id,msg,false);
-//        }
-//        txn_man->set_ready();
-//
-//        INC_STATS(_thd_id,mtx[33],get_sys_clock() - prof_starttime);
-//        prof_starttime = get_sys_clock();
-
-//    }
-    printf("FINISH %ld:%ld\n",_node_id,_thd_id);
-    fflush(stdout);
-    return FINISH;
-}
-
 void PlannerThread::setup() {
-}
-
-bool PlannerThread::is_batch_ready() {
-//    bool ready = get_wall_clock() - simulation->last_seq_epoch_time >= g_seq_batch_time_limit;
-//    return ready;
-    return false;
 }
 
 uint32_t PlannerThread::get_bucket(uint64_t key) {
@@ -120,10 +45,6 @@ RC PlannerThread::run() {
     uint64_t idle_starttime = 0;
     uint64_t prof_starttime = 0;
     uint64_t batch_cnt = 0;
-//    uint64_t mrange_cnt = g_thread_cnt;
-
-    Array<uint64_t> mrange_cnts;
-    mrange_cnts.init(g_thread_cnt);
 
     uint64_t txn_prefix_base = 0x0010000000000000;
     uint64_t txn_prefix_planner_base = (_planner_id * txn_prefix_base);
@@ -140,33 +61,38 @@ RC PlannerThread::run() {
     // When the batch is complete we will CAS the exec_q array to allow
     // execution threads to be
 
+// implementtion using array class
     Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
     exec_queues->init(g_thread_cnt);
+    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+//        exec_queues->add();
+        Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
+        exec_q->init(exec_queue_capacity);
+//        exec_queues->set(i,exec_q);
+        exec_queues->add(exec_q);
+    }
+
+//    exec_queue_entry ** exec_queues = (exec_queue_entry **) mem_allocator.alloc(sizeof(exec_queue_entry *)*g_thread_cnt);
+//    uint64_t * b_mrange_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
+//    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+//        b_mrange_cnts[i] = 0;
+//    }
+
+#if DEBUG_QUECC
+    Array<uint64_t> mrange_cnts;
+    mrange_cnts.init(g_thread_cnt);
 
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
         mrange_cnts.add(0);
-        Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
-        exec_q->init(exec_queue_capacity);
-        exec_queues->add(exec_q);
     }
     uint64_t total_msg_processed_cnt = 0;
     uint64_t total_access_cnt = 0;
+#endif
     uint64_t  batch_id = 0;
     uint64_t planner_txn_id = txn_prefix_planner_base;
-
+    uint64_t batch_start_time = 0;
 
     while(!simulation->is_done()) {
-
-//        prof_starttime = get_sys_clock();
-
-        // TQ: this does nto work well for multiple planner threads
-//        if(is_batch_ready()) {
-//            simulation->advance_seq_epoch();
-//            //last_batchtime = get_wall_clock();
-//            seq_man.send_next_batch(_thd_id);
-//        }
-
-//        INC_STATS(_thd_id,mtx[30],get_sys_clock() - prof_starttime);
         prof_starttime = get_sys_clock();
 
         // dequeue for repective input_queue: there is an input queue for each planner
@@ -183,8 +109,14 @@ RC PlannerThread::run() {
                 idle_starttime = get_sys_clock();
             continue;
         }
+
+        // we have got a message, which is a transaction
         batch_cnt++;
-        if (batch_cnt == planner_batch_size){
+        if (batch_start_time == 0){
+            batch_start_time = get_sys_clock();
+        }
+
+        if (batch_cnt == planner_batch_size){ // || (get_sys_clock() - batch_start_time) >= BATCH_COMP_TIMEOUT){
 //            DEBUG_Q("Batch complete\n")
             // a batch is ready to be delivered to the the execution threads.
             // we will have a batch queue for each of the planners and they are scanned in known order
@@ -196,32 +128,46 @@ RC PlannerThread::run() {
 
             // Here major ranges have one-to-one mapping to worker threads
             for (uint64_t i = 0; i < g_thread_cnt; i++){
-//                uint64_t exe_q_ptr = (uint64_t) work_queue.batch_map[_planner_id][i][batch_id];
 //                DEBUG_Q("old value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, exe_q_ptr);
 //                DEBUG_Q("new value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, (uint64_t) exec_queues->get(i));
                 uint64_t slot_num = (batch_id % g_batch_map_length);
-                while (!ATOM_CAS(work_queue.batch_map[_planner_id][i][slot_num], 0, exec_queues->get(i))) {}
-                atomic_thread_fence(std::memory_order_release);
-//                DEBUG_Q("Batch_%ld for range_%ld ready! b_slot = %ld\n", batch_id, slot_num, i);
+//                while (!ATOM_CAS(work_queue.batch_map[_planner_id][i][slot_num], 0, exec_queues->get(i))) {}
+//                DEBUG_Q("Batch %ld is ready! setting map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
+                Array<exec_queue_entry> * expected = (Array<exec_queue_entry> *) 0;
+                while(!work_queue.batch_map[_planner_id][i][slot_num].compare_exchange_strong(
+                        expected, exec_queues->get(i))){
+                    DEBUG_Q("For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
+                }
+
+//                atomic_thread_fence(std::memory_order_release);
+//                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, slot_num, i);
             }
 
 
             // reset execution queues for the new batch
+            // TODO(tq): we are allocating and initializing at every batch, can we use a memory pool and recycle
+
+            // Array class implementation
             exec_queues = new Array<Array<exec_queue_entry> *>();
             exec_queues->init(g_thread_cnt);
-
             for (uint64_t i = 0; i < g_thread_cnt; i++) {
                 Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
                 exec_q->init(exec_queue_capacity);
+//                exec_queues->set(i,exec_q);
                 exec_queues->add(exec_q);
+//                b_mrange_cnts[i] = 0;
             }
+// pointer-based implementation
+//            for (uint64_t i = 0; i < g_thread_cnt; i++) {
+//                exec_queue_entry * exec_q = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry)*exec_queue_capacity);
+//                exec_queues[i] = exec_q;
+//            }
+
+
+
             batch_id++;
             batch_cnt = 0;
-        }
-
-        if(idle_starttime > 0) {
-            INC_STATS(_thd_id,seq_idle_time,get_sys_clock() - idle_starttime);
-            idle_starttime = 0;
+            batch_start_time = 0;
         }
 
         switch (msg->get_rtype()) {
@@ -232,8 +178,13 @@ RC PlannerThread::run() {
 
 #if WORKLOAD == YCSB
                 // create transaction context
+                // TODO(tq): here also we are dynamically allocting memory, we should use a pool recycle
                 transaction_context *tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
                 tctx->txn_id = planner_txn_id;
+                tctx->completion_cnt = 0;
+                tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
+                tctx->batch_id = batch_id;
+
                 // Analyze read-write set
                 /* We need to determine the ranges needed for each key
                  * We group keys that fall in the same range to be processed together
@@ -246,18 +197,28 @@ RC PlannerThread::run() {
 //                    DEBUG_Q("Planner_%d looking up bucket for key %ld\n", _planner_id, key);
                     uint64_t idx = get_bucket(key);
 //                    DEBUG_Q("Planner_%d using bucket %ld for key %ld\n", _planner_id,idx, key);
+
+                    // TODO(tq): move to statitic module
+#if DEBUG_QUECC
                     uint64_t nval = mrange_cnts.get(idx) + 1;
                     mrange_cnts.set(idx, nval);
                     total_access_cnt++;
-
+#endif
                     // create execution entry, for now it will contain only one request
+                    // we dont need to allocate memory here
                     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
-                    entry->tctx = tctx;
-                    entry->batch_id = batch_id;
-                    entry->mrange_id = idx;
-                    entry->planner_id = _planner_id;
+                    Array<exec_queue_entry> *mrange = exec_queues->get(idx);
+                    // increment of batch mrange to use the next entry slot
+//                    mrange->add();
+//                    uint64_t entry_i = b_mrange_cnts[idx];
+//                    b_mrange_cnts[idx]++;
 
-                    entry->starttime = get_sys_clock();
+//                    exec_queue_entry * entry = mrange->get_ptr(entry_i);
+                    entry->txn_id = planner_txn_id;
+                    entry->txn_ctx = tctx;
+                    entry->req_id = j;
+                    entry->batch_id = batch_id;
+                    assert(msg->return_node_id != g_node_id);
                     entry->return_node_id = msg->return_node_id;
 
                     // for now, assume only one request per entry
@@ -274,46 +235,33 @@ RC PlannerThread::run() {
                     req_buff->key = ycsb_req->key;
                     req_buff->value = ycsb_req->value;
 
-                    std::memset(entry->dep_vector, 0, 10);
+//                    std::memset(entry->dep_vector, 0, 10);
 
                     // add entry into range/bucket queue
-                    Array<exec_queue_entry> *mrange = exec_queues->get(idx);
                     // entry is a sturct, need to double check if this works
                     mrange->add(*entry);
                 }
                 // Free message, as there is no need for it anymore
+#if DEBUG_QUECC
                 total_msg_processed_cnt++;
+#endif
                 msg->release();
-
                 // increment for next ransaction
                 planner_txn_id++;
 #endif
-
-//                seq_man.process_txn(msg,get_thd_id(),0,0,0,0);
-                // Don't free message yet
-//                break;
-//            case CALVIN_ACK:
-//                // Ack from server
-//                DEBUG("SEQ process_ack (%ld,%ld) from %ld\n",msg->get_txn_id(),msg->get_batch_id(),msg->get_return_id());
-//                seq_man.process_ack(msg,get_thd_id());
-                // Free message here
-//                msg->release();
-
-
-
                 break;
             }
             default:
                 assert(false);
         }
 
-        INC_STATS(_thd_id,mtx[32],get_sys_clock() - prof_starttime);
-        prof_starttime = get_sys_clock();
     }
-    DEBUG_Q("Planner_%ld: Total access cnt = %ld, and proceeded %ld msgs\n", _planner_id, total_access_cnt, total_msg_processed_cnt);
+#if DEBUG_QUECC
+    DEBUG_Q("Planner_%ld: Total access cnt = %ld, and processed %ld msgs\n", _planner_id, total_access_cnt, total_msg_processed_cnt);
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
         DEBUG_Q("Planner_%ld: Access cnt for bucket_%ld = %ld\n",_planner_id, i, mrange_cnts.get(i));
     }
+#endif
     printf("FINISH %ld:%ld\n",_node_id,_thd_id);
     fflush(stdout);
     return FINISH;

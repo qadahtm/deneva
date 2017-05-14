@@ -67,8 +67,10 @@ bool SimManager::is_done() {
 }
 
 bool SimManager::is_warmup_done() {
-  if(warmup)
+  if(warmup){
     return true;
+  }
+
   bool done = ((get_sys_clock() - run_starttime) >= g_warmup_timer);
   if(done) {
     ATOM_CAS(warmup_end_time,0,get_sys_clock());

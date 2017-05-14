@@ -107,6 +107,11 @@ public:
     return items[idx];
   }
 
+    T* get_ptr(uint64_t idx) {
+        assert(idx < count);
+        return &(items[idx]);
+    }
+
   void set(uint64_t idx, T item) {
     assert(idx < count);
     items[idx] = item;
@@ -135,7 +140,7 @@ public:
     items[i] = items[j];
     items[j] = tmp;
   }
-  T operator[](uint64_t idx) {assert(idx < count); return items[idx];}
+  inline T operator[](const uint64_t idx) {assert(idx < count); return items[idx];}
   uint64_t get_count() {return count;}
   uint64_t size() {return count;}
   bool is_full() { return count == capacity;}
