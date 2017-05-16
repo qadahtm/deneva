@@ -75,6 +75,9 @@ bool SimManager::is_warmup_done() {
   if(done) {
     ATOM_CAS(warmup_end_time,0,get_sys_clock());
     ATOM_CAS(warmup,false,true);
+    stats.totals->quecc_txn_comp_cnt.store(0);
+    stats.totals->quecc_txn_sent_cnt.store(0);
+    DEBUG_Q("Warm up is done!! at %ld and warmup = %d\n", warmup_end_time, warmup);
   }
   return done;
 }

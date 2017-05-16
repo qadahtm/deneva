@@ -43,7 +43,7 @@ RC PlannerThread::run() {
 
     Message * msg;
     uint64_t idle_starttime = 0;
-    uint64_t prof_starttime = 0;
+//    uint64_t prof_starttime = 0;
     uint64_t batch_cnt = 0;
 
     uint64_t txn_prefix_base = 0x0010000000000000;
@@ -91,9 +91,11 @@ RC PlannerThread::run() {
     uint64_t  batch_id = 0;
     uint64_t planner_txn_id = txn_prefix_planner_base;
     uint64_t batch_start_time = 0;
+    uint64_t prof_starttime = 0;
+    uint64_t txn_prof_starttime = 0;
 
     while(!simulation->is_done()) {
-        prof_starttime = get_sys_clock();
+//        prof_starttime = get_sys_clock();
 
         // dequeue for repective input_queue: there is an input queue for each planner
         // entries in the input queue is placed by the I/O thread
@@ -101,14 +103,14 @@ RC PlannerThread::run() {
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
         msg = work_queue.plan_dequeue(_thd_id, _planner_id);
 
-        INC_STATS(_thd_id,mtx[31],get_sys_clock() - prof_starttime);
-        prof_starttime = get_sys_clock();
-
         if(!msg) {
             if(idle_starttime == 0)
                 idle_starttime = get_sys_clock();
             continue;
         }
+
+        INC_STATS(_thd_id,plan_idle_time,get_sys_clock() - idle_starttime);
+
 
         // we have got a message, which is a transaction
         batch_cnt++;
@@ -134,13 +136,13 @@ RC PlannerThread::run() {
 //                while (!ATOM_CAS(work_queue.batch_map[_planner_id][i][slot_num], 0, exec_queues->get(i))) {}
 //                DEBUG_Q("Batch %ld is ready! setting map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
                 Array<exec_queue_entry> * expected = (Array<exec_queue_entry> *) 0;
-                while(!work_queue.batch_map[_planner_id][i][slot_num].compare_exchange_strong(
+                while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
                         expected, exec_queues->get(i))){
                     DEBUG_Q("For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
                 }
 
 //                atomic_thread_fence(std::memory_order_release);
-//                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, slot_num, i);
+                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
             }
 
 
@@ -163,7 +165,8 @@ RC PlannerThread::run() {
 //                exec_queues[i] = exec_q;
 //            }
 
-
+            INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
+            INC_STATS(_thd_id, plan_batch_process_time, get_sys_clock() - batch_start_time);
 
             batch_id++;
             batch_cnt = 0;
@@ -177,6 +180,7 @@ RC PlannerThread::run() {
 
 
 #if WORKLOAD == YCSB
+                txn_prof_starttime = get_sys_clock();
                 // create transaction context
                 // TODO(tq): here also we are dynamically allocting memory, we should use a pool recycle
                 transaction_context *tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
@@ -206,7 +210,10 @@ RC PlannerThread::run() {
 #endif
                     // create execution entry, for now it will contain only one request
                     // we dont need to allocate memory here
+                    prof_starttime = get_sys_clock();
                     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
+                    INC_STATS(_thd_id, plan_mem_alloc_time, get_sys_clock() - prof_starttime);
+
                     Array<exec_queue_entry> *mrange = exec_queues->get(idx);
                     // increment of batch mrange to use the next entry slot
 //                    mrange->add();
@@ -249,6 +256,8 @@ RC PlannerThread::run() {
                 // increment for next ransaction
                 planner_txn_id++;
 #endif
+
+                INC_STATS(_thd_id,plan_txn_process_time, get_sys_clock() - txn_prof_starttime);
                 break;
             }
             default:

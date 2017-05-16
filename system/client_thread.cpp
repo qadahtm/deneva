@@ -107,6 +107,8 @@ RC ClientThread::run() {
 		num_txns_sent++;
 		txns_sent[next_node]++;
       client_man.inflight_msgs.fetch_add(1);
+      stats.totals->quecc_txn_sent_cnt.fetch_add(1);
+
     INC_STATS(get_thd_id(),txn_sent_cnt,1);
 
 	}

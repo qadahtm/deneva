@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 5
+#define THREAD_CNT 1
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -52,7 +52,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions
-#define MAX_TXN_IN_FLIGHT 1000000
+#define MAX_TXN_IN_FLIGHT 100000
 
 #define SERVER_GENERATE_QUERIES false
 
@@ -108,8 +108,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-//#define CC_ALG NO_WAIT
-#define CC_ALG QUECC
+#define CC_ALG NO_WAIT
+//#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -150,10 +150,10 @@
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
 // [QUECC]
-#define PLAN_THREAD_CNT 4
+#define PLAN_THREAD_CNT 1//4
 // This relates to MAX_TXN_IN_FLIGHT
 #define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 100000 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 1000 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 10 * 1000000UL
 
 /***********************************************/
@@ -299,7 +299,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD true
 

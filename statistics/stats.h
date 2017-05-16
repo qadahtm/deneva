@@ -17,6 +17,7 @@
 #ifndef _STATS_H_
 #define _STATS_H_
 #include "stats_array.h"
+#include <boost/atomic.hpp>
 
 class StatValue {
 public:
@@ -82,6 +83,10 @@ public:
   // Client
   uint64_t txn_sent_cnt;
   double cl_send_intv;
+//#if CC_ALG == QUECC
+  boost::atomic<uint64_t> quecc_txn_sent_cnt;
+  boost::atomic<uint64_t> quecc_txn_comp_cnt;
+//#endif
 
   // Breakdown
   double ts_alloc_time;
@@ -191,20 +196,27 @@ public:
 
     // QueCC
     uint64_t * plan_txn_cnts;
-    uint64_t plan_batch_cnt;
+    uint64_t * plan_batch_cnts;
     uint64_t plan_full_batch_cnt;
-    double plan_ack_time;
     double plan_batch_time;
-    uint64_t plan_process_cnt;
-    uint64_t plan_complete_cnt;
-    double plan_process_time;
-    double plan_prep_time;
+    double plan_batch_process_time;
+    double plan_txn_process_time;
     double plan_idle_time;
-    double plan_queue_wait_time;
-    uint64_t plan_queue_cnt;
     uint64_t plan_queue_enq_cnt;
+    uint64_t plan_queue_cnt;
+    double plan_queue_wait_time;
     double plan_queue_enqueue_time;
     double plan_queue_dequeue_time;
+    double plan_mem_alloc_time;
+
+    uint64_t * exec_batch_part_cnt;
+    uint64_t * exec_batch_cnt;
+    uint64_t * exec_txn_cnts;
+    uint64_t * exec_txn_frag_cnt;
+    // we share worker idle time
+    double exec_mem_free_time;
+    double exec_batch_proc_time;
+
 
   // OCC
   double occ_validate_time;

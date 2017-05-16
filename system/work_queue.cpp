@@ -38,9 +38,9 @@ void QWorkQueue::init() {
   plan_queue = new boost::lockfree::queue<work_queue_entry* > * [g_plan_thread_cnt];
     //TODO(tq): change this to pure array and be cache-aware
 
-    for (uint64_t i=0; i < g_plan_thread_cnt; i++){
+    for (uint64_t i=0; i < g_batch_map_length ; i++){
         for (uint64_t j=0; j < g_thread_cnt; j++){
-            for (uint64_t k=0; k< g_batch_map_length; k++){
+            for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
 //                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
               (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
             }

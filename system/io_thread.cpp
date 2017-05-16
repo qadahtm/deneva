@@ -129,7 +129,10 @@ RC InputThread::client_recv_loop() {
             }
             //INC_STATS_ARR(get_thd_id(),all_lat,timespan);
             inf = client_man.dec_inflight(return_node_offset);
+            // TQ: QueCC stats
             client_man.inflight_msgs.fetch_sub(1);
+            stats.totals->quecc_txn_comp_cnt.fetch_add(1);
+
             DEBUG("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
                   float(timespan)/BILLION);
             assert(inf >= 0);
