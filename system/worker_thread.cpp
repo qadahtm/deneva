@@ -338,6 +338,11 @@ RC WorkerThread::run() {
                     INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
                     INC_STATS(get_thd_id(), txn_cnt, 1);
 
+                    // Free memory
+                    // Free txn context
+                    quecc_mem_free_startts = get_sys_clock();
+                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
+                    INC_STATS(_thd_id, exec_mem_free_time, get_sys_clock() - quecc_mem_free_startts);
 //#endif
                     // we always commit
                     //TODO(tq): how to handle logic-induced aborts
@@ -366,8 +371,8 @@ RC WorkerThread::run() {
                 wbatch_id++;
                 batch_slot =  wbatch_id % g_batch_map_length;
                 wplanner_id = 0;
-//                DEBUG_Q("** Completed batch %ld, and moving to next batch %ld at [%ld][%ld][%ld] \n",
-//                        wbatch_id-1, wbatch_id, _thd_id, wplanner_id, batch_slot);
+                DEBUG_Q("** Completed batch %ld, and moving to next batch %ld at [%ld][%ld][%ld] \n",
+                        wbatch_id-1, wbatch_id, batch_slot, _thd_id, wplanner_id);
                 INC_STATS(_thd_id, exec_batch_cnt[_thd_id], 1);
 
             }

@@ -11,7 +11,7 @@
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT NODE_CNT
+#define PART_CNT 1//NODE_CNT
 
 // TQ: since we have 20 cores per node on halstead
 // With a single node used for client requests, 
@@ -108,8 +108,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-#define CC_ALG NO_WAIT
-//#define CC_ALG QUECC
+//#define CC_ALG NO_WAIT
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -150,10 +150,10 @@
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
 // [QUECC]
-#define PLAN_THREAD_CNT 1//4
+#define PLAN_THREAD_CNT PART_CNT//4
 // This relates to MAX_TXN_IN_FLIGHT
 #define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 1000 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 32 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 10 * 1000000UL
 
 /***********************************************/
@@ -199,8 +199,8 @@
 #define TUP_WRITE_PERC 0.5
 #define SCAN_PERC           0
 #define SCAN_LEN          20
-#define PART_PER_TXN 1//PART_CNT
-#define PERC_MULTI_PART 1//MPR 
+#define PART_PER_TXN PART_CNT
+#define PERC_MULTI_PART 1.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
@@ -299,7 +299,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD true
 
@@ -380,10 +380,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 60 * BILLION // ~60 seconds
-#define WARMUP_TIMER 1 * 30 * BILLION // ~1 second
+#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 60 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 30 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

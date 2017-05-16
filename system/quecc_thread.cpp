@@ -65,10 +65,8 @@ RC PlannerThread::run() {
     Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
     exec_queues->init(g_thread_cnt);
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
-//        exec_queues->add();
         Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
         exec_q->init(exec_queue_capacity);
-//        exec_queues->set(i,exec_q);
         exec_queues->add(exec_q);
     }
 
@@ -76,6 +74,8 @@ RC PlannerThread::run() {
 //    uint64_t * b_mrange_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
 //    for (uint64_t i = 0; i < g_thread_cnt; i++) {
 //        b_mrange_cnts[i] = 0;
+//        exec_queue_entry * exec_q = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry)*exec_queue_capacity);
+//        exec_queues[i] = exec_q;
 //    }
 
 #if DEBUG_QUECC
@@ -95,13 +95,13 @@ RC PlannerThread::run() {
     uint64_t txn_prof_starttime = 0;
 
     while(!simulation->is_done()) {
-//        prof_starttime = get_sys_clock();
 
         // dequeue for repective input_queue: there is an input queue for each planner
         // entries in the input queue is placed by the I/O thread
         // for now just dequeue and print notification
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
         msg = work_queue.plan_dequeue(_thd_id, _planner_id);
+
 
         if(!msg) {
             if(idle_starttime == 0)
@@ -150,17 +150,21 @@ RC PlannerThread::run() {
             // TODO(tq): we are allocating and initializing at every batch, can we use a memory pool and recycle
 
             // Array class implementation
+            prof_starttime = get_sys_clock();
             exec_queues = new Array<Array<exec_queue_entry> *>();
             exec_queues->init(g_thread_cnt);
             for (uint64_t i = 0; i < g_thread_cnt; i++) {
                 Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
                 exec_q->init(exec_queue_capacity);
-//                exec_queues->set(i,exec_q);
                 exec_queues->add(exec_q);
-//                b_mrange_cnts[i] = 0;
             }
+            INC_STATS(_thd_id, plan_mem_alloc_time, get_sys_clock()-prof_starttime);
 // pointer-based implementation
+//            exec_queues = (exec_queue_entry **) mem_allocator.alloc(sizeof(exec_queue_entry *)*g_thread_cnt);
+
+//            uint64_t * b_mrange_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
 //            for (uint64_t i = 0; i < g_thread_cnt; i++) {
+//                b_mrange_cnts[i] = 0;
 //                exec_queue_entry * exec_q = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry)*exec_queue_capacity);
 //                exec_queues[i] = exec_q;
 //            }
@@ -208,19 +212,17 @@ RC PlannerThread::run() {
                     mrange_cnts.set(idx, nval);
                     total_access_cnt++;
 #endif
+
                     // create execution entry, for now it will contain only one request
                     // we dont need to allocate memory here
                     prof_starttime = get_sys_clock();
                     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
                     INC_STATS(_thd_id, plan_mem_alloc_time, get_sys_clock() - prof_starttime);
-
                     Array<exec_queue_entry> *mrange = exec_queues->get(idx);
                     // increment of batch mrange to use the next entry slot
-//                    mrange->add();
-//                    uint64_t entry_i = b_mrange_cnts[idx];
-//                    b_mrange_cnts[idx]++;
+//                    Array<exec_queue_entry> mmrange = *(exec_queues->get(idx));
+//                    exec_queue_entry * entry = mmrange.add_ptr();
 
-//                    exec_queue_entry * entry = mrange->get_ptr(entry_i);
                     entry->txn_id = planner_txn_id;
                     entry->txn_ctx = tctx;
                     entry->req_id = j;
@@ -247,11 +249,13 @@ RC PlannerThread::run() {
                     // add entry into range/bucket queue
                     // entry is a sturct, need to double check if this works
                     mrange->add(*entry);
+                    mem_allocator.free(entry, sizeof(exec_queue_entry));
                 }
-                // Free message, as there is no need for it anymore
+
 #if DEBUG_QUECC
                 total_msg_processed_cnt++;
 #endif
+                // Free message, as there is no need for it anymore
                 msg->release();
                 // increment for next ransaction
                 planner_txn_id++;
