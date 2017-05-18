@@ -223,8 +223,10 @@ RC WorkerThread::run() {
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
                 idle_starttime = 0;
             }
+            if (wplanner_id == 0 && quecc_batch_proc_starttime == 0){
+                quecc_batch_proc_starttime = get_sys_clock();
+            }
 
-            quecc_batch_proc_starttime = get_sys_clock();
 
             DEBUG_Q("Pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,  batch partition size = %ld entries\n",
                     batch_slot,_thd_id, wplanner_id, ((uint64_t) exec_q), wbatch_id,
@@ -351,9 +353,10 @@ RC WorkerThread::run() {
                 DEBUG_Q("** Completed batch %ld, and moving to next batch %ld at [%ld][%ld][%ld] \n",
                         wbatch_id-1, wbatch_id, batch_slot, _thd_id, wplanner_id);
                 INC_STATS(_thd_id, exec_batch_cnt[_thd_id], 1);
-
+                INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock() - quecc_batch_proc_starttime);
+                quecc_batch_proc_starttime = 0;
             }
-            INC_STATS(_thd_id, exec_batch_proc_time, get_sys_clock() - quecc_batch_proc_starttime);
+
             INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
         }
         else{

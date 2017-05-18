@@ -109,8 +109,8 @@ RC PlannerThread::run() {
             continue;
         }
 
-        INC_STATS(_thd_id,plan_idle_time,get_sys_clock() - idle_starttime);
-
+        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+        idle_starttime = 0;
 
         // we have got a message, which is a transaction
         batch_cnt++;
@@ -170,7 +170,7 @@ RC PlannerThread::run() {
 //            }
 
             INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
-            INC_STATS(_thd_id, plan_batch_process_time, get_sys_clock() - batch_start_time);
+            INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
 
             batch_id++;
             batch_cnt = 0;

@@ -197,25 +197,27 @@ public:
     // QueCC
     uint64_t * plan_txn_cnts;
     uint64_t * plan_batch_cnts;
+    double * plan_batch_process_time;
+    double * plan_idle_time;
+    double * plan_mem_alloc_time;
     uint64_t plan_full_batch_cnt;
     double plan_batch_time;
-    double plan_batch_process_time;
     double plan_txn_process_time;
-    double plan_idle_time;
     uint64_t plan_queue_enq_cnt;
     uint64_t plan_queue_cnt;
     double plan_queue_wait_time;
     double plan_queue_enqueue_time;
     double plan_queue_dequeue_time;
-    double plan_mem_alloc_time;
+
 
     uint64_t * exec_batch_part_cnt;
     uint64_t * exec_batch_cnt;
     uint64_t * exec_txn_cnts;
     uint64_t * exec_txn_frag_cnt;
+    double * exec_batch_proc_time;
     // we share worker idle time
     double exec_mem_free_time;
-    double exec_batch_proc_time;
+
 
 
   // OCC
