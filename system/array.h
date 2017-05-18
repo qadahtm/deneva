@@ -90,18 +90,6 @@ public:
     ++count;
   }
 
-    T front(){
-        if (head == count) return NULL;
-        ATOM_ADD(head,1);
-        return items[head];
-    }
-
-    T peek(){
-        if (head == count) return NULL;
-        return items[head];
-    }
-
-    
   T get(uint64_t idx) {
     assert(idx < count);
     return items[idx];
