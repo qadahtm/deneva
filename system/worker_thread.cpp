@@ -211,12 +211,9 @@ RC WorkerThread::run() {
         progress_stats();
 
 #if CC_ALG == QUECC
+        // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
         // we should spin here if pointer is not set
-        // a fence is needed here to make sure we are reading an up to date value
-        // TODO(tq): do we actually need it?
-//        atomic_thread_fence(std::memory_order_acquire);
-//        exec_q = work_queue.batch_map[wplanner_id][_thd_id][batch_slot];
         exec_q = work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
 
 //      DEBUG_Q("Pointer for map slot [%d][%ld][%ld] is %ld, going to spin if 0\n", 0, _thd_id, wbatch_id, exec_q_ptr);
@@ -238,26 +235,8 @@ RC WorkerThread::run() {
                 exec_queue_entry exec_qe = exec_q->get(i);
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
                 assert(exec_qe.batch_id == wbatch_id);
-//                uint64_t txid = exec_qe.txn_id;
-//                transaction_context * txn_ctx = exec_qe.txn_ctx;
-
-
-//                txn_man = txn_table.get_transaction_manager(get_thd_id(), txid, wbatch_id);
-//                txn_man->register_thread(this);
-
-//                ready_starttime = get_sys_clock();
-//                txn_man->set_ready();
-//                INC_STATS(get_thd_id(),worker_activate_txn_time,get_sys_clock() - ready_starttime);
-
-//                DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
-//                      txn_man->txn_stats.starttime);
-
-//                txn_man->return_id = exec_qe.return_node_id;
-
-//                txn_man->run_quecc_txn(&exec_qe);
 
                 row_t *quecc_row;
-//                uint64_t starttime = get_sys_clock();
 
                 //TQ: dirty code: using a char buffer to store ycsb_request
                 ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
@@ -298,12 +277,13 @@ RC WorkerThread::run() {
                 // TQ: declare this operation as executed
                 // since we only have a single operation, we just increment by one
 //                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
-//    incr_rsp(1);
+
                 assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
                 uint64_t comp_cnt = ATOM_ADD_FETCH(exec_qe.txn_ctx->completion_cnt, 1);
                 INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
 
-                // TQ: we are committing now, which is done one by one.
+                // TQ: we are committing now, which is done one by one the threads only
+                // this allows lower latency for transactions.
                 // Since there is no logging this is okay
                 // TODO(tq): consider committing as a batch with logging enabled
                 // TODO(tq): Hardcoding for 10 operations, use a paramter instead
@@ -312,8 +292,7 @@ RC WorkerThread::run() {
 //                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
 //                          txn_man->return_id, exec_qe.return_node_id, g_node_id);
-                    // set client_id for creating response
-//                    txn_man->client_id = exec_qe->return_node_id;
+
 //                    DEBUG_Q("thread_%ld: Committing with txn(%ld,%ld,%ld)\n", _thd_id, wbatch_id, exec_qe.txn_id,
 //                            exec_qe.req_id);
 //TODO(tq): collect stats
@@ -334,7 +313,9 @@ RC WorkerThread::run() {
                     rsp_msg->lat_other_time = 0;
 
                     msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
+#if QUECC_DEBUG
                     work_queue.inflight_msg.fetch_sub(1);
+#endif
                     INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
                     INC_STATS(get_thd_id(), txn_cnt, 1);
 
@@ -356,10 +337,6 @@ RC WorkerThread::run() {
             exec_q->release();
             INC_STATS(_thd_id, exec_mem_free_time, get_sys_clock() - quecc_mem_free_startts);
             // reset map slot to 0
-            // Maybe we need to do a CAS because planners may be trying to write to it
-//            while(!ATOM_CAS(work_queue.batch_map[wplanner_id][_thd_id][batch_slot], (uint64_t) exec_q, 0)) {};
-//            atomic_thread_fence(std::memory_order_release);
-//            work_queue.batch_map[wplanner_id][_thd_id][batch_slot].store((Array<exec_queue_entry> *) 0, boost::memory_order_seq_cst);
             Array<exec_queue_entry> * desired = (Array<exec_queue_entry> *) 0;
             while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
                     exec_q, desired)){

@@ -91,7 +91,9 @@ public:
 //    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
 // Layout of the batch map is imporatant to avoid potential tharshing
     volatile atomic<Array<exec_queue_entry> *> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+#if QUECC_DEBUG
     atomic<int64_t> inflight_msg;
+#endif
 //------
   uint64_t get_cnt() {return get_wq_cnt() + get_rem_wq_cnt() + get_new_wq_cnt();}
   uint64_t get_wq_cnt() {return 0;}

@@ -498,7 +498,9 @@ void Stats_thd::print(FILE * outf, bool prog) {
   if(single_part_txn_cnt > 0)
     single_part_txn_avg_time = single_part_txn_run_time / single_part_txn_cnt;
   fprintf(outf,
+#if QUECC_DEBUG
           ",inf_msgs=%ld"
+#endif
   ",tput=%f"
   ",txn_cnt=%ld"
   ",remote_txn_cnt=%ld"
@@ -523,7 +525,9 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ",record_write_cnt=%ld"
   ",parts_touched=%ld"
   ",avg_parts_touched=%f"
+#if QUECC_DEBUG
           ,work_queue.inflight_msg.load()
+#endif
   ,tput
   ,txn_cnt
   ,remote_txn_cnt

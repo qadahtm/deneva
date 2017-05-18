@@ -201,7 +201,9 @@ RC InputThread::server_recv_loop() {
             if (msg->rtype == CL_QRY) {
                 work_queue.plan_enqueue(get_thd_id(), msg);
                 planner_msg_cnt++;
+#if QUECC_DEBUG
                 work_queue.inflight_msg.fetch_add(1);
+#endif
                 msgs->erase(msgs->begin());
                 continue;
             }

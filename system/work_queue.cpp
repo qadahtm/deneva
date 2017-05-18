@@ -46,7 +46,9 @@ void QWorkQueue::init() {
             }
         }
     }
+#if QUECC_DEBUG
     inflight_msg.store(0);
+#endif
     DEBUG_Q("Initialized batch_map\n");
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
     plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
