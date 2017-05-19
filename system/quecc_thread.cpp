@@ -88,29 +88,39 @@ RC PlannerThread::run() {
     uint64_t total_msg_processed_cnt = 0;
     uint64_t total_access_cnt = 0;
 #endif
-    uint64_t  batch_id = 0;
+    uint64_t batch_id = 0;
     uint64_t planner_txn_id = txn_prefix_planner_base;
     uint64_t batch_start_time = 0;
     uint64_t prof_starttime = 0;
     uint64_t txn_prof_starttime = 0;
+    uint64_t plan_starttime = 0;
 
     while(!simulation->is_done()) {
+        if (plan_starttime == 0 && simulation->is_warmup_done()){
+            plan_starttime = get_sys_clock();
+        }
 
         // dequeue for repective input_queue: there is an input queue for each planner
         // entries in the input queue is placed by the I/O thread
         // for now just dequeue and print notification
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
+        prof_starttime = get_sys_clock();
         msg = work_queue.plan_dequeue(_thd_id, _planner_id);
-
+        INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-prof_starttime);
 
         if(!msg) {
-            if(idle_starttime == 0)
+            if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
+            }
             continue;
         }
+        INC_STATS(_thd_id,plan_queue_deq_cnt[_planner_id],1);
 
-        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
-        idle_starttime = 0;
+        if (idle_starttime != 0){
+            // plan_idle_time includes dequeue time, which should be subtracted from it
+            INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+            idle_starttime = 0;
+        }
 
         // we have got a message, which is a transaction
         batch_cnt++;
@@ -129,6 +139,7 @@ RC PlannerThread::run() {
             // and the execution threads who are spinning can start execution
 
             // Here major ranges have one-to-one mapping to worker threads
+            prof_starttime = get_sys_clock();
             for (uint64_t i = 0; i < g_thread_cnt; i++){
 //                DEBUG_Q("old value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, exe_q_ptr);
 //                DEBUG_Q("new value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, (uint64_t) exec_queues->get(i));
@@ -145,7 +156,6 @@ RC PlannerThread::run() {
                 DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
             }
 
-
             // reset execution queues for the new batch
             // TODO(tq): we are allocating and initializing at every batch, can we use a memory pool and recycle
 
@@ -158,7 +168,7 @@ RC PlannerThread::run() {
                 exec_q->init(exec_queue_capacity);
                 exec_queues->add(exec_q);
             }
-            INC_STATS(_thd_id, plan_mem_alloc_time, get_sys_clock()-prof_starttime);
+            INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
 // pointer-based implementation
 //            exec_queues = (exec_queue_entry **) mem_allocator.alloc(sizeof(exec_queue_entry *)*g_thread_cnt);
 
@@ -175,6 +185,7 @@ RC PlannerThread::run() {
             batch_id++;
             batch_cnt = 0;
             batch_start_time = 0;
+            INC_STATS(_thd_id, plan_batch_delivery_time[_planner_id], get_sys_clock()-prof_starttime);
         }
 
         switch (msg->get_rtype()) {
@@ -187,7 +198,9 @@ RC PlannerThread::run() {
                 txn_prof_starttime = get_sys_clock();
                 // create transaction context
                 // TODO(tq): here also we are dynamically allocting memory, we should use a pool recycle
+                prof_starttime = get_sys_clock();
                 transaction_context *tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;
                 tctx->completion_cnt = 0;
                 tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
@@ -217,7 +230,7 @@ RC PlannerThread::run() {
                     // we dont need to allocate memory here
                     prof_starttime = get_sys_clock();
                     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
-                    INC_STATS(_thd_id, plan_mem_alloc_time, get_sys_clock() - prof_starttime);
+                    INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                     Array<exec_queue_entry> *mrange = exec_queues->get(idx);
                     // increment of batch mrange to use the next entry slot
 //                    Array<exec_queue_entry> mmrange = *(exec_queues->get(idx));
@@ -249,19 +262,20 @@ RC PlannerThread::run() {
                     // add entry into range/bucket queue
                     // entry is a sturct, need to double check if this works
                     mrange->add(*entry);
+                    prof_starttime = get_sys_clock();
                     mem_allocator.free(entry, sizeof(exec_queue_entry));
+                    INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 }
 
 #if DEBUG_QUECC
                 total_msg_processed_cnt++;
 #endif
+                INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - txn_prof_starttime);
                 // Free message, as there is no need for it anymore
                 msg->release();
                 // increment for next ransaction
                 planner_txn_id++;
 #endif
-
-                INC_STATS(_thd_id,plan_txn_process_time, get_sys_clock() - txn_prof_starttime);
                 break;
             }
             default:
@@ -269,6 +283,7 @@ RC PlannerThread::run() {
         }
 
     }
+    INC_STATS(_thd_id, plan_total_time[_planner_id], get_sys_clock()-plan_starttime);
 #if DEBUG_QUECC
     DEBUG_Q("Planner_%ld: Total access cnt = %ld, and processed %ld msgs\n", _planner_id, total_access_cnt, total_msg_processed_cnt);
     for (uint64_t i = 0; i < g_thread_cnt; i++) {

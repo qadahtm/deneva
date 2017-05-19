@@ -28,7 +28,7 @@ void QWorkQueue::init() {
   sched_ptr = 0;
   seq_queue = new boost::lockfree::queue<work_queue_entry* > (0);
   work_queue = new boost::lockfree::queue<work_queue_entry* > (0);
-  new_txn_queue = new boost::lockfree::queue<work_queue_entry* >(0);
+  new_txn_queue = new boost::lockfree::queue<work_queue_entry* >(g_inflight_max);
   sched_queue = new boost::lockfree::queue<work_queue_entry* > * [g_node_cnt];
   for ( uint64_t i = 0; i < g_node_cnt; i++) {
     sched_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
@@ -51,7 +51,7 @@ void QWorkQueue::init() {
 #endif
     DEBUG_Q("Initialized batch_map\n");
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
-    plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
+    plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (g_inflight_max);
   }
 }
 
@@ -191,26 +191,24 @@ void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
 }
 // need a mapping between thread ids and planner ids
 Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
-  uint64_t starttime = get_sys_clock();
   assert(ISSERVER);
   Message * msg = NULL;
   work_queue_entry * entry = NULL;
-
+  uint64_t prof_starttime = 0;
 //    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, planner_id);
 
+  prof_starttime = get_sys_clock();
   bool valid = plan_queue[planner_id]->pop(entry);
-
+  INC_STATS(thd_id, plan_queue_deq_pop_time[planner_id], get_sys_clock()-prof_starttime);
   if(valid) {
     msg = entry->msg;
     assert(msg);
 //    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
-    uint64_t queue_time = get_sys_clock() - entry->starttime;
-    INC_STATS(thd_id,plan_queue_wait_time,queue_time);
-    INC_STATS(thd_id,plan_queue_cnt,1);
     //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
 //    DEBUG_M("PlanQueue::dequeue work_queue_entry free\n");
+    prof_starttime = get_sys_clock();
     mem_allocator.free(entry,sizeof(work_queue_entry));
-    INC_STATS(thd_id,plan_queue_dequeue_time,get_sys_clock() - starttime);
+    INC_STATS(thd_id, plan_queue_deq_free_mem_time[planner_id], get_sys_clock()-prof_starttime);
   }
 //    else {
 //      DEBUG_Q("Invalid message Dequeued\n");

@@ -221,6 +221,7 @@ RC WorkerThread::run() {
 
             if(idle_starttime > 0) {
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
                 idle_starttime = 0;
             }
             if (wplanner_id == 0 && quecc_batch_proc_starttime == 0){
@@ -325,7 +326,7 @@ RC WorkerThread::run() {
                     // Free txn context
                     quecc_mem_free_startts = get_sys_clock();
                     mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
-                    INC_STATS(_thd_id, exec_mem_free_time, get_sys_clock() - quecc_mem_free_startts);
+                    INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 //#endif
                     // we always commit
                     //TODO(tq): how to handle logic-induced aborts
@@ -337,7 +338,7 @@ RC WorkerThread::run() {
             // relaese
             quecc_mem_free_startts = get_sys_clock();
             exec_q->release();
-            INC_STATS(_thd_id, exec_mem_free_time, get_sys_clock() - quecc_mem_free_startts);
+            INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
             // reset map slot to 0
             Array<exec_queue_entry> * desired = (Array<exec_queue_entry> *) 0;
             while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
@@ -368,11 +369,13 @@ RC WorkerThread::run() {
 #else
         Message * msg = work_queue.dequeue(get_thd_id());
         if(!msg) {
-          if(idle_starttime ==0)
-            idle_starttime = get_sys_clock();
+          if(idle_starttime ==0){
+          idle_starttime = get_sys_clock();
+          }
+
           continue;
         }
-            if(idle_starttime > 0) {
+        if(idle_starttime > 0) {
           INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
           idle_starttime = 0;
         }

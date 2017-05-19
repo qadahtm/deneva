@@ -41,12 +41,21 @@ void Stats_thd::init(uint64_t thd_id) {
   plan_batch_process_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_idle_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_mem_alloc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_queue_dequeue_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_batch_delivery_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_queue_deq_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
+  plan_queue_deq_pop_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_queue_deq_free_mem_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_txn_process_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_total_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
 
   exec_batch_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_thread_cnt);
   exec_batch_part_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_thread_cnt);
   exec_txn_cnts = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_thread_cnt);
   exec_txn_frag_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_thread_cnt);
   exec_batch_proc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_idle_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_mem_free_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
 
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
@@ -215,15 +224,20 @@ void Stats_thd::clear() {
     plan_batch_process_time[i]=0;
     plan_idle_time[i]=0;
     plan_mem_alloc_time[i]=0;
+    plan_queue_dequeue_time[i]=0;
+    plan_batch_delivery_time[i]=0;
+    plan_queue_deq_cnt[i]=0;
+    plan_txn_process_time[i]=0;
+    plan_total_time[i]=0;
+    plan_queue_deq_pop_time[i]=0;
+    plan_queue_deq_free_mem_time[i]=0;
   }
   plan_queue_wait_time =0;
-  plan_queue_cnt=0;
   plan_full_batch_cnt=0;
   plan_batch_time=0;
-  plan_txn_process_time=0;
   plan_queue_enq_cnt=0;
   plan_queue_enqueue_time=0;
-  plan_queue_dequeue_time=0;
+
   // TODO(tq): add combine for worker/exec threads
   for (uint64_t i=0; i < g_thread_cnt; i++){
     exec_batch_cnt[i] = 0;
@@ -231,8 +245,10 @@ void Stats_thd::clear() {
     exec_txn_cnts[i] = 0;
     exec_txn_frag_cnt[i] = 0;
     exec_batch_proc_time[i] = 0;
+    exec_idle_time[i] =0;
+    exec_mem_free_time[i] = 0;
   }
-  exec_mem_free_time = 0;
+
 
   //OCC
   occ_validate_time=0;
@@ -941,21 +957,52 @@ void Stats_thd::print(FILE * outf, bool prog) {
     );
     fprintf(outf,
             ",quecc_plan%ld_idle_time=%f"
-            ,i
-            ,plan_idle_time[i] /BILLION
+            ,i // idle time as measured includes dequeue time so
+            ,(plan_idle_time[i] - plan_queue_dequeue_time[i]) /BILLION
     );
     fprintf(outf,
             ",quecc_plan%ld_batch_proc_time=%f"
             ,i
             ,plan_batch_process_time[i] /BILLION
     );
+    fprintf(outf,
+            ",quecc_plan%ld_queue_deq_cnt=%ld"
+            ,i
+            ,plan_queue_deq_cnt[i]
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_queue_dequeue_time=%f"
+            ,i
+            ,plan_queue_dequeue_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_queue_deq_pop_time=%f"
+            ,i
+            ,plan_queue_deq_pop_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_queue_deq_free_mem_time=%f"
+            ,i
+            ,plan_queue_deq_free_mem_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_batch_delivery_time=%f"
+            ,i
+            ,plan_batch_delivery_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_txn_proc_time=%f"
+            ,i
+            ,plan_txn_process_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_total_time=%f"
+            ,i
+            ,plan_total_time[i] /BILLION
+    );
   }
   fprintf(outf,
-          ",quecc_plan_txn_proc_time=%f"
-          ",quecc_plan_queue_cnt=%ld"
           ",quecc_plan_queue_wait_time=%f"
-          ,plan_txn_process_time /BILLION
-          ,plan_queue_cnt
           ,plan_queue_wait_time /BILLION
   );
 
@@ -990,11 +1037,18 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,i
             ,exec_batch_proc_time[i] / (BILLION * exec_batch_cnt[i])
     );
+    fprintf(outf,
+            ",quecc_exec%ld_mem_free_time=%f"
+            ,i
+            ,exec_mem_free_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_exec%ld_idle_time=%f"
+            ,i
+            ,exec_idle_time[i] /BILLION
+    );
   }
-  fprintf(outf,
-          ",quecc_exec_mem_free_time=%f"
-          ,exec_mem_free_time /BILLION
-  );
+
   //OCC
   fprintf(outf,
   ",occ_validate_time=%f"
@@ -1481,17 +1535,19 @@ void Stats_thd::combine(Stats_thd * stats) {
       plan_batch_process_time[i] += stats->plan_batch_process_time[i];
       plan_idle_time[i] += stats->plan_idle_time[i];
       plan_mem_alloc_time[i] += stats->plan_mem_alloc_time[i];
+      plan_queue_dequeue_time[i] += stats->plan_queue_dequeue_time[i];
+      plan_batch_delivery_time[i] += stats->plan_batch_delivery_time[i];
+      plan_queue_deq_cnt[i] += stats->plan_queue_deq_cnt[i];
+      plan_txn_process_time[i]+=stats->plan_txn_process_time[i];
+      plan_total_time[i] += stats->plan_total_time[i];
+      plan_queue_deq_pop_time[i] += stats->plan_queue_deq_pop_time[i];
+      plan_queue_deq_free_mem_time[i] += stats->plan_queue_deq_free_mem_time[i];
     }
     plan_queue_wait_time += stats->plan_queue_wait_time;
-    plan_queue_cnt += stats->plan_queue_cnt;
     plan_full_batch_cnt+=stats->plan_full_batch_cnt;
     plan_batch_time+=stats->plan_batch_time;
-
-    plan_txn_process_time+=stats->plan_txn_process_time;
-
     plan_queue_enq_cnt+=stats->plan_queue_enq_cnt;
     plan_queue_enqueue_time+=stats->plan_queue_enqueue_time;
-    plan_queue_dequeue_time+=stats->plan_queue_dequeue_time;
 
   // TODO(tq): add combine for worker/exec threads
   for (uint64_t i=0; i < g_thread_cnt; i++){
@@ -1500,8 +1556,10 @@ void Stats_thd::combine(Stats_thd * stats) {
     exec_txn_cnts[i] += stats->exec_txn_cnts[i];
     exec_txn_frag_cnt[i] += stats->exec_txn_frag_cnt[i];
     exec_batch_proc_time[i] += stats->exec_batch_proc_time[i];
+    exec_idle_time[i] += stats->exec_idle_time[i];
+    exec_mem_free_time[i] += stats->exec_mem_free_time[i];
   }
-  exec_mem_free_time += stats->exec_mem_free_time;
+
 
   //OCC
   occ_validate_time+=stats->occ_validate_time;
