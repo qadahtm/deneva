@@ -52,7 +52,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions
-#define MAX_TXN_IN_FLIGHT 1000000
+#define MAX_TXN_IN_FLIGHT 1000000 * 4
 
 #define SERVER_GENERATE_QUERIES false
 
@@ -152,9 +152,9 @@
 // [QUECC]
 #define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT
-#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
+#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.1
 #define BATCH_MAP_LENGTH 512 // width of map is PLAN_THREAD_CNT
-#define BATCH_COMP_TIMEOUT 10 * 1000000UL
+#define BATCH_COMP_TIMEOUT 1 * 200 * MILLION // 50ms
 
 /***********************************************/
 // Logging
@@ -177,7 +177,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART 5000000
+#define MAX_TXN_PER_PART 8000000
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false

@@ -197,6 +197,8 @@ public:
     // QueCC
     uint64_t * plan_txn_cnts;
     uint64_t * plan_batch_cnts;
+    uint64_t * plan_size_batch_cnts;
+    uint64_t * plan_time_batch_cnts;
     double * plan_batch_process_time;
     double * plan_idle_time;
     double * plan_mem_alloc_time;
@@ -222,7 +224,10 @@ public:
     double * exec_batch_proc_time;
     double * exec_idle_time;
     double * exec_mem_free_time;
-
+    double * exec_txn_ctx_update;
+    double * exec_resp_msg_create_time;
+    double * exec_batch_part_proc_time;
+    double * exec_txn_commit_time;
 
 
   // OCC

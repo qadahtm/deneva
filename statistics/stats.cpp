@@ -38,6 +38,8 @@ void Stats_thd::init(uint64_t thd_id) {
   DEBUG_M("Stats_thd::init plan_txn_cnts alloc\n");
   plan_txn_cnts= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
   plan_batch_cnts = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
+  plan_size_batch_cnts = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
+  plan_time_batch_cnts = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
   plan_batch_process_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_idle_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_mem_alloc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
@@ -56,6 +58,10 @@ void Stats_thd::init(uint64_t thd_id) {
   exec_batch_proc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_idle_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_mem_free_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_txn_ctx_update = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_resp_msg_create_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_batch_part_proc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_txn_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
 
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
@@ -221,6 +227,8 @@ void Stats_thd::clear() {
   for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
     plan_txn_cnts[i] =0;
     plan_batch_cnts[i] =0;
+    plan_size_batch_cnts[i] =0;
+    plan_time_batch_cnts[i] =0;
     plan_batch_process_time[i]=0;
     plan_idle_time[i]=0;
     plan_mem_alloc_time[i]=0;
@@ -247,6 +255,10 @@ void Stats_thd::clear() {
     exec_batch_proc_time[i] = 0;
     exec_idle_time[i] =0;
     exec_mem_free_time[i] = 0;
+    exec_txn_ctx_update[i] =0;
+    exec_resp_msg_create_time[i]=0;
+    exec_batch_part_proc_time[i]=0;
+    exec_txn_commit_time[i]=0;
   }
 
 
@@ -873,7 +885,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
     ,twopl_release_cnt 
     ,twopl_release_time / BILLION
   );
-
+#if CC_ALG == CALVIN
   // Calvin
   double seq_queue_wait_avg_time = 0;
   if(seq_queue_cnt > 0)
@@ -937,7 +949,9 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,sched_epoch_cnt
   ,sched_epoch_diff /BILLION
   );
+#endif
 
+#if CC_ALG == QUECC
     // QueCC
   for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
     fprintf(outf,
@@ -949,6 +963,16 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ",quecc_plan%ld_batch_cnt=%ld"
             ,i
             ,plan_batch_cnts[i]
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_size_batch_cnt=%ld"
+            ,i
+            ,plan_size_batch_cnts[i]
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_time_batch_cnt=%ld"
+            ,i
+            ,plan_time_batch_cnts[i]
     );
     fprintf(outf,
             ",quecc_plan%ld_mem_alloc_time=%f"
@@ -1047,8 +1071,30 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,i
             ,exec_idle_time[i] /BILLION
     );
+    fprintf(outf,
+            ",quecc_exec%ld_txn_ctx_update_time=%f"
+            ,i
+            ,exec_txn_ctx_update[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_exec%ld_resp_msg_create_time=%f"
+            ,i
+            ,exec_resp_msg_create_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_exec%ld_batch_part_proc_time=%f"
+            ,i
+            ,exec_batch_part_proc_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_exec%ld_txn_commit_time=%f"
+            ,i
+            ,exec_txn_commit_time[i] /BILLION
+    );
   }
+#endif
 
+#if CC_ALG == OCC
   //OCC
   fprintf(outf,
   ",occ_validate_time=%f"
@@ -1074,7 +1120,8 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,occ_ts_abort_cnt
   ,occ_finish_time / BILLION
   );
-
+#endif
+#if CC_ALG == MAAT
   //MAAT
   double maat_range_avg = 0;
   double maat_validate_avg = 0;
@@ -1117,7 +1164,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,maat_commit_avg
   ,maat_range_avg
   );
-
+#endif
 
   // Logging
   double log_write_avg_time = 0;
@@ -1532,6 +1579,8 @@ void Stats_thd::combine(Stats_thd * stats) {
     for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
       plan_txn_cnts[i] += stats->plan_txn_cnts[i];
       plan_batch_cnts[i] += stats->plan_batch_cnts[i];
+      plan_size_batch_cnts[i] += stats->plan_size_batch_cnts[i];
+      plan_time_batch_cnts[i] += stats->plan_time_batch_cnts[i];
       plan_batch_process_time[i] += stats->plan_batch_process_time[i];
       plan_idle_time[i] += stats->plan_idle_time[i];
       plan_mem_alloc_time[i] += stats->plan_mem_alloc_time[i];
@@ -1558,6 +1607,10 @@ void Stats_thd::combine(Stats_thd * stats) {
     exec_batch_proc_time[i] += stats->exec_batch_proc_time[i];
     exec_idle_time[i] += stats->exec_idle_time[i];
     exec_mem_free_time[i] += stats->exec_mem_free_time[i];
+    exec_txn_ctx_update[i] += stats->exec_txn_ctx_update[i];
+    exec_resp_msg_create_time[i] += stats->exec_resp_msg_create_time[i];
+    exec_batch_part_proc_time[i] += stats->exec_batch_part_proc_time[i];
+    exec_txn_commit_time[i] += stats->exec_txn_commit_time[i];
   }
 
 

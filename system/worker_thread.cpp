@@ -198,7 +198,10 @@ RC WorkerThread::run() {
     uint64_t idle_starttime = 0;
 
 #if CC_ALG == QUECC
+    uint64_t quecc_prof_time = 0;
+    uint64_t quecc_commit_starttime = 0;
     uint64_t quecc_batch_proc_starttime = 0;
+    uint64_t quecc_batch_part_proc_starttime = 0;
     uint64_t quecc_mem_free_startts = 0;
     uint64_t wbatch_id = 0;
     uint64_t wplanner_id = 0;
@@ -218,7 +221,7 @@ RC WorkerThread::run() {
 
 //      DEBUG_Q("Pointer for map slot [%d][%ld][%ld] is %ld, going to spin if 0\n", 0, _thd_id, wbatch_id, exec_q_ptr);
         if (((uint64_t) exec_q) != 0) {
-
+            quecc_batch_part_proc_starttime = get_sys_clock();
             if(idle_starttime > 0) {
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
@@ -282,7 +285,9 @@ RC WorkerThread::run() {
 //                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
 
                 assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
+                quecc_prof_time = get_sys_clock();
                 uint64_t comp_cnt = ATOM_ADD_FETCH(exec_qe.txn_ctx->completion_cnt, 1);
+                INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
                 INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
 
                 // TQ: we are committing now, which is done one by one the threads only
@@ -292,6 +297,7 @@ RC WorkerThread::run() {
                 // TODO(tq): Hardcoding for 10 operations, use a paramter instead
                 // Execution thrad that will execute the last operation will commit
                 if (comp_cnt == 10) {
+                    quecc_commit_starttime = get_sys_clock();
 //                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
 //                          txn_man->return_id, exec_qe.return_node_id, g_node_id);
@@ -302,6 +308,7 @@ RC WorkerThread::run() {
                     // Committing
                     // Sending response to client a
 //#if !SERVER_GENERATE_QUERIES
+                    quecc_prof_time = get_sys_clock();
                     Message * rsp_msg = Message::create_message(CL_RSP);
                     rsp_msg->txn_id = exec_qe.txn_id;
                     rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
@@ -316,6 +323,7 @@ RC WorkerThread::run() {
                     rsp_msg->lat_other_time = 0;
 
                     msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
+                    INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
 #if QUECC_DEBUG
                     work_queue.inflight_msg.fetch_sub(1);
 #endif
@@ -329,6 +337,7 @@ RC WorkerThread::run() {
                     INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 //#endif
                     // we always commit
+                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
                     //TODO(tq): how to handle logic-induced aborts
                 }
 
@@ -357,7 +366,7 @@ RC WorkerThread::run() {
                 INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock() - quecc_batch_proc_starttime);
                 quecc_batch_proc_starttime = 0;
             }
-
+            INC_STATS(_thd_id, exec_batch_part_proc_time[_thd_id], get_sys_clock()-quecc_batch_part_proc_starttime);
             INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
         }
         else{

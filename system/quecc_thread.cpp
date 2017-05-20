@@ -94,7 +94,8 @@ RC PlannerThread::run() {
     uint64_t prof_starttime = 0;
     uint64_t txn_prof_starttime = 0;
     uint64_t plan_starttime = 0;
-
+    bool force_batch_delivery = false;
+    uint64_t idle_cnt = 0;
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
             plan_starttime = get_sys_clock();
@@ -112,23 +113,50 @@ RC PlannerThread::run() {
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
             }
-            continue;
-        }
-        INC_STATS(_thd_id,plan_queue_deq_cnt[_planner_id],1);
+            idle_cnt++;
+            double idle_for =  ( (double) get_sys_clock() - idle_starttime);
+            double batch_start_since = ( (double) get_sys_clock() - batch_start_time);
+            if (idle_starttime > 0 && idle_cnt % (10 * MILLION) == 0){
+                DEBUG_Q("Planner_%ld : we should force batch delivery with batch_cnt = %ld, total_idle_time = %f, idle_for=%f, batch_started_since=%f\n",
+                        _planner_id,
+                        batch_cnt,
+                        stats._stats[_thd_id]->plan_idle_time[_planner_id]/BILLION,
+                        idle_for/BILLION,
+                        batch_start_since/BILLION)
+            }
+            // we have not recieved a transaction
 
-        if (idle_starttime != 0){
-            // plan_idle_time includes dequeue time, which should be subtracted from it
-            INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
-            idle_starttime = 0;
+//            if ( batch_start_time > 0 && (get_sys_clock() - batch_start_time) >= BATCH_COMP_TIMEOUT && batch_cnt > 0){
+////                double batch_start_since = ( (double) get_sys_clock() - batch_start_time);
+//                DEBUG_Q("Planner_%ld : forcing a batch delivery with batch_cnt = %ld, total_idle_time = %f, idle_for=%f, batch_started_since=%f\n",
+//                        _planner_id,
+//                        batch_cnt,
+//                        stats._stats[_thd_id]->plan_idle_time[_planner_id]/BILLION,
+//                        idle_for/BILLION,
+//                        batch_start_since/BILLION)
+//                force_batch_delivery = true;
+//            }
+//            else {
+                continue;
+//            }
         }
+//        if (!force_batch_delivery){
+            INC_STATS(_thd_id,plan_queue_deq_cnt[_planner_id],1);
 
-        // we have got a message, which is a transaction
-        batch_cnt++;
-        if (batch_start_time == 0){
-            batch_start_time = get_sys_clock();
-        }
-
-        if (batch_cnt == planner_batch_size){ // || (get_sys_clock() - batch_start_time) >= BATCH_COMP_TIMEOUT){
+            if (idle_starttime != 0){
+                // plan_idle_time includes dequeue time, which should be subtracted from it
+                INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+                idle_starttime = 0;
+            }
+//        }
+        force_batch_delivery = ((get_sys_clock() - batch_start_time) >= BATCH_COMP_TIMEOUT && batch_cnt > 0);
+        if (batch_cnt == planner_batch_size || force_batch_delivery){
+            if (force_batch_delivery) {
+                INC_STATS(_thd_id, plan_time_batch_cnts[_planner_id], 1)
+                force_batch_delivery = false;
+            } else{
+                INC_STATS(_thd_id, plan_size_batch_cnts[_planner_id], 1)
+            }
 //            DEBUG_Q("Batch complete\n")
             // a batch is ready to be delivered to the the execution threads.
             // we will have a batch queue for each of the planners and they are scanned in known order
@@ -186,6 +214,12 @@ RC PlannerThread::run() {
             batch_cnt = 0;
             batch_start_time = 0;
             INC_STATS(_thd_id, plan_batch_delivery_time[_planner_id], get_sys_clock()-prof_starttime);
+        }
+
+        // we have got a message, which is a transaction
+        batch_cnt++;
+        if (batch_start_time == 0){
+            batch_start_time = get_sys_clock();
         }
 
         switch (msg->get_rtype()) {
