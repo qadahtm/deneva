@@ -46,6 +46,8 @@ void Stats_thd::init(uint64_t thd_id) {
   plan_queue_dequeue_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_batch_delivery_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_queue_deq_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
+  plan_reuse_exec_queue_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
+  plan_alloc_exec_queue_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
   plan_queue_deq_pop_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_queue_deq_free_mem_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_txn_process_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
@@ -241,6 +243,8 @@ void Stats_thd::clear() {
     plan_total_time[i]=0;
     plan_queue_deq_pop_time[i]=0;
     plan_queue_deq_free_mem_time[i]=0;
+    plan_reuse_exec_queue_cnt[i]=0;
+    plan_alloc_exec_queue_cnt[i]=0;
   }
   plan_queue_wait_time =0;
   plan_full_batch_cnt=0;
@@ -999,6 +1003,16 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,plan_queue_deq_cnt[i]
     );
     fprintf(outf,
+            ",quecc_plan%ld_reuse_exec_queue_cnt=%ld"
+            ,i
+            ,plan_reuse_exec_queue_cnt[i]
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_alloc_exec_queue_cnt=%ld"
+            ,i
+            ,plan_alloc_exec_queue_cnt[i]
+    );
+    fprintf(outf,
             ",quecc_plan%ld_queue_dequeue_time=%f"
             ,i
             ,plan_queue_dequeue_time[i] /BILLION
@@ -1605,6 +1619,8 @@ void Stats_thd::combine(Stats_thd * stats) {
       plan_total_time[i] += stats->plan_total_time[i];
       plan_queue_deq_pop_time[i] += stats->plan_queue_deq_pop_time[i];
       plan_queue_deq_free_mem_time[i] += stats->plan_queue_deq_free_mem_time[i];
+      plan_reuse_exec_queue_cnt[i] += stats->plan_reuse_exec_queue_cnt[i];
+      plan_alloc_exec_queue_cnt[i] += stats->plan_alloc_exec_queue_cnt[i];
     }
     plan_queue_wait_time += stats->plan_queue_wait_time;
     plan_full_batch_cnt+=stats->plan_full_batch_cnt;

@@ -192,7 +192,7 @@ TxnManager *WorkerThread::get_transaction_manager(Message *msg) {
 RC WorkerThread::run() {
     tsetup();
     printf("Running WorkerThread %ld\n", _thd_id);
-#if CC_ALG != QUECC
+#if !(CC_ALG == QUECC || CC_ALG == DUMMY_CC)
     uint64_t ready_starttime;
 #endif
     uint64_t idle_starttime = 0;
@@ -258,6 +258,7 @@ RC WorkerThread::run() {
                 //TQ: dirty code: using a char buffer to store ycsb_request
                 ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
 
+                quecc_prof_time = get_sys_clock();
                 // get pointer to record in row
                 YCSBWorkload *my_wl = (YCSBWorkload *) this->_wl;
                 int part_id = my_wl->key_to_part(req->key);
@@ -266,6 +267,9 @@ RC WorkerThread::run() {
                 INDEX *index = my_wl->the_index;
                 index->index_read(req->key, item, part_id, _thd_id);
 
+                INC_STATS(_thd_id, exec_txn_index_lookup_time[_thd_id], get_sys_clock()-quecc_prof_time);
+
+                quecc_prof_time = get_sys_clock();
                 // just access row, no need to go through lock manager path
                 quecc_row = ((row_t *) item->location);
 
@@ -290,7 +294,7 @@ RC WorkerThread::run() {
                     // 100 below is the number of bytes for each field
                     *(uint64_t *) (&data[fid * 100]) = 0;
                 }
-
+                INC_STATS(_thd_id, exec_txn_proc_time[_thd_id], get_sys_clock()-quecc_prof_time);
                 // TQ: declare this operation as executed
                 // since we only have a single operation, we just increment by one
 //                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
@@ -347,6 +351,7 @@ RC WorkerThread::run() {
                     // Free txn context
                     quecc_mem_free_startts = get_sys_clock();
                     mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
+//                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
                     INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 //#endif
                     // we always commit
@@ -359,7 +364,8 @@ RC WorkerThread::run() {
                     wbatch_id, exec_q->size(), batch_slot, _thd_id, wplanner_id);
             // relaese
             quecc_mem_free_startts = get_sys_clock();
-            exec_q->release();
+//            exec_q->release();
+            while(!work_queue.exec_queue_free_list[_thd_id]->push(exec_q)) {};
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
             // reset map slot to 0
             Array<exec_queue_entry> * desired = (Array<exec_queue_entry> *) 0;
@@ -388,13 +394,43 @@ RC WorkerThread::run() {
 //            }
 //        }
 
+#elif CC_ALG == DUMMY_CC
+        Message * msg = work_queue.dequeue(get_thd_id());
+        if(!msg) {
+            if(idle_starttime ==0){
+                idle_starttime = get_sys_clock();
+            }
+            continue;
+        }
+        if(idle_starttime > 0) {
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            idle_starttime = 0;
+        }
+
+        // this does nothing on receiving a client query, just respond with commit
+        if (msg->rtype == CL_QRY){
+            Message * rsp_msg = Message::create_message(CL_RSP);
+            rsp_msg->txn_id = 0;
+            rsp_msg->batch_id = 0; // using batch_id from local, we can also use the one in the context
+            ((ClientResponseMessage *) rsp_msg)->client_startts = ((ClientQueryMessage *)msg)->client_startts;
+            rsp_msg->lat_work_queue_time = 0;
+            rsp_msg->lat_msg_queue_time = 0;
+            rsp_msg->lat_cc_block_time = 0;
+            rsp_msg->lat_cc_time = 0;
+            rsp_msg->lat_process_time = 0;
+            rsp_msg->lat_network_time = 0;
+            rsp_msg->lat_other_time = 0;
+
+            msg_queue.enqueue(get_thd_id(), rsp_msg, ((ClientQueryMessage *)msg)->return_node_id);
+            INC_STATS(get_thd_id(), txn_cnt, 1);
+            msg->release();
+        }
 #else
         Message * msg = work_queue.dequeue(get_thd_id());
         if(!msg) {
           if(idle_starttime ==0){
           idle_starttime = get_sys_clock();
           }
-
           continue;
         }
         if(idle_starttime > 0) {

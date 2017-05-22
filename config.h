@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 4
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -52,7 +52,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions
-#define MAX_TXN_IN_FLIGHT 1000000 * 4
+#define MAX_TXN_IN_FLIGHT 1000000 * 1
 
 #define SERVER_GENERATE_QUERIES false
 
@@ -108,8 +108,9 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-#define CC_ALG NO_WAIT
+//#define CC_ALG NO_WAIT
 //#define CC_ALG QUECC
+#define CC_ALG DUMMY_CC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -154,7 +155,7 @@
 // This relates to MAX_TXN_IN_FLIGHT
 #define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
 #define BATCH_MAP_LENGTH 512 // width of map is PLAN_THREAD_CNT
-#define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
+#define BATCH_COMP_TIMEOUT 1 * 1 * MILLION // 5ms
 
 /***********************************************/
 // Logging
@@ -326,6 +327,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PPS             3
 #define TEST            4
 // Concurrency Control Algorithm
+#define DUMMY_CC         -1
 #define NO_WAIT           1
 #define WAIT_DIE          2
 #define DL_DETECT         3

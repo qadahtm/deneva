@@ -36,6 +36,7 @@ struct exec_queue_entry {
     transaction_context * txn_ctx;
     uint64_t txn_id;
 //    uint64_t req_id;
+//    uint64_t planner_id;
     uint64_t batch_id;
 #if WORKLOAD == YCSB
     // Static allocation for request

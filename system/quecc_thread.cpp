@@ -55,7 +55,7 @@ RC PlannerThread::run() {
     uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
     // max capcity, assume YCSB workload
 //    uint64_t exec_queue_capacity = planner_batch_size*10;
-    uint64_t exec_queue_capacity = 512;//1000;
+    uint64_t exec_queue_capacity = 1024 * 32;
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
     // there will be an array pointer.
@@ -70,6 +70,24 @@ RC PlannerThread::run() {
         exec_q->init(exec_queue_capacity);
         exec_queues->add(exec_q);
     }
+
+    // Pre-allocate execution queues to be used by planners and executors
+    // this should eliminate the overhead of memory allocation
+    uint64_t  exec_queue_pool_size = 10;
+    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+        for (uint64_t j = 0; j < exec_queue_pool_size; j++){
+            Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
+            exec_q->init(exec_queue_capacity);
+            while(!work_queue.exec_queue_free_list[i]->push(exec_q)){}
+        }
+    }
+
+//    uint64_t plan_txn_cnt = g_inflight_max / (g_plan_thread_cnt);
+//    for (uint64_t j=0; j < plan_txn_cnt; j++){
+//        transaction_context * tc = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+//        while(!work_queue.txn_ctx_free_list[_planner_id]->push(tc)) {}
+//    }
+
 
 //    exec_queue_entry ** exec_queues = (exec_queue_entry **) mem_allocator.alloc(sizeof(exec_queue_entry *)*g_thread_cnt);
 //    uint64_t * b_mrange_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
@@ -190,11 +208,22 @@ RC PlannerThread::run() {
 
             // Array class implementation
             prof_starttime = get_sys_clock();
-            exec_queues = new Array<Array<exec_queue_entry> *>();
-            exec_queues->init(g_thread_cnt);
+//            exec_queues = new Array<Array<exec_queue_entry> *>();
+//            exec_queues->init(g_thread_cnt);
+            exec_queues->clear();
             for (uint64_t i = 0; i < g_thread_cnt; i++) {
-                Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
-                exec_q->init(exec_queue_capacity);
+                Array<exec_queue_entry> * exec_q = NULL;
+                if (work_queue.exec_queue_free_list[i]->pop(exec_q)){
+                    exec_q->clear();
+                    DEBUG_Q("Planner_%ld : Reusing exec_q\n", _planner_id);
+                    INC_STATS(_thd_id, plan_reuse_exec_queue_cnt[_planner_id], 1);
+                }
+                else{
+                    exec_q = new Array<exec_queue_entry>();
+                    exec_q->init(exec_queue_capacity);
+                    DEBUG_Q("Planner_%ld: Allocating new exec_q\n", _planner_id);
+                    INC_STATS(_thd_id, plan_alloc_exec_queue_cnt[_planner_id], 1);
+                }
                 exec_queues->add(exec_q);
             }
             INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
@@ -234,7 +263,10 @@ RC PlannerThread::run() {
                 // create transaction context
                 // TODO(tq): here also we are dynamically allocting memory, we should use a pool recycle
                 prof_starttime = get_sys_clock();
-                transaction_context *tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+                transaction_context *tctx = NULL;
+//                if (!work_queue.txn_ctx_free_list[_planner_id]->pop(tctx)){
+                    tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+//                }
                 INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;
 //                tctx->completion_cnt = 0;
@@ -275,6 +307,7 @@ RC PlannerThread::run() {
                     entry->txn_id = planner_txn_id;
                     entry->txn_ctx = tctx;
 //                    entry->req_id = j;
+//                    entry->planner_id = _planner_id;
                     entry->batch_id = batch_id;
                     assert(msg->return_node_id != g_node_id);
                     entry->return_node_id = msg->return_node_id;

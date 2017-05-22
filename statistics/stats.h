@@ -209,6 +209,8 @@ public:
     uint64_t * plan_queue_deq_cnt;
     double * plan_txn_process_time;
     double * plan_total_time;
+    uint64_t * plan_reuse_exec_queue_cnt;
+    uint64_t * plan_alloc_exec_queue_cnt;
     uint64_t plan_full_batch_cnt;
     double plan_batch_time;
     uint64_t plan_queue_enq_cnt;

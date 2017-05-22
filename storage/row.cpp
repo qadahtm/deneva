@@ -56,7 +56,7 @@ void row_t::init_manager(row_t * row) {
   return;
 #endif
   DEBUG_M("row_t::init_manager alloc \n");
-#if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC
+#if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC
 	manager = (Row_lock *) mem_allocator.align_alloc(sizeof(Row_lock));
 #elif CC_ALG == TIMESTAMP
     manager = (Row_ts *) mem_allocator.align_alloc(sizeof(Row_ts));
@@ -205,7 +205,7 @@ RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
     return rc;
 #endif
 
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC || CC_ALG == DUMMY_CC
 	// For QueCC no locking needed
 	// This line is added just to compile
 	// row is not accessed here.
@@ -231,7 +231,7 @@ RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
     assert(rc == RCOK);
 	goto end;
 #endif
-#if CC_ALG == WAIT_DIE || CC_ALG == NO_WAIT 
+#if CC_ALG == WAIT_DIE || CC_ALG == NO_WAIT
 	//uint64_t thd_id = txn->get_thd_id();
 	lock_t lt = (type == RD || type == SCAN)? LOCK_SH : LOCK_EX;
 	rc = this->manager->lock_get(lt, txn);

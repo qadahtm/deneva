@@ -107,7 +107,7 @@ public:
 	void return_row(RC rc, access_t type, TxnManager * txn, row_t * row);
 // Lockmanager is not needed for QueCC
 // TODO(tq): FIXME
-  #if CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC
+  #if CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC
     Row_lock * manager;
   #elif CC_ALG == TIMESTAMP
    	Row_ts * manager;

@@ -91,6 +91,14 @@ public:
 //    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
 // Layout of the batch map is imporatant to avoid potential tharshing
     volatile atomic<Array<exec_queue_entry> *> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+
+    // QueCC optimization to reuse and recycle execution queues
+    // Use this instead of freeing memory and reallocating it
+    boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
+    // Similaryly we will have a free list for execution context per planner
+    // This approach is not needed
+//    boost::lockfree::queue<transaction_context *> ** txn_ctx_free_list;
+
 #if QUECC_DEBUG
     atomic<int64_t> inflight_msg;
 #endif

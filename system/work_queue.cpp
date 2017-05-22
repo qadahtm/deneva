@@ -28,7 +28,7 @@ void QWorkQueue::init() {
   sched_ptr = 0;
   seq_queue = new boost::lockfree::queue<work_queue_entry* > (0);
   work_queue = new boost::lockfree::queue<work_queue_entry* > (0);
-  new_txn_queue = new boost::lockfree::queue<work_queue_entry* >(g_inflight_max);
+  new_txn_queue = new boost::lockfree::queue<work_queue_entry* >(0);
   sched_queue = new boost::lockfree::queue<work_queue_entry* > * [g_node_cnt];
   for ( uint64_t i = 0; i < g_node_cnt; i++) {
     sched_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
@@ -36,23 +36,34 @@ void QWorkQueue::init() {
 
   // QUECC planners
   plan_queue = new boost::lockfree::queue<work_queue_entry* > * [g_plan_thread_cnt];
-    //TODO(tq): change this to pure array and be cache-aware
-
-    for (uint64_t i=0; i < g_batch_map_length ; i++){
-        for (uint64_t j=0; j < g_thread_cnt; j++){
-            for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
-//                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
-              (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
-            }
-        }
-    }
-#if QUECC_DEBUG
-    inflight_msg.store(0);
-#endif
-    DEBUG_Q("Initialized batch_map\n");
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
-    plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (g_inflight_max);
+    plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
+  //TODO(tq): change this to pure array and be cache-aware
+
+  for (uint64_t i=0; i < g_batch_map_length ; i++){
+    for (uint64_t j=0; j < g_thread_cnt; j++){
+      for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
+//                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
+        (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
+      }
+    }
+  }
+  // QueCC execution queue free list
+  exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [g_thread_cnt];
+  for ( uint64_t i = 0; i < g_thread_cnt; i++) {
+    exec_queue_free_list[i] = new boost::lockfree::queue<Array<exec_queue_entry> *> (0);
+  }
+
+//  txn_ctx_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
+//  for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+//    txn_ctx_free_list[i] = new boost::lockfree::queue<transaction_context *> (0);
+//  }
+
+#if QUECC_DEBUG
+  inflight_msg.store(0);
+#endif
+  DEBUG_Q("Initialized batch_map\n");
 }
 
 uint64_t QWorkQueue::get_random_planner_id() {
