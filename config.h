@@ -108,8 +108,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-//#define CC_ALG NO_WAIT
-#define CC_ALG QUECC
+#define CC_ALG NO_WAIT
+//#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -152,9 +152,9 @@
 // [QUECC]
 #define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT
-#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.1
+#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
 #define BATCH_MAP_LENGTH 512 // width of map is PLAN_THREAD_CNT
-#define BATCH_COMP_TIMEOUT 1 * 200 * MILLION // 50ms
+#define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 /***********************************************/
 // Logging

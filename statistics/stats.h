@@ -228,6 +228,8 @@ public:
     double * exec_resp_msg_create_time;
     double * exec_batch_part_proc_time;
     double * exec_txn_commit_time;
+    double * exec_txn_index_lookup_time;
+    double * exec_txn_proc_time;
 
 
   // OCC

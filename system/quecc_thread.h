@@ -23,33 +23,33 @@ class Workload;
  */
 struct transaction_context {
     uint64_t txn_id;
-    uint64_t completion_cnt;
+//    uint64_t completion_cnt;
+    boost::atomic<uint64_t> completion_cnt;
     uint64_t client_startts;
     uint64_t batch_id;
-    bool dep_vector[10][10];
-    uint64_t keys[10];
-    char vals[10000];
-
+//    bool dep_vector[10][10];
+//    uint64_t keys[10];
+//    char vals[10000];
 };
 
 struct exec_queue_entry {
     transaction_context * txn_ctx;
     uint64_t txn_id;
-    uint64_t req_id;
+//    uint64_t req_id;
     uint64_t batch_id;
 #if WORKLOAD == YCSB
     // Static allocation for request
     // Thiw should work after casting it to ycsb_request
     char req_buffer[1016];
 
-    access_t ycsb_req_acctype;
-    uint64_t ycsb_req_key;
+//    access_t ycsb_req_acctype;
+//    uint64_t ycsb_req_key;
     // This is different from ycsb_request spects where value is only 1 byte
     // here value consist of 10 fields and each is 100 bytes
-    char ycsb_req_val[1000];
+//    char ycsb_req_val[1000];
     // Used to capture dependencies among data items within a transaction
-    uint64_t ycsb_req_index;
-    char dep_vector[10];
+//    uint64_t ycsb_req_index;
+//    char dep_vector[10];
     uint64_t return_node_id;
 #endif
 };

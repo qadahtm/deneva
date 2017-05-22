@@ -64,10 +64,12 @@ public:
   void release() {
     //DEBUG("Array release: %ld * %ld = %ld\n",sizeof(T),capacity,sizeof(T)*capacity);
     DEBUG_M("Array::release %ld*%ld\n",sizeof(T),capacity);
-    mem_allocator.free(items,sizeof(T)*capacity);
-    items = NULL;
-    count = 0;
-    capacity = 0;
+      if (items != NULL && capacity > 0){
+          mem_allocator.free(items,sizeof(T)*capacity);
+          items = NULL;
+          count = 0;
+          capacity = 0;
+      }
   }
 
   void add_unique(T item){

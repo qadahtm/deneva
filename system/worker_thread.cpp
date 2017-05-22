@@ -219,8 +219,15 @@ RC WorkerThread::run() {
         // we should spin here if pointer is not set
         exec_q = work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
 
+        if (((uint64_t) exec_q) == 0){
+            if (idle_starttime == 0){
+                idle_starttime = get_sys_clock();
+            }
+            continue;
+        }
+
 //      DEBUG_Q("Pointer for map slot [%d][%ld][%ld] is %ld, going to spin if 0\n", 0, _thd_id, wbatch_id, exec_q_ptr);
-        if (((uint64_t) exec_q) != 0) {
+//        if (((uint64_t) exec_q) != 0) {
             quecc_batch_part_proc_starttime = get_sys_clock();
             if(idle_starttime > 0) {
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
@@ -240,6 +247,10 @@ RC WorkerThread::run() {
             for (uint64_t i = 0; i < exec_q->size(); ++i) {
                 exec_queue_entry exec_qe = exec_q->get(i);
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
+                if (exec_qe.batch_id != wbatch_id) {
+                    DEBUG_Q("Processing batch part map slot [%ld][%ld][%ld], wbatch_id=%ld, ebatch_id = %ld\n",
+                            batch_slot,_thd_id, wplanner_id, wbatch_id, exec_qe.batch_id);
+                }
                 assert(exec_qe.batch_id == wbatch_id);
 
                 row_t *quecc_row;
@@ -286,7 +297,8 @@ RC WorkerThread::run() {
 
                 assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
                 quecc_prof_time = get_sys_clock();
-                uint64_t comp_cnt = ATOM_ADD_FETCH(exec_qe.txn_ctx->completion_cnt, 1);
+//                uint64_t comp_cnt = ATOM_ADD_FETCH(exec_qe.txn_ctx->completion_cnt, 1);
+                uint64_t comp_cnt = exec_qe.txn_ctx->completion_cnt.fetch_add(1);
                 INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
                 INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
 
@@ -296,7 +308,8 @@ RC WorkerThread::run() {
                 // TODO(tq): consider committing as a batch with logging enabled
                 // TODO(tq): Hardcoding for 10 operations, use a paramter instead
                 // Execution thrad that will execute the last operation will commit
-                if (comp_cnt == 10) {
+//                if (comp_cnt == 10) {
+                if (comp_cnt == 9) {
                     quecc_commit_starttime = get_sys_clock();
 //                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
@@ -368,12 +381,12 @@ RC WorkerThread::run() {
             }
             INC_STATS(_thd_id, exec_batch_part_proc_time[_thd_id], get_sys_clock()-quecc_batch_part_proc_starttime);
             INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
-        }
-        else{
-            if (idle_starttime == 0){
-                idle_starttime = get_sys_clock();
-            }
-        }
+//        }
+//        else{
+//            if (idle_starttime == 0){
+//                idle_starttime = get_sys_clock();
+//            }
+//        }
 
 #else
         Message * msg = work_queue.dequeue(get_thd_id());

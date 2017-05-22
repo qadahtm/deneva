@@ -54,7 +54,8 @@ RC PlannerThread::run() {
     DEBUG_Q("Planner_%ld thread started, txn_ids start at %ld \n", _planner_id, txn_prefix_planner_base);
     uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
     // max capcity, assume YCSB workload
-    uint64_t exec_queue_capacity = planner_batch_size*10;
+//    uint64_t exec_queue_capacity = planner_batch_size*10;
+    uint64_t exec_queue_capacity = 512;//1000;
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
     // there will be an array pointer.
@@ -236,7 +237,8 @@ RC PlannerThread::run() {
                 transaction_context *tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
                 INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;
-                tctx->completion_cnt = 0;
+//                tctx->completion_cnt = 0;
+                tctx->completion_cnt.store(0);
                 tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
                 tctx->batch_id = batch_id;
 
@@ -272,18 +274,18 @@ RC PlannerThread::run() {
 
                     entry->txn_id = planner_txn_id;
                     entry->txn_ctx = tctx;
-                    entry->req_id = j;
+//                    entry->req_id = j;
                     entry->batch_id = batch_id;
                     assert(msg->return_node_id != g_node_id);
                     entry->return_node_id = msg->return_node_id;
 
                     // for now, assume only one request per entry
-                    entry->ycsb_req_index = j;
+//                    entry->ycsb_req_index = j;
 
                     // TODO(tq): this should be removed if the buffer approach works
-                    entry->ycsb_req_acctype = ycsb_req->acctype;
-                    entry->ycsb_req_key = ycsb_req->key;
-                    entry->ycsb_req_val[0] = ycsb_req->value;
+//                    entry->ycsb_req_acctype = ycsb_req->acctype;
+//                    entry->ycsb_req_key = ycsb_req->key;
+//                    entry->ycsb_req_val[0] = ycsb_req->value;
 
                     // Dirty code
                     ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;

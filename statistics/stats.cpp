@@ -62,6 +62,8 @@ void Stats_thd::init(uint64_t thd_id) {
   exec_resp_msg_create_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_batch_part_proc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_txn_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_txn_index_lookup_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  exec_txn_proc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
 
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
@@ -259,6 +261,8 @@ void Stats_thd::clear() {
     exec_resp_msg_create_time[i]=0;
     exec_batch_part_proc_time[i]=0;
     exec_txn_commit_time[i]=0;
+    exec_txn_index_lookup_time[i]=0;
+    exec_txn_proc_time[i]=0;
   }
 
 
@@ -1091,6 +1095,16 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,i
             ,exec_txn_commit_time[i] /BILLION
     );
+    fprintf(outf,
+            ",quecc_exec%ld_txn_index_lookup_time=%f"
+            ,i
+            ,exec_txn_index_lookup_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_exec%ld_txn_proc_time=%f"
+            ,i
+            ,exec_txn_proc_time[i] /BILLION
+    );
   }
 #endif
 
@@ -1611,6 +1625,8 @@ void Stats_thd::combine(Stats_thd * stats) {
     exec_resp_msg_create_time[i] += stats->exec_resp_msg_create_time[i];
     exec_batch_part_proc_time[i] += stats->exec_batch_part_proc_time[i];
     exec_txn_commit_time[i] += stats->exec_txn_commit_time[i];
+    exec_txn_index_lookup_time[i] += stats->exec_txn_index_lookup_time[i];
+    exec_txn_proc_time[i] += stats->exec_txn_proc_time[i];
   }
 
 
