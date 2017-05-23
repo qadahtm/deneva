@@ -196,6 +196,8 @@ RC PlannerThread::run() {
                 Array<exec_queue_entry> * expected = (Array<exec_queue_entry> *) 0;
                 while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
                         expected, exec_queues->get(i))){
+                    fprintf(stdout,"For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
+                    fflush(stdout);
                     DEBUG_Q("For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
                 }
 

@@ -7,8 +7,8 @@
 /***********************************************/
 #define NODE_CNT 1
 #define THREAD_CNT 4
-#define REM_THREAD_CNT 1//THREAD_CNT
-#define SEND_THREAD_CNT 1//THREAD_CNT
+#define REM_THREAD_CNT 2//THREAD_CNT
+#define SEND_THREAD_CNT 2//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
 #define PART_CNT 1//NODE_CNT
@@ -107,10 +107,8 @@
 /***********************************************/
 // Concurrency Control
 /***********************************************/
-// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT
-//#define CC_ALG NO_WAIT
-//#define CC_ALG QUECC
-#define CC_ALG DUMMY_CC
+// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -154,8 +152,8 @@
 #define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT
 #define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 512 // width of map is PLAN_THREAD_CNT
-#define BATCH_COMP_TIMEOUT 1 * 1 * MILLION // 5ms
+#define BATCH_MAP_LENGTH 1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 /***********************************************/
 // Logging

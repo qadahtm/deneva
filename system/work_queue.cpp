@@ -35,6 +35,8 @@ void QWorkQueue::init() {
   }
 
   // QUECC planners
+
+  rng = new boost::random::mt19937[g_rem_thread_cnt];
   plan_queue = new boost::lockfree::queue<work_queue_entry* > * [g_plan_thread_cnt];
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
     plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
@@ -66,9 +68,9 @@ void QWorkQueue::init() {
   DEBUG_Q("Initialized batch_map\n");
 }
 
-uint64_t QWorkQueue::get_random_planner_id() {
+uint64_t QWorkQueue::get_random_planner_id(uint64_t thd_id) {
   boost::random::uniform_int_distribution<> dist(0, max_planner_index);
-  return (uint64_t) dist(rng);
+  return (uint64_t) dist(rng[thd_id]);
 }
 
 void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
@@ -187,7 +189,7 @@ Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
 }
 
 void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
-    uint64_t planner_id = get_random_planner_id();
+    uint64_t planner_id = get_random_planner_id(thd_id);
     work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
     entry->msg = msg;
     entry->rtype = msg->rtype;

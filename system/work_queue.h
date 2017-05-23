@@ -83,7 +83,7 @@ public:
   void sequencer_enqueue(uint64_t thd_id, Message * msg);
   Message * sequencer_dequeue(uint64_t thd_id);
     // TQ: QUECC
-    uint64_t get_random_planner_id();
+    uint64_t get_random_planner_id(uint64_t thd_id);
     void plan_enqueue(uint64_t thd_id, Message * msg);
     Message * plan_dequeue(uint64_t thd_id, uint64_t planner_id);
 
@@ -126,7 +126,7 @@ private:
   BaseQuery * last_sched_dq;
   uint64_t curr_epoch;
 
-    boost::random::mt19937 rng;         // produces randomness out of thin air
+    boost::random::mt19937 * rng;         // produces randomness out of thin air
     uint32_t max_planner_index = g_plan_thread_cnt-1;
 };
 
