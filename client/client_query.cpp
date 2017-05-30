@@ -99,7 +99,12 @@ Client_query_queue::initQueriesParallel() {
     PPSQueryGenerator * gen = new PPSQueryGenerator;
 #endif
 #if SERVER_GENERATE_QUERIES
-  for ( UInt32 thread_id = 0; thread_id < g_thread_cnt; thread_id ++) {
+    UInt32 thd_cnt = g_thread_cnt;
+#if CC_ALG == QUECC
+    DEBUG_WL("QueCC server-side generation ...\n")
+    thd_cnt = g_plan_thread_cnt;
+#endif
+  for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
     for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
       queries[thread_id][query_id] = gen->create_query(_wl,g_node_id);
     }

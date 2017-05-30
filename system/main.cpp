@@ -215,6 +215,11 @@ int main(int argc, char* argv[])
     all_thd_cnt += g_plan_thread_cnt;
     all_thd_cnt -= 1; // to remove abort thread for QueCC but there is a logger
 #endif
+
+#if CC_ALG == DUMMY_CC
+    all_thd_cnt -= 1; // remove abort thread
+#endif
+
     DEBUG_Q("all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n", all_thd_cnt, g_this_total_thread_cnt);
     assert(all_thd_cnt == g_this_total_thread_cnt);
 	
@@ -325,8 +330,8 @@ int main(int argc, char* argv[])
     pthread_setname_np(p_thds[id-1], "s_logger");
 #endif
 
-#if CC_ALG != CALVIN && CC_ALG != QUECC
-    #if SET_AFFINITY
+#if CC_ALG != CALVIN && CC_ALG != QUECC && CC_ALG != DUMMY_CC
+#if SET_AFFINITY
       CPU_ZERO(&cpus);
       CPU_SET(cpu_cnt, &cpus);
       pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);

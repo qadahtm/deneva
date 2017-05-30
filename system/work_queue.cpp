@@ -206,14 +206,27 @@ void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
 Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
   assert(ISSERVER);
   Message * msg = NULL;
-  work_queue_entry * entry = NULL;
+
   uint64_t prof_starttime = 0;
 //    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, planner_id);
-
   prof_starttime = get_sys_clock();
-  bool valid = plan_queue[planner_id]->pop(entry);
-  INC_STATS(thd_id, plan_queue_deq_pop_time[planner_id], get_sys_clock()-prof_starttime);
-  if(valid) {
+#if SERVER_GENERATE_QUERIES
+  if(ISSERVER) {
+    BaseQuery * m_query = NULL;
+#if CC_ALG == QUECC
+    m_query = client_query_queue.get_next_query(planner_id,thd_id);
+#else
+    m_query = client_query_queue.get_next_query(thd_id,thd_id);
+#endif
+    if(m_query) {
+      assert(m_query);
+      msg = Message::create_message((BaseQuery*)m_query,CL_QRY);
+    }
+  }
+#else
+    work_queue_entry * entry = NULL;
+    bool valid = plan_queue[planner_id]->pop(entry);
+    if(valid) {
     msg = entry->msg;
     assert(msg);
 //    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
@@ -223,9 +236,9 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
     mem_allocator.free(entry,sizeof(work_queue_entry));
     INC_STATS(thd_id, plan_queue_deq_free_mem_time[planner_id], get_sys_clock()-prof_starttime);
   }
-//    else {
-//      DEBUG_Q("Invalid message Dequeued\n");
-//  }
+#endif
+
+  INC_STATS(thd_id, plan_queue_deq_pop_time[planner_id], get_sys_clock()-prof_starttime);
 
   return msg;
 

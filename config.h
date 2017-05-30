@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 4
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 2//THREAD_CNT
 #define SEND_THREAD_CNT 2//THREAD_CNT
 #define CORE_CNT 20
@@ -54,7 +54,7 @@
 // Max allowed number of transactions
 #define MAX_TXN_IN_FLIGHT 1000000 * 1
 
-#define SERVER_GENERATE_QUERIES false
+#define SERVER_GENERATE_QUERIES true
 
 
 
@@ -108,7 +108,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-#define CC_ALG QUECC
+#define CC_ALG DUMMY_CC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 

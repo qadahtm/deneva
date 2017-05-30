@@ -193,6 +193,10 @@ void parser(int argc, char * argv[]) {
     g_total_thread_cnt += g_plan_thread_cnt; // planner threads
     g_total_thread_cnt -= 1; // remove abort thread
 #endif
+
+#if CC_ALG == DUMMY_CC
+    g_total_thread_cnt -= 1; // remove abort thread
+#endif
   g_total_client_thread_cnt = g_client_thread_cnt + g_client_rem_thread_cnt + g_client_send_thread_cnt;
   g_total_node_cnt = g_node_cnt + g_client_node_cnt + g_repl_cnt*g_node_cnt;
   if(ISCLIENT) {

@@ -409,6 +409,8 @@ RC WorkerThread::run() {
 
         // this does nothing on receiving a client query, just respond with commit
         if (msg->rtype == CL_QRY){
+
+#if !SERVER_GENERATE_QUERIES
             Message * rsp_msg = Message::create_message(CL_RSP);
             rsp_msg->txn_id = 0;
             rsp_msg->batch_id = 0; // using batch_id from local, we can also use the one in the context
@@ -422,8 +424,14 @@ RC WorkerThread::run() {
             rsp_msg->lat_other_time = 0;
 
             msg_queue.enqueue(get_thd_id(), rsp_msg, ((ClientQueryMessage *)msg)->return_node_id);
+#endif
             INC_STATS(get_thd_id(), txn_cnt, 1);
             msg->release();
+            // explicitly release message
+            // TQ: this does not seem to be called within releasing the message
+            // which may be resulting in a memory leak
+            // TODO(tq): verify that there is no memory leak
+            Message::release_message(msg);
         }
 #else
         Message * msg = work_queue.dequeue(get_thd_id());
