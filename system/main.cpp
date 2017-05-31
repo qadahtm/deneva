@@ -220,6 +220,10 @@ int main(int argc, char* argv[])
     all_thd_cnt -= 1; // remove abort thread
 #endif
 
+#if SERVER_GENERATE_QUERIES
+    all_thd_cnt -= (rthd_cnt + sthd_cnt);
+#endif
+
     DEBUG_Q("all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n", all_thd_cnt, g_this_total_thread_cnt);
     assert(all_thd_cnt == g_this_total_thread_cnt);
 	
@@ -292,6 +296,8 @@ int main(int argc, char* argv[])
       pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
       pthread_setname_np(p_thds[id-1], "s_worker");
 	}
+
+#if !SERVER_GENERATE_QUERIES
 	for (uint64_t j = 0; j < rthd_cnt ; j++) {
 #if SET_AFFINITY
       CPU_ZERO(&cpus);
@@ -318,6 +324,8 @@ int main(int argc, char* argv[])
 	    pthread_create(&p_thds[id++], &attr, run_thread, (void *)&output_thds[j]);
         pthread_setname_np(p_thds[id-1], "s_sender");
 	  }
+#endif
+
 #if LOGGING
     #if SET_AFFINITY
       CPU_ZERO(&cpus);
@@ -386,6 +394,11 @@ int main(int argc, char* argv[])
 
 #endif
 
+#if SERVER_GENERATE_QUERIES
+    //TQ: start simulation, there is no need to wait anymore
+//    simulation->process_setup_msg();
+    simulation->set_setup_done();
+#endif
 
 	for (uint64_t i = 0; i < all_thd_cnt ; i++) 
 		pthread_join(p_thds[i], NULL);

@@ -43,6 +43,7 @@ void InputThread::setup() {
             if (msg->rtype == INIT_DONE) {
                 printf("Received INIT_DONE from node %ld\n", msg->return_node_id);
                 fflush(stdout);
+                // TQ: simulation starts at the server at the receiver/input thread.
                 simulation->process_setup_msg();
             } else {
                 assert(ISSERVER || ISREPLICA);
