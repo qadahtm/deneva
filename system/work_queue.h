@@ -90,7 +90,8 @@ public:
     // QueCC batch slot map
 //    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
 // Layout of the batch map is imporatant to avoid potential tharshing
-    volatile atomic<Array<exec_queue_entry> *> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+//    volatile atomic<Array<exec_queue_entry> *> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+    volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
 
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it

@@ -6,9 +6,9 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
-#define REM_THREAD_CNT 2//THREAD_CNT
-#define SEND_THREAD_CNT 2//THREAD_CNT
+#define THREAD_CNT 8
+#define REM_THREAD_CNT 1//THREAD_CNT
+#define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
 #define PART_CNT 1//NODE_CNT
@@ -53,7 +53,9 @@
 #define FIN_BY_TIME true
 // Max allowed number of transactions
 #define MAX_TXN_IN_FLIGHT 1000000 * 1
-
+// TQ: this allows servers to generate transactions and avoid client-server communication overhead
+// However, it have only been tested with a single server node.
+// Also, there is no need to run client processes when this flag is enabled
 #define SERVER_GENERATE_QUERIES true
 
 
@@ -108,7 +110,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-#define CC_ALG DUMMY_CC
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -176,7 +178,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART 8000000
+#define MAX_TXN_PER_PART    1 * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false

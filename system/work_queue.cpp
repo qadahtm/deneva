@@ -47,7 +47,8 @@ void QWorkQueue::init() {
     for (uint64_t j=0; j < g_thread_cnt; j++){
       for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
 //                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
-        (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
+//        (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
+        (batch_map[i][j][k]).store(0);
       }
     }
   }

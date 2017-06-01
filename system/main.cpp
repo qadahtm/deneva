@@ -376,7 +376,6 @@ int main(int argc, char* argv[])
     // creating threads for QUECC
 #if CC_ALG == QUECC
     DEBUG_Q("Initilizing Quecc threads\n");
-//    all_thd_cnt = all_thd_cnt -1; // remove abort thread
     for (uint64_t j = 0; j < g_plan_thread_cnt; j++) {
 #if SET_AFFINITY
       CPU_ZERO(&cpus);

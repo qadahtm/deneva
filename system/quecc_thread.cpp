@@ -193,14 +193,32 @@ RC PlannerThread::run() {
                 uint64_t slot_num = (batch_id % g_batch_map_length);
 //                while (!ATOM_CAS(work_queue.batch_map[_planner_id][i][slot_num], 0, exec_queues->get(i))) {}
 //                DEBUG_Q("Batch %ld is ready! setting map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
-                Array<exec_queue_entry> * expected = (Array<exec_queue_entry> *) 0;
-                while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
-                        expected, exec_queues->get(i))){
-                    fprintf(stdout,"For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
-                    fflush(stdout);
-                    DEBUG_Q("For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
+//                Array<exec_queue_entry> * expected = (Array<exec_queue_entry> *) 0;
+                uint64_t expected = 0;
+                Array<exec_queue_entry> * exec_q = exec_queues->get(i);
+                uint64_t desired = (uint64_t) exec_q;
+
+                //TODO(tq): make sure we need these memory fences
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0 && !simulation->is_done()) {
+                    if(idle_starttime == 0){
+                        idle_starttime = get_sys_clock();
+                    }
+                    DEBUG_Q("SPIN!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
                 }
 
+                // include idle time from spinning above
+                if (idle_starttime != 0){
+                    INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+                    idle_starttime = 0;
+                }
+                while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
+                        expected, desired)){
+                    fprintf(stdout,"For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
+                    fflush(stdout);
+                    DEBUG_Q("For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
+                }
+                std::atomic_thread_fence(std::memory_order_seq_cst);
 //                atomic_thread_fence(std::memory_order_release);
                 DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
             }
@@ -311,7 +329,9 @@ RC PlannerThread::run() {
 //                    entry->req_id = j;
 //                    entry->planner_id = _planner_id;
                     entry->batch_id = batch_id;
+#if !SERVER_GENERATE_QUERIES
                     assert(msg->return_node_id != g_node_id);
+#endif
                     entry->return_node_id = msg->return_node_id;
 
                     // for now, assume only one request per entry

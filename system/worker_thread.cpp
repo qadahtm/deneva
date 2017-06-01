@@ -217,13 +217,25 @@ RC WorkerThread::run() {
         // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
         // we should spin here if pointer is not set
-        exec_q = work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        exec_q = (Array<exec_queue_entry> *) work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
+        std::atomic_thread_fence(std::memory_order_seq_cst);
 
         if (((uint64_t) exec_q) == 0){
             if (idle_starttime == 0){
                 idle_starttime = get_sys_clock();
             }
             continue;
+        }
+
+        // reset batch_map_slot to zero before processing it
+        // reset map slot to 0
+//        Array<exec_queue_entry> * desired = (Array<exec_queue_entry> *) 0;
+        uint64_t desired = 0;
+        uint64_t expected = (uint64_t) exec_q;
+        while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
+                expected, desired)){
+            DEBUG_Q("failing to RESET map slot \n");
         }
 
 //      DEBUG_Q("Pointer for map slot [%d][%ld][%ld] is %ld, going to spin if 0\n", 0, _thd_id, wbatch_id, exec_q_ptr);
@@ -248,8 +260,10 @@ RC WorkerThread::run() {
                 exec_queue_entry exec_qe = exec_q->get(i);
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
                 if (exec_qe.batch_id != wbatch_id) {
-                    DEBUG_Q("Processing batch part map slot [%ld][%ld][%ld], wbatch_id=%ld, ebatch_id = %ld\n",
-                            batch_slot,_thd_id, wplanner_id, wbatch_id, exec_qe.batch_id);
+                    fprintf(stdout, "Assertion will fail when processing batch part map slot [%ld][%ld][%ld],"
+                                    " wbatch_id=%ld, ebatch_id = %ld, at exec_q_entry[%ld]\n",
+                            batch_slot,_thd_id, wplanner_id, wbatch_id, exec_qe.batch_id, i);
+                    fflush(stdout);
                 }
                 assert(exec_qe.batch_id == wbatch_id);
 
@@ -324,8 +338,8 @@ RC WorkerThread::run() {
 //TODO(tq): collect stats
                     // Committing
                     // Sending response to client a
-//#if !SERVER_GENERATE_QUERIES
                     quecc_prof_time = get_sys_clock();
+#if !SERVER_GENERATE_QUERIES
                     Message * rsp_msg = Message::create_message(CL_RSP);
                     rsp_msg->txn_id = exec_qe.txn_id;
                     rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
@@ -340,6 +354,7 @@ RC WorkerThread::run() {
                     rsp_msg->lat_other_time = 0;
 
                     msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
+#endif
                     INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
 #if QUECC_DEBUG
                     work_queue.inflight_msg.fetch_sub(1);
@@ -353,7 +368,6 @@ RC WorkerThread::run() {
                     mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
 //                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
                     INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
-//#endif
                     // we always commit
                     INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
                     //TODO(tq): how to handle logic-induced aborts
@@ -367,12 +381,7 @@ RC WorkerThread::run() {
 //            exec_q->release();
             while(!work_queue.exec_queue_free_list[_thd_id]->push(exec_q)) {};
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
-            // reset map slot to 0
-            Array<exec_queue_entry> * desired = (Array<exec_queue_entry> *) 0;
-            while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
-                    exec_q, desired)){
-                DEBUG_Q("failing to RESET map slot \n");
-            }
+
             // go to the next batch partition prepared by the next planner
             wplanner_id++;
             if (wplanner_id == g_plan_thread_cnt) {
