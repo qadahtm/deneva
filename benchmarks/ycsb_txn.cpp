@@ -250,6 +250,7 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
 #endif
 
     } else {
+        //TODO(tq): remove on clean up
         if (acctype != WR){
             DEBUG_Q("Access type must be %d == %d\n", WR, acctype);
         }

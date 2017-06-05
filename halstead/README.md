@@ -20,7 +20,7 @@ for 2 hours. The request will go to the `standby` queue which is shared among al
 cluster users.
 
 
-## Building Deneva
+# Building Deneva
 Note: you will need to request a node for building the code as it seems agains the user 
 policy of Halstead to run intensive tasks on the front-end.
 
@@ -37,22 +37,101 @@ On Halstead this can be loaded using:
 You also need to create an obj directory. Perhaps we can modify the Makefile to do this for us implicitly.
 
 
-### Building dependencies
-Dependencies are included in the `deps` directory of the repo.  
-#### Boost
-TBD
-#### nanomsg
-TBD
+## Get started with Deneva/QueCC
+
+To get started, you need to get the code from the private repo. 
+
+### Setup credentials with github
+The best way to do this is to use SSH. You can follow this link to set that up. [SSH with Github](https://help.github.com/articles/connecting-to-github-with-ssh/)
+
+### Cloning repo
+Subtitute your user name below without the square brackets. 
+```bash
+$ git clone https://[username]@github.com/msadoghi/DBx1000-Distributed && cd DBx1000-Distributed; git checkout quecc
+```
+
+Verify that you in the `quecc` branch by running
+
+```bash
+$ git branch
+```
+
+You should get an output like this:
+```bash
+  master
+* quecc
+```
+
+## Building dependencies
+The sources for dependencies are included in the `deps` directory of the repo. All you need to do is to uncompress the the files and build from source. You only need to build nanomsg and jemalloc. For boost, we are using the headers only, so there is not need to build it. Before we continue, create a dependency directory outside the current working directory. We do this to avoid track any files from the dependencies by accedentilly adding it into the repo. Assuming that you are in the directory of the repo, we will create the actual dependenies directory outside the repo using the following command:
+```bash
+$ mkdir ../deps
+```
+
+### GCC and build tools
+If you are on a clean linux machine (e.g. an new EC2 instance), make sure that all build tools are installed before proceeding.
+```bash
+$ sudo apt-get install build-essential git vim cmake
+```
+
+### boost
+We are using only the header files fro boost, so we only need to uncompress the boost dependency file into the dependency folder. Here is the command to do it:
+```bash
+$ tar -xzf deps/boost_1_63_0.tar.gz -C ../
+```
+
+### nanomsg
+Extract source files
+```bash
+# Source files and Change directory
+$ tar -xzf deps/1.0.0.tar.gz -C ../; cd ../nanomsg-1.0.0/
+```
+
+You can refer to the `README` file on building instruction. The only things you need to do differently is to set the installtion directory and the generate a static library. 
+
+Here is a list of command that you can use:
+```bash
+$ mkdir build; cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=../../deps/nanomsg-1.0.0 -DNN_STATIC_LIB=ON -DNN_ENABLE_GETADDRINFO_A=OFF
+$ cmake --build .;ctest -C Debug .;cmake --build . --target install
+```
+
+**Note**: the Makefile is configured for 64-bit machines and hence it is using the library from `lib64`, on 32-bit machines you will need to modify the Makefile accordingly to use the `lib` directory instead. 
+
 ### jemalloc
+Starting from the root directory of the repo, extract source files for jemalloc using:
 
+```bash
+# Extract files 
+$ tar -xf deps/jemalloc-4.5.0.tar.bz2 -C ../; cd ../jemalloc-4.5.0/
+```
 
-## Running Deneva
-Refer to the README.md at the root directory. I will add details specific to halstead 
-here if any
+Similarly, you can refer to the `INSTALL` instruction to build jemalloc. Below are the commands that you can use, which should work with the current configuration. You need to subtitute the absolute directory path without square brackets. 
 
-For generating ifconfig.txt, we need to have IP addresses in them. Hostnames do not 
-work. Also, IP addresses for servers should be listed first and clients later. Working 
-on a python script that automatically generate this file for Halstead is in-progress.
+```bash
+$ ./configure --prefix=[absolute_dir_path]/deps/jemalloc-4.5.0 --with-jemalloc-prefix=je_
+$ make; make install
+```
+
+# Building Deneva
+After all the dependencies are installed correctly, you can build Deneva by running:
+```bash
+$ make -j
+```
+
+**Note**: you probably need to create an `obj` directory in the root directory of the deneva project. 
+
+# Running Deneva
+Refer to the README.md at the root directory. I will add details specific to halstead or AWS here if any
+
+For generating ifconfig.txt, we need to have IP addresses in them. Hostnames do not work. Also, IP addresses for servers should be listed first and clients later.Python scripts that automatically generate this file for Halstead is available in the `halstead` directory. First run `setupNodesIPs.sh` outside the project directory. It will generate a file containing hostnames of the reserved nodes. Then, run `setupDenevaScripts.py` also from outside the project directory. 
+
+*TODO*
+Here are the commands:
+```bash
+# Make sure that you are outside the project directory
+$ 
+```
 
 ### Server-side configuration
 The key config parameters are:

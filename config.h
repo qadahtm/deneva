@@ -194,7 +194,7 @@
 //#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 #define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.6//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5

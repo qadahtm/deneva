@@ -958,6 +958,7 @@ RC TxnManager::validate() {
 RC
 TxnManager::send_remote_reads() {
     assert(CC_ALG == CALVIN);
+    // we will send remote reads only in abort mode for YCSB
 #if !YCSB_ABORT_MODE && WORKLOAD == YCSB
     return RCOK;
 #endif
