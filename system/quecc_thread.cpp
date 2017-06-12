@@ -52,7 +52,7 @@ RC PlannerThread::run() {
     assert(UINT64_MAX > (txn_prefix_planner_base+txn_prefix_base));
 
     DEBUG_Q("Planner_%ld thread started, txn_ids start at %ld \n", _planner_id, txn_prefix_planner_base);
-    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+//    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
     // max capcity, assume YCSB workload
 //    uint64_t exec_queue_capacity = planner_batch_size*10;
     uint64_t exec_queue_capacity = 1024 * 32;
@@ -115,6 +115,9 @@ RC PlannerThread::run() {
     uint64_t plan_starttime = 0;
     bool force_batch_delivery = false;
     uint64_t idle_cnt = 0;
+
+
+
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
             plan_starttime = get_sys_clock();
@@ -168,9 +171,15 @@ RC PlannerThread::run() {
                 idle_starttime = 0;
             }
 //        }
+#if BATCHING_TYPE == SIZE_BASED
+        force_batch_delivery = (batch_cnt == BATCH_SIZE);
+#else
+    // Default to TIME_BASED
         force_batch_delivery = ((get_sys_clock() - batch_start_time) >= BATCH_COMP_TIMEOUT && batch_cnt > 0);
-        if (batch_cnt == planner_batch_size || force_batch_delivery){
-            if (force_batch_delivery) {
+#endif
+
+        if (force_batch_delivery){
+            if (BATCHING_TYPE == TIME_BASED) {
                 INC_STATS(_thd_id, plan_time_batch_cnts[_planner_id], 1)
                 force_batch_delivery = false;
             } else{
@@ -293,6 +302,7 @@ RC PlannerThread::run() {
                 tctx->completion_cnt.store(0);
                 tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
                 tctx->batch_id = batch_id;
+
 
                 // Analyze read-write set
                 /* We need to determine the ranges needed for each key

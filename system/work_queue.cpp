@@ -57,7 +57,8 @@ void QWorkQueue::init() {
   for ( uint64_t i = 0; i < g_thread_cnt; i++) {
     exec_queue_free_list[i] = new boost::lockfree::queue<Array<exec_queue_entry> *> (0);
   }
-
+  // completion queue
+  completion_queue = new boost::lockfree::queue<transaction_context *>(0);
 //  txn_ctx_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
 //  for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
 //    txn_ctx_free_list[i] = new boost::lockfree::queue<transaction_context *> (0);

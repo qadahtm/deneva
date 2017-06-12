@@ -233,7 +233,7 @@ num_trials = 3;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
 cc_algs = ['NO_WAIT', 'QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC' , 'MAAT' ]
 # cc_algs = ['NO_WAIT']
-wthreads = [1,2,4,8,16]
+wthreads = [1,2,4,8,16,32]
 # wthreads = [1,2]
 procs = []
 seq_no = 0
@@ -256,8 +256,8 @@ for ncc_alg in cc_algs:
             #Don't run other CCs with 1 thread 
             runexp = False
 
-        if wthd == 16 and ncc_alg == 'QUECC':
-            #Don't run QueCC with 16 threads 
+        if wthd == 32 and ncc_alg == 'QUECC':
+            #Don't run QueCC with 32 threads 
             runexp = False
         if runexp:       
             set_config(ncc_alg, wthd)

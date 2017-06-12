@@ -152,10 +152,17 @@
 #define SEQ_THREAD_CNT 4
 // [QUECC]
 #define PLAN_THREAD_CNT THREAD_CNT
-// This relates to MAX_TXN_IN_FLIGHT
-#define BATCH_SIZE MAX_TXN_IN_FLIGHT * 0.9
+// This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
+// For server-only deployment, this can be set to any number
+#define BATCH_SIZE 100 * 1000//MAX_TXN_IN_FLIGHT * 0.9
 #define BATCH_MAP_LENGTH 1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
+
+#define BATCHING_TYPE TIME_BASED
+#define TIME_BASED 1
+#define SIZE_BASED 2
+
+
 
 /***********************************************/
 // Logging
@@ -194,7 +201,7 @@
 //#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 #define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define ZIPF_THETA 0.6//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5

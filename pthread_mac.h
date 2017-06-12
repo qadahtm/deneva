@@ -25,6 +25,10 @@ typedef struct
 } pthread_barrier_t;
 
 
+int pthread_setname_np(pthread_t thd, const char * name){
+    return pthread_setname_np(name);
+}
+
 int pthread_barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t *attr, unsigned int count)
 {
     if(count == 0)

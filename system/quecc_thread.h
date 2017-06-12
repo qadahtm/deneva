@@ -27,6 +27,7 @@ struct transaction_context {
     boost::atomic<uint64_t> completion_cnt;
     uint64_t client_startts;
     uint64_t batch_id;
+    uint8_t txn_state;
 //    bool dep_vector[10][10];
 //    uint64_t keys[10];
 //    char vals[10000];
@@ -53,6 +54,11 @@ struct exec_queue_entry {
 //    char dep_vector[10];
     uint64_t return_node_id;
 #endif
+};
+
+struct batch_partition{
+    uint64_t planner_id;
+
 };
 
 class PlannerThread : public Thread {

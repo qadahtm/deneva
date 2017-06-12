@@ -267,6 +267,8 @@ RC WorkerThread::run() {
                 }
                 assert(exec_qe.batch_id == wbatch_id);
 
+                //TODO(tq): check if this transaction is already aborted
+
                 row_t *quecc_row;
 
                 //TQ: dirty code: using a char buffer to store ycsb_request
@@ -312,7 +314,6 @@ RC WorkerThread::run() {
                 // TQ: declare this operation as executed
                 // since we only have a single operation, we just increment by one
 //                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
-
                 assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
                 quecc_prof_time = get_sys_clock();
 //                uint64_t comp_cnt = ATOM_ADD_FETCH(exec_qe.txn_ctx->completion_cnt, 1);
@@ -335,7 +336,9 @@ RC WorkerThread::run() {
 
 //                    DEBUG_Q("thread_%ld: Committing with txn(%ld,%ld,%ld)\n", _thd_id, wbatch_id, exec_qe.txn_id,
 //                            exec_qe.req_id);
-//TODO(tq): collect stats
+
+                    // We are ready to commit, now we need to check if we need to abort.
+
                     // Committing
                     // Sending response to client a
                     quecc_prof_time = get_sys_clock();
