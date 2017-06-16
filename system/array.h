@@ -132,7 +132,8 @@ public:
   }
   inline T operator[](const uint64_t idx) {assert(idx < count); return items[idx];}
   uint64_t get_count() {return count;}
-  uint64_t size() {return count;}
+    //TQ: added const modifier to allow using boost::heap container
+  uint64_t size() const {return count;}
   bool is_full() { return count == capacity;}
   bool is_empty() { return count == 0;}
 private:

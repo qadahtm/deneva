@@ -58,7 +58,44 @@ struct exec_queue_entry {
 
 struct batch_partition{
     uint64_t planner_id;
+    uint64_t batch_id;
+    uint64_t sub_exec_qs_cnt;
+    bool single_q;
+    Array<exec_queue_entry> * exec_q;
+    Array<exec_queue_entry> ** exec_qs;
 
+};
+
+struct ArrayCompare
+{
+    bool operator()(const Array<exec_queue_entry> &a1, const Array<exec_queue_entry> &a2) const
+    {
+        return a1.size() < a2.size();
+    }
+};
+
+class SplitEntry {
+public:
+    Array<exec_queue_entry> * exec_q;
+    SplitEntry * children[2];
+    void printEntries(uint64_t i, uint64_t planner_id) const;
+    uint64_t range_start;
+    uint64_t range_end;
+    uint64_t range_size;
+};
+
+struct SplitEntryCompareSize{
+    bool operator()(const SplitEntry &e1, const SplitEntry &e2) const
+    {
+        return e1.exec_q->size() < e2.exec_q->size();
+    }
+};
+
+struct SplitEntryCompareStartRange{
+    bool operator()(const SplitEntry &e1, const SplitEntry &e2) const
+    {
+        return e1.range_start < e2.range_start;
+    }
 };
 
 class PlannerThread : public Thread {
@@ -67,6 +104,7 @@ public:
     void setup();
     uint64_t _planner_id;
     uint32_t get_bucket(uint64_t key);
+    uint32_t get_split(uint64_t key, uint32_t range_cnt, uint64_t range_start, uint64_t range_end);
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
     uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
@@ -74,6 +112,12 @@ public:
 #endif
 private:
     uint64_t last_batchtime;
+};
+
+class CommitThread : public Thread {
+public:
+    RC run();
+    void setup();
 };
 
 #endif //_QUECC_THREAD_H

@@ -158,11 +158,16 @@
 #define BATCH_MAP_LENGTH 1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define BATCHING_TYPE TIME_BASED
+// Controls the batching decition in the planning phase
+#define BATCHING_MODE SIZE_BASED
 #define TIME_BASED 1
 #define SIZE_BASED 2
 
+// Controls execution queue split behavior.
+#define EXECQ_CAP_FACTOR 1.1
 
+// used for building histogram for planning
+#define HIST_BUCKET_CNT 100
 
 /***********************************************/
 // Logging
@@ -185,7 +190,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    1 * MILLION
+#define MAX_TXN_PER_PART    0.1 * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -198,17 +203,17 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+#define ZIPF_THETA 0.6//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
 #define SCAN_PERC           0
 #define SCAN_LEN          20
 #define PART_PER_TXN PART_CNT
-#define PERC_MULTI_PART 1.0//MPR
+#define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
@@ -307,9 +312,9 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
-#define DEBUG_WLOAD true
+#define DEBUG_WLOAD false
 
 /***********************************************/
 // MODES
@@ -389,10 +394,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 60 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 30 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+#define DONE_TIMER 1 * 5 * BILLION // ~60 seconds
+#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false
