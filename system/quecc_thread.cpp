@@ -209,6 +209,8 @@ RC PlannerThread::run() {
                 batch_part->batch_id = batch_id;
                 batch_part->exec_q = exec_q;
                 batch_part->single_q = true;
+                batch_part->batch_part_status.store(0);
+                batch_part->exec_q_status.store(0);
 
                 // Check if we need to split
                 // 10 is the number of operations in each transaction, we are assuming YCSB here
@@ -303,10 +305,10 @@ RC PlannerThread::run() {
                         );
 
                         // Recucle execution queue
-                        if (split_rounds != 0){
+//                        if (split_rounds != 0){
                             // skip the root, for now
                             while(!work_queue.exec_queue_free_list[i]->push(top_entry->exec_q)) {};
-                        }
+//                        }
                         top_entry->exec_q = NULL;
 
                         if(pq.top().exec_q->size() <= exec_queue_limit){
@@ -343,10 +345,13 @@ RC PlannerThread::run() {
                     batch_part->sub_exec_qs_cnt = pq.size();
                     batch_part->exec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
                             sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
+                    batch_part->exec_qs_status = (atomic<uint64_t> *) mem_allocator.alloc(
+                            sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
 
                     for (uint64_t j = 0; j < batch_part->sub_exec_qs_cnt; j++){
                         batch_part->exec_qs[j] = pq.top().exec_q;
                         pq.pop();
+                        batch_part->exec_qs_status[j].store(AVAILABLE);
 //                        uint64_t tmp_pq_size = pq.size();
 //                        assert((tmp_pq_size-j-1) == (batch_part->sub_exec_qs_cnt-j-2));
                     }
@@ -382,11 +387,8 @@ RC PlannerThread::run() {
                 }
                 while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
                         expected, desired)){
-//                    fprintf(stdout,"For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
-//                    fflush(stdout);
                     // this should not happen after spinning
                     M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
-//                    DEBUG_Q("For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
                 }
                 std::atomic_thread_fence(std::memory_order_seq_cst);
 //                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
@@ -439,7 +441,7 @@ RC PlannerThread::run() {
                 prof_starttime = get_sys_clock();
                 transaction_context *tctx = NULL;
 //                if (!work_queue.txn_ctx_free_list[_planner_id]->pop(tctx)){
-                    tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+                tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
 //                }
                 INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;

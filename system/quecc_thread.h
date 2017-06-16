@@ -59,11 +59,19 @@ struct exec_queue_entry {
 struct batch_partition{
     uint64_t planner_id;
     uint64_t batch_id;
-    uint64_t sub_exec_qs_cnt;
+    atomic<uint64_t> batch_part_status;
+
+    // A small optimization in case there is only a single exec_q
+    // This optimization will avoid a cache miss
     bool single_q;
     Array<exec_queue_entry> * exec_q;
-    Array<exec_queue_entry> ** exec_qs;
+    atomic<uint64_t> exec_q_status;
 
+    // Info. related to having multiple exec. queues
+    uint64_t sub_exec_qs_cnt;
+    atomic<uint64_t> exec_qs_comp_cnt;
+    Array<exec_queue_entry> ** exec_qs;
+    atomic<uint64_t> * exec_qs_status;
 };
 
 struct ArrayCompare

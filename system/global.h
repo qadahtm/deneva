@@ -341,3 +341,11 @@ enum TsType {R_REQ = 0, W_REQ, P_REQ, XP_REQ};
 #endif // UINT64_MAX
 
 #endif
+
+/************************************************/
+// constants for QueCC
+/************************************************/
+
+#define AVAILABLE   0
+#define WORKING     1
+#define COMPLETED   2

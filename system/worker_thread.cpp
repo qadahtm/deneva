@@ -208,6 +208,8 @@ RC WorkerThread::run() {
     uint64_t batch_slot = 0;
     Array<exec_queue_entry> *exec_q = NULL;
     batch_partition * batch_part = NULL;
+    uint64_t desired = 0;
+    uint64_t expected = 0;
 #endif
     while (!simulation->is_done()) {
         txn_man = NULL;
@@ -217,14 +219,14 @@ RC WorkerThread::run() {
 #if CC_ALG == QUECC
         // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
-        // we should spin here if pointer is not set
-        std::atomic_thread_fence(std::memory_order_seq_cst);
 
+        // fences are used to ensure we have the latest update.
+        // However, this is a conservative step, we may not actually need it
+        // TODO(tq): remove if not needed
+        std::atomic_thread_fence(std::memory_order_seq_cst);
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
         std::atomic_thread_fence(std::memory_order_seq_cst);
 
-
-//        if (((uint64_t) exec_q) == 0){
         if (((uint64_t) batch_part) == 0){
             if (idle_starttime == 0){
                 idle_starttime = get_sys_clock();
@@ -232,8 +234,26 @@ RC WorkerThread::run() {
             continue;
         }
 
-        exec_q = batch_part->exec_q;
+        bool batch_partition_done = false;
+        uint64_t w_exec_q_index = 0;
+        while (!batch_partition_done){
 
+            //select an execution queue to work on.
+            if (batch_part->single_q){
+                exec_q = batch_part->exec_q;
+            }
+            else {
+                exec_q = batch_part->exec_qs[w_exec_q_index];
+                desired = WORKING;
+                expected = AVAILABLE;
+                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected, desired)){
+                    // we need to fail here because we should be the first one
+                    M_ASSERT_V(false, "ET_%ld : Could not reserve exec_q at %ld\n", _thd_id, w_exec_q_index);
+                }
+
+            }
+
+            // process exec_q
             quecc_batch_part_proc_starttime = get_sys_clock();
             if(idle_starttime > 0) {
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
@@ -245,16 +265,26 @@ RC WorkerThread::run() {
             }
 
 
-            DEBUG_Q("Pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,"
+            DEBUG_Q("ET_%ld: Got a pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,"
                             "batch partition exec_q size = %ld entries, single queue = %d, sub_queues_cnt = %ld"
                             "\n",
-                    batch_slot,_thd_id, wplanner_id, ((uint64_t) exec_q), wbatch_id,
+                    _thd_id, batch_slot,_thd_id, wplanner_id, ((uint64_t) exec_q), wbatch_id,
                     exec_q->size(), batch_part->single_q, batch_part->sub_exec_qs_cnt);
 
 //            DEBUG_Q("Processing batch partition from planner[%ld]\n", wplanner_id);
+            uint64_t qsize __attribute__ ((unused));
+            qsize = exec_q->size();
+
             for (uint64_t i = 0; i < exec_q->size(); ++i) {
                 exec_queue_entry exec_qe = exec_q->get(i);
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
+                M_ASSERT_V(exec_qe.txn_id == exec_qe.txn_ctx->txn_id,
+                           "ET_%ld : Executed QueCC txn fragment, wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
+                           _thd_id, wbatch_id, exec_qe.txn_ctx->batch_id, exec_qe.txn_id, exec_qe.txn_ctx->txn_id);
+                M_ASSERT_V(exec_qe.txn_ctx->batch_id == wbatch_id,
+                           "ET_%ld : Executed QueCC txn fragment, wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
+                           _thd_id, wbatch_id, exec_qe.txn_ctx->batch_id, exec_qe.txn_id, exec_qe.txn_ctx->txn_id);
+
                 if (exec_qe.batch_id != wbatch_id) {
                     fprintf(stdout, "Assertion will fail when processing batch part map slot [%ld][%ld][%ld],"
                                     " wbatch_id=%ld, ebatch_id = %ld, at exec_q_entry[%ld]\n",
@@ -307,9 +337,10 @@ RC WorkerThread::run() {
                 // TQ: declare this operation as executed
                 // since we only have a single operation, we just increment by one
 //                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
-                assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
+//                assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
+
                 quecc_prof_time = get_sys_clock();
-                uint64_t comp_cnt = exec_qe.txn_ctx->completion_cnt.fetch_add(1);
+                exec_qe.txn_ctx->completion_cnt.fetch_add(1);
                 INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
                 INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
 
@@ -317,10 +348,9 @@ RC WorkerThread::run() {
                 // this allows lower latency for transactions.
                 // Since there is no logging this is okay
                 // TODO(tq): consider committing as a batch with logging enabled
-                // TODO(tq): Hardcoding for 10 operations, use a paramter instead
                 // Execution thrad that will execute the last operation will commit
-//                if (comp_cnt == 10) {
-                if (comp_cnt == 9) {
+
+                if (exec_qe.txn_ctx->completion_cnt.load() == (REQ_PER_QUERY)) {
                     quecc_commit_starttime = get_sys_clock();
 //                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
@@ -351,16 +381,14 @@ RC WorkerThread::run() {
                     msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
 #endif
                     INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
-#if QUECC_DEBUG
-                    work_queue.inflight_msg.fetch_sub(1);
-#endif
                     INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
                     INC_STATS(get_thd_id(), txn_cnt, 1);
 
                     // Free memory
                     // Free txn context
                     quecc_mem_free_startts = get_sys_clock();
-                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
+                    // not freering ctx now MEM LEAK
+//                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
 //                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
                     INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
                     // we always commit
@@ -369,45 +397,70 @@ RC WorkerThread::run() {
                 }
 
             }
-//            DEBUG_Q("For batch %ld , batch partition processing complete with %ld entries processed at map slot [%ld][%ld][%ld] \n",
-//                    wbatch_id, exec_q->size(), batch_slot, _thd_id, wplanner_id);
             // recycle exec_q
             quecc_mem_free_startts = get_sys_clock();
+            exec_q->clear();
             while(!work_queue.exec_queue_free_list[_thd_id]->push(exec_q)) {};
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 
-            // reset batch_map_slot to zero after processing it
-            // reset map slot to 0 to allow planners to use the slot
-            uint64_t desired = 0;
-            uint64_t expected = (uint64_t) batch_part;
-            while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
-                    expected, desired)){
-                DEBUG_Q("failing to RESET map slot \n");
+            if (!batch_part->single_q){
+                // set the status of this processed EQ to complete
+                // TODO(tq): use pre-constants instead of literals
+                desired = COMPLETED;
+                expected = WORKING;
+
+                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected, desired)){
+                    // we need to fail here because we should be the only one who can do this
+                    M_ASSERT_V(false, "ET_%ld : Could not set exec_q at %ld to COMPLETED\n", _thd_id, w_exec_q_index);
+                }
+
+                // move the next exec_q withing same batch partition
+                w_exec_q_index++;
+
+                // check if we are done with all exec_qs within the same batch_partition
+                if (w_exec_q_index == batch_part->sub_exec_qs_cnt){
+                    batch_partition_done = true;
+                    DEBUG_Q("For batch %ld , batch partition processing complete at map slot [%ld][%ld][%ld] \n",
+                            wbatch_id, batch_slot, _thd_id, wplanner_id);
+
+                    // reset batch_map_slot to zero after processing it
+                    // reset map slot to 0 to allow planners to use the slot
+                    desired = 0;
+                    expected = (uint64_t) batch_part;
+                    while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
+                            expected, desired)){
+                        DEBUG_Q("failing to RESET map slot \n");
+                    }
+                }
             }
+            else{
+                batch_partition_done = true;
+            }
+        }
+
+        if (!batch_part->single_q){
             // free batch_partition
             //TODO(tq): recycle batch_partition memory blocks
-            mem_allocator.free(batch_part, sizeof(batch_partition));
+            mem_allocator.free(batch_part->exec_qs, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
+            mem_allocator.free(batch_part->exec_qs_status, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+        }
+        mem_allocator.free(batch_part, sizeof(batch_partition));
 
-            // go to the next batch partition prepared by the next planner
-            wplanner_id++;
-            if (wplanner_id == g_plan_thread_cnt) {
-                wbatch_id++;
-                batch_slot =  wbatch_id % g_batch_map_length;
-                wplanner_id = 0;
+
+        // go to the next batch partition prepared by the next planner
+        wplanner_id++;
+        if (wplanner_id == g_plan_thread_cnt) {
+            wbatch_id++;
+            batch_slot =  wbatch_id % g_batch_map_length;
+            wplanner_id = 0;
 //                DEBUG_Q("** Completed batch %ld, and moving to next batch %ld at [%ld][%ld][%ld] \n",
 //                        wbatch_id-1, wbatch_id, batch_slot, _thd_id, wplanner_id);
-                INC_STATS(_thd_id, exec_batch_cnt[_thd_id], 1);
-                INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock() - quecc_batch_proc_starttime);
-                quecc_batch_proc_starttime = 0;
-            }
-            INC_STATS(_thd_id, exec_batch_part_proc_time[_thd_id], get_sys_clock()-quecc_batch_part_proc_starttime);
-            INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
-//        }
-//        else{
-//            if (idle_starttime == 0){
-//                idle_starttime = get_sys_clock();
-//            }
-//        }
+            INC_STATS(_thd_id, exec_batch_cnt[_thd_id], 1);
+            INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock() - quecc_batch_proc_starttime);
+            quecc_batch_proc_starttime = 0;
+        }
+        INC_STATS(_thd_id, exec_batch_part_proc_time[_thd_id], get_sys_clock()-quecc_batch_part_proc_starttime);
+        INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
 
 #elif CC_ALG == DUMMY_CC
         Message * msg = work_queue.dequeue(get_thd_id());
