@@ -199,7 +199,7 @@ RC WorkerThread::run() {
 
 #if CC_ALG == QUECC
     uint64_t quecc_prof_time = 0;
-    uint64_t quecc_commit_starttime = 0;
+//    uint64_t quecc_commit_starttime = 0;
     uint64_t quecc_batch_proc_starttime = 0;
     uint64_t quecc_batch_part_proc_starttime = 0;
     uint64_t quecc_mem_free_startts = 0;
@@ -210,7 +210,12 @@ RC WorkerThread::run() {
     batch_partition * batch_part = NULL;
     uint64_t desired = 0;
     uint64_t expected = 0;
+    RC rc = RCOK;
 #endif
+    TxnManager * my_txn_man;
+    _wl->get_txn_man(my_txn_man);
+    my_txn_man->init(_thd_id, _wl);
+
     while (!simulation->is_done()) {
         txn_man = NULL;
         heartbeat();
@@ -295,54 +300,62 @@ RC WorkerThread::run() {
 
                 //TODO(tq): check if this transaction is already aborted
 
-                row_t *quecc_row;
 
-                //TQ: dirty code: using a char buffer to store ycsb_request
-                ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
+                // Use txnManager to execute transaction frament
+                rc = my_txn_man->run_quecc_txn(&exec_qe);
 
-                quecc_prof_time = get_sys_clock();
-                // get pointer to record in row
-                YCSBWorkload *my_wl = (YCSBWorkload *) this->_wl;
-                int part_id = my_wl->key_to_part(req->key);
-
-                itemid_t *item;
-                INDEX *index = my_wl->the_index;
-                index->index_read(req->key, item, part_id, _thd_id);
-
-                INC_STATS(_thd_id, exec_txn_index_lookup_time[_thd_id], get_sys_clock()-quecc_prof_time);
-
-                quecc_prof_time = get_sys_clock();
-                // just access row, no need to go through lock manager path
-                quecc_row = ((row_t *) item->location);
-
-                // perfrom access
-                if (req->acctype == RD || req->acctype == SCAN) {
-                    int fid = 0;
-                    char *data = quecc_row->get_data();
-                    //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is not used
-                    uint64_t fval __attribute__ ((unused));
-                    // TQ: perform the actual read by
-                    // However this only reads 8 bytes of the data
-                    fval = *(uint64_t *) (&data[fid * 100]);
-
-                } else {
-                    assert(req->acctype == WR);
-                    int fid = 0;
-                    char *data = quecc_row->get_data();
-                    //TQ: here the we are zeroing the first 8 bytes
-                    // 100 below is the number of bytes for each field
-                    *(uint64_t *) (&data[fid * 100]) = 0;
-                }
-                INC_STATS(_thd_id, exec_txn_proc_time[_thd_id], get_sys_clock()-quecc_prof_time);
+//                row_t *quecc_row;
+//
+//                //TQ: dirty code: using a char buffer to store ycsb_request
+//                ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
+//
+//                quecc_prof_time = get_sys_clock();
+//                // get pointer to record in row
+//                YCSBWorkload *my_wl = (YCSBWorkload *) this->_wl;
+//                int part_id = my_wl->key_to_part(req->key);
+//
+//                itemid_t *item;
+//                INDEX *index = my_wl->the_index;
+//                index->index_read(req->key, item, part_id, _thd_id);
+//
+//                INC_STATS(_thd_id, exec_txn_index_lookup_time[_thd_id], get_sys_clock()-quecc_prof_time);
+//
+//                quecc_prof_time = get_sys_clock();
+//                // just access row, no need to go through lock manager path
+//                quecc_row = ((row_t *) item->location);
+//
+//                // perfrom access
+//                if (req->acctype == RD || req->acctype == SCAN) {
+//                    int fid = 0;
+//                    char *data = quecc_row->get_data();
+//                    //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is not used
+//                    uint64_t fval __attribute__ ((unused));
+//                    // TQ: perform the actual read by
+//                    // However this only reads 8 bytes of the data
+//                    fval = *(uint64_t *) (&data[fid * 100]);
+//
+//                } else {
+//                    assert(req->acctype == WR);
+//                    int fid = 0;
+//                    char *data = quecc_row->get_data();
+//                    //TQ: here the we are zeroing the first 8 bytes
+//                    // 100 below is the number of bytes for each field
+//                    *(uint64_t *) (&data[fid * 100]) = 0;
+//                }
+//                INC_STATS(_thd_id, exec_txn_proc_time[_thd_id], get_sys_clock()-quecc_prof_time);
                 // TQ: declare this operation as executed
                 // since we only have a single operation, we just increment by one
 //                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
 //                assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
+                uint64_t comp_cnt;
+                if (rc == RCOK){
+                    quecc_prof_time = get_sys_clock();
+                    exec_qe.txn_ctx->completion_cnt.fetch_add(1);
+                    comp_cnt = exec_qe.txn_ctx->completion_cnt.load();
+                    INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
+                    INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
+                }
 
-                quecc_prof_time = get_sys_clock();
-                exec_qe.txn_ctx->completion_cnt.fetch_add(1);
-                INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
-                INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
 
                 // TQ: we are committing now, which is done one by one the threads only
                 // this allows lower latency for transactions.
@@ -350,8 +363,8 @@ RC WorkerThread::run() {
                 // TODO(tq): consider committing as a batch with logging enabled
                 // Execution thrad that will execute the last operation will commit
 
-                if (exec_qe.txn_ctx->completion_cnt.load() == (REQ_PER_QUERY)) {
-                    quecc_commit_starttime = get_sys_clock();
+                if (comp_cnt == (REQ_PER_QUERY)) {
+//                    quecc_commit_starttime = get_sys_clock();
 //                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
 //                          txn_man->return_id, exec_qe.return_node_id, g_node_id);
@@ -386,13 +399,14 @@ RC WorkerThread::run() {
 
                     // Free memory
                     // Free txn context
+//                    DEBUG_Q("ET_%ld : commtting txn_id = %ld with comp_cnt %ld\n", _thd_id, exec_qe.txn_ctx->txn_id, comp_cnt);
+
                     quecc_mem_free_startts = get_sys_clock();
-                    // not freering ctx now MEM LEAK
-//                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
+                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
 //                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
                     INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
                     // we always commit
-                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
+//                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
                     //TODO(tq): how to handle logic-induced aborts
                 }
 
@@ -446,7 +460,7 @@ RC WorkerThread::run() {
         }
         mem_allocator.free(batch_part, sizeof(batch_partition));
 
-
+        work_queue.batch_map_comp_cnts[batch_slot][wplanner_id].fetch_add(1);
         // go to the next batch partition prepared by the next planner
         wplanner_id++;
         if (wplanner_id == g_plan_thread_cnt) {
@@ -461,6 +475,13 @@ RC WorkerThread::run() {
         }
         INC_STATS(_thd_id, exec_batch_part_proc_time[_thd_id], get_sys_clock()-quecc_batch_part_proc_starttime);
         INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
+
+        // before going to the next planner, spin here if not all other partitions of the same planners have completed
+        uint64_t priority_group = wplanner_id-1;
+        while (work_queue.batch_map_comp_cnts[batch_slot][priority_group].load() != g_thread_cnt){
+            // spinn
+//            DEBUG_Q("ET_%ld : Spinning waiting for priority group %ld to be COMPLETED\n", _thd_id, priority_group);
+        }
 
 #elif CC_ALG == DUMMY_CC
         Message * msg = work_queue.dequeue(get_thd_id());

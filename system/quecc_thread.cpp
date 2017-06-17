@@ -25,8 +25,6 @@
 #include "quecc_thread.h"
 #include <boost/heap/priority_queue.hpp>
 
-void PlannerThread::setup() {
-}
 
 void SplitEntry::printEntries(uint64_t i, uint64_t planner_id) const{
 //    if (children[0] != NULL){
@@ -38,6 +36,24 @@ void SplitEntry::printEntries(uint64_t i, uint64_t planner_id) const{
 //    else {
     DEBUG_Q("Planner_%ld: mrange = %ld, exec_q size = %ld, from %ld to %ld\n", planner_id, i, exec_q->size(), range_start, range_end);
 //    }
+}
+void CommitThread::setup() {
+}
+
+RC CommitThread::run() {
+    tsetup();
+
+    while(!simulation->is_done()) {
+        //
+    }
+
+    printf("FINISH %ld:%ld\n",_node_id,_thd_id);
+    fflush(stdout);
+    return FINISH;
+
+}
+
+void PlannerThread::setup() {
 }
 
 uint32_t PlannerThread::get_bucket(uint64_t key) {

@@ -41,17 +41,22 @@ void QWorkQueue::init() {
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
     plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
-  //TODO(tq): change this to pure array and be cache-aware
-
+  //TODO(tq): is this cache-aware?
   for (uint64_t i=0; i < g_batch_map_length ; i++){
     for (uint64_t j=0; j < g_thread_cnt; j++){
       for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
-//                batch_map[i][j][k] = (Array<exec_queue_entry> *) 0;
-//        (batch_map[i][j][k]).store((Array<exec_queue_entry> *) 0);
         (batch_map[i][j][k]).store(0);
       }
     }
   }
+
+  //TODO(tq): is this cache-aware?
+  for (uint64_t i=0; i < g_batch_map_length ; i++){
+    for (uint64_t j=0; j < g_plan_thread_cnt; j++){
+      (batch_map_comp_cnts[i][j]).store(0);
+    }
+  }
+
   // QueCC execution queue free list
   exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [g_thread_cnt];
   for ( uint64_t i = 0; i < g_thread_cnt; i++) {

@@ -620,7 +620,7 @@ Workload *TxnManager::get_wl() {
     return h_wl;
 }
 
-uint64_t TxnManager::get_thd_id() {
+inline uint64_t TxnManager::get_thd_id() {
     if (h_thd)
         return h_thd->get_thd_id();
     else

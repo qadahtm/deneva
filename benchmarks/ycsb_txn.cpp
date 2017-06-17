@@ -212,7 +212,7 @@ RC YCSBTxnManager::run_txn_state() {
  * @param row_local
  * @return
  */
-RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
+inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     RC rc = RCOK;
     int part_id = _wl->key_to_part(req->key);
 #if CC_ALG != QUECC
@@ -222,7 +222,6 @@ RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
 
     m_item = index_read(_wl->the_index, req->key, part_id);
 
-// not used anymore
 #if CC_ALG == QUECC
     // just access row, no need to go throught lock manager path
     row_local = ((row_t *) m_item->location);
@@ -235,7 +234,7 @@ RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
 
 }
 
-RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
+inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
     if (acctype == RD || acctype == SCAN) {
         int fid = 0;
         char *data = row_local->get_data();
@@ -244,7 +243,7 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
         // TQ: perform the actual read by
         // However this only reads 8 bytes of the data
         fval = *(uint64_t *) (&data[fid * 100]);
-#if ISOLATION_LEVEL == READ_COMMITTED || ISOLATION_LEVEL == READ_UNCOMMITTED
+#if CC_ALG != QUECC && (ISOLATION_LEVEL == READ_COMMITTED || ISOLATION_LEVEL == READ_UNCOMMITTED)
         // Release lock after read
         release_last_row_lock();
 #endif
@@ -265,7 +264,7 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
           return RCOK;
 #endif
 
-#if ISOLATION_LEVEL == READ_UNCOMMITTED
+#if CC_ALG != QUECC && ISOLATION_LEVEL == READ_UNCOMMITTED
         // Release lock after write
         release_last_row_lock();
 #endif
@@ -349,25 +348,29 @@ RC YCSBTxnManager::run_calvin_txn() {
     return rc;
 }
 
-RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
+inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
-    uint64_t starttime = get_sys_clock();
-
+//    uint64_t starttime = get_sys_clock();
+//    uint64_t quecc_prof_time = 0;
     //TQ: dirty code: using a char buffer to store ycsb_request
     ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
 
+//    quecc_prof_time = get_sys_clock();
     // get pointer to record in row
     rc = run_ycsb_0(req, row);
     assert(rc == RCOK);
+//    INC_STATS(get_thd_id(), exec_txn_index_lookup_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
 
+//    quecc_prof_time = get_sys_clock();
     // perfrom access
     rc = run_ycsb_1(req->acctype, row);
     assert(rc == RCOK);
+//    INC_STATS(get_thd_id(), exec_txn_proc_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
 
-    uint64_t curr_time = get_sys_clock();
-    txn_stats.process_time += curr_time - starttime;
-    txn_stats.process_time_short += curr_time - starttime;
-    txn_stats.wait_starttime = get_sys_clock();
+//    uint64_t curr_time = get_sys_clock();
+//    txn_stats.process_time += curr_time - starttime;
+//    txn_stats.process_time_short += curr_time - starttime;
+//    txn_stats.wait_starttime = get_sys_clock();
     return rc;
 }
 

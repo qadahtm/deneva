@@ -88,10 +88,14 @@ public:
     Message * plan_dequeue(uint64_t thd_id, uint64_t planner_id);
 
     // QueCC batch slot map
-//    Array<exec_queue_entry> * batch_map[PLAN_THREAD_CNT][THREAD_CNT][BATCH_MAP_LENGTH];
 // Layout of the batch map is imporatant to avoid potential tharshing
-//    volatile atomic<Array<exec_queue_entry> *> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
     volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+
+    // Use to synchronize between ETs so that a priority group will need to be completed before any transaction
+    // from the next one starts to process
+    // Each cell in this map is increamed atomically by an ET
+    // Each cell is reset by the commit thread.
+    volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
 
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it
