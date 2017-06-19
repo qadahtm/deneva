@@ -43,8 +43,102 @@ void CommitThread::setup() {
 RC CommitThread::run() {
     tsetup();
 
+//    uint64_t idle_starttime = 0;
+    uint64_t batch_slot = 0;
+    uint64_t batch_id = 0;
+    uint64_t cplanner_id = 0; // planner_id
+    transaction_context * txn_ctxs = NULL;
+    uint64_t tmp_p = 0;
+    priority_group * planner_pg = NULL;
+
+    uint64_t expected = 0;
+    uint64_t desired = 0;
+
     while(!simulation->is_done()) {
+        // wait for a priority group to complete
+        // start committing transactions in a priority group
         //
+//        heartbeat();
+        DEBUG_Q("CT_%ld : Going to spin waiting for priority group %ld to be COMPLETED , batch_id = %ld, batch_slot = %ld\n",
+                _thd_id, cplanner_id, batch_id, batch_slot);
+        while (work_queue.batch_map_comp_cnts[batch_slot][cplanner_id].load() != g_thread_cnt){}
+
+        DEBUG_Q("CT_%ld : Ready to process priority group %ld for batch_id = %ld, batch_slot = %ld\n",
+                _thd_id, cplanner_id, batch_id, batch_slot);
+
+        // get the pointer to the transaction contexts of the current priority group
+//        std::atomic_thread_fence(std::memory_order_seq_cst);
+        tmp_p = work_queue.batch_pg_map[batch_slot][cplanner_id].load();
+        M_ASSERT_V(tmp_p != 0, "CT_%ld : txn_ctxs is not inisitalized\n", _thd_id);
+//        std::atomic_thread_fence(std::memory_order_seq_cst);
+        planner_pg = ((priority_group *) tmp_p);
+
+        M_ASSERT_V(planner_pg->planner_id == cplanner_id, "CT_%ld : mismatch of planner id pg_plan_id(%ld) == cplan_id(%ld)\n",
+                   _thd_id, planner_pg->planner_id, cplanner_id);
+        M_ASSERT_V(planner_pg->batch_id == batch_id, "CT_%ld : mismatch of batch ids pg_batch_id(%ld) == local batch_id(%ld)\n",
+                   _thd_id, planner_pg->batch_id, batch_id);
+
+        txn_ctxs   = planner_pg->txn_ctxs;
+
+        //loop over all transactions in the priority group
+        for (uint64_t i = 0; i < planner_pg->batch_txn_cnt; i++){
+            // hardcod for YCSB workload for now
+            // TODO(tq): fix this to support other workloads
+            if (txn_ctxs[i].completion_cnt.load() == REQ_PER_QUERY){
+                    // We are ready to commit, now we need to check if we need to abort.
+                    // Committing
+                    // Sending response to client a
+#if !SERVER_GENERATE_QUERIES
+                    Message * rsp_msg = Message::create_message(CL_RSP);
+                    rsp_msg->txn_id = txn_ctxs[i].txn_id;
+                    rsp_msg->batch_id = batch_id; // using batch_id from local, we can also use the one in the context
+                    ((ClientResponseMessage *) rsp_msg)->client_startts = txn_ctxs[i].client_startts;
+                    rsp_msg->lat_work_queue_time = 0;
+                    rsp_msg->lat_msg_queue_time = 0;
+                    rsp_msg->lat_cc_block_time = 0;
+                    rsp_msg->lat_cc_time = 0;
+                    rsp_msg->lat_process_time = 0;
+                    rsp_msg->lat_network_time = 0;
+                    rsp_msg->lat_other_time = 0;
+
+                    msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[i].return_node_id);
+#endif
+                    INC_STATS(get_thd_id(), txn_cnt, 1);
+
+                    // we always commit here
+                    //TODO(tq): how to handle logic-induced aborts
+            }
+            else{
+
+                // abort case
+                //TODO(tq): handle abort case
+
+            }
+        }
+        expected = (uint64_t) planner_pg;
+        desired = 0;
+        DEBUG_Q("CT_%ld :going to reset pg(%ld) for batch_%ld at b_slot = %ld\n", cplanner_id, desired, batch_id, batch_slot);
+        while(!work_queue.batch_pg_map[batch_slot][cplanner_id].compare_exchange_strong(
+                expected, desired)){
+            // this should not happen after spinning
+            M_ASSERT_V(false, "CT_%ld : For batch %ld : failing to RESET batch_pg_map slot [%ld][%ld]\n",
+                       _thd_id, batch_id, batch_slot, cplanner_id);
+        }
+        DEBUG_Q("CT_%ld : Done processing priority group %ld for batch_id = %ld\n", _thd_id, cplanner_id, batch_id);
+
+
+        cplanner_id++;
+//        if (idle_starttime == 0){
+//            idle_starttime = get_sys_clock();
+//        }
+
+        if (cplanner_id == g_plan_thread_cnt){
+            // proceed to the next batch
+            batch_id++;
+            batch_slot = batch_id % g_batch_map_length;
+            // process the highest piority grop next
+            cplanner_id = 0;
+        }
     }
 
     printf("FINISH %ld:%ld\n",_node_id,_thd_id);
@@ -125,6 +219,12 @@ RC PlannerThread::run() {
         }
     }
 
+    // Pre-allocate planner's transaction contexts
+//    transaction_context * txn_ctxs = new transaction_context[planner_batch_size];
+    transaction_context * txn_ctxs = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context)*planner_batch_size);
+    priority_group * planner_pg = (priority_group *) mem_allocator.alloc(sizeof(priority_group));
+    planner_pg->planner_id = _planner_id;
+    planner_pg->txn_ctxs = txn_ctxs;
 
 #if DEBUG_QUECC
     Array<uint64_t> mrange_cnts;
@@ -138,13 +238,17 @@ RC PlannerThread::run() {
 #endif
     uint64_t batch_id = 0;
     uint64_t planner_txn_id = txn_prefix_planner_base;
+//    uint64_t batch_starting_txn_id = txn_prefix_planner_base;
     uint64_t batch_start_time = 0;
     uint64_t prof_starttime = 0;
     uint64_t txn_prof_starttime = 0;
     uint64_t plan_starttime = 0;
     bool force_batch_delivery = false;
     uint64_t idle_cnt = 0;
-
+//    transaction_context *tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+    uint64_t expected = 0;
+    uint64_t desired = 0;
+    uint64_t slot_num = 0;
 
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
@@ -193,12 +297,15 @@ RC PlannerThread::run() {
 #endif
 
         if (force_batch_delivery){
+            slot_num = (batch_id % g_batch_map_length);
+
             if (BATCHING_MODE == TIME_BASED) {
                 INC_STATS(_thd_id, plan_time_batch_cnts[_planner_id], 1)
                 force_batch_delivery = false;
             } else{
                 INC_STATS(_thd_id, plan_size_batch_cnts[_planner_id], 1)
             }
+
 //            DEBUG_Q("Batch complete\n")
             // a batch is ready to be delivered to the the execution threads.
             // we will have a batch queue for each of the planners and they are scanned in known order
@@ -213,11 +320,10 @@ RC PlannerThread::run() {
             for (uint64_t i = 0; i < g_thread_cnt; i++){
 //                DEBUG_Q("old value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, exe_q_ptr);
 //                DEBUG_Q("new value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, (uint64_t) exec_queues->get(i));
-                uint64_t slot_num = (batch_id % g_batch_map_length);
 
 //                DEBUG_Q("Batch %ld is ready! setting map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
 
-                uint64_t expected = 0;
+
                 Array<exec_queue_entry> * exec_q = exec_queues->get(i);
                 // use batch_partition
                 batch_partition * batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
@@ -384,9 +490,8 @@ RC PlannerThread::run() {
 //                    mem_allocator.free(min_range_cnts, sizeof(uint64_t)*2);
                 }
 
-
-//                uint64_t desired = (uint64_t) exec_q;
-                uint64_t desired = (uint64_t) batch_part;
+                expected = 0;
+                desired = (uint64_t) batch_part;
                 //TODO(tq): make sure we need these memory fences
                 std::atomic_thread_fence(std::memory_order_seq_cst);
                 while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0 && !simulation->is_done()) {
@@ -401,6 +506,8 @@ RC PlannerThread::run() {
                     INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
                     idle_starttime = 0;
                 }
+
+                // Deliver batch partition to the repective ET
                 while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
                         expected, desired)){
                     // this should not happen after spinning
@@ -409,6 +516,25 @@ RC PlannerThread::run() {
                 std::atomic_thread_fence(std::memory_order_seq_cst);
 //                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
             }
+
+            planner_pg->batch_txn_cnt = batch_cnt;
+            planner_pg->batch_id = batch_id;
+
+            // Set batch txn contexts in the batch_txn_map
+            expected = 0;
+            desired = (uint64_t) planner_pg;
+            DEBUG_Q("Planner_%ld :going to set pg(%ld) for batch_%ld at b_slot = %ld\n", _planner_id, desired, batch_id, slot_num);
+            while(!work_queue.batch_pg_map[slot_num][_planner_id].compare_exchange_strong(
+                    expected, desired)){
+                // this should not happen after spinning
+                M_ASSERT_V(false, "For batch %ld : failing to SET batch_pg_map slot [%ld][%ld]\n", batch_id, slot_num, _planner_id);
+            }
+
+            // TODO(tq): reuse from a free list instead of allocating new mem. block
+            txn_ctxs = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context)*planner_batch_size);
+            planner_pg = (priority_group *) mem_allocator.alloc(sizeof(priority_group));
+            planner_pg->planner_id = _planner_id;
+            planner_pg->txn_ctxs = txn_ctxs;
 
             // reset execution queues for the new batch
             prof_starttime = get_sys_clock();
@@ -435,6 +561,7 @@ RC PlannerThread::run() {
             batch_id++;
             batch_cnt = 0;
             batch_start_time = 0;
+//            batch_starting_txn_id = planner_txn_id;
             INC_STATS(_thd_id, plan_batch_delivery_time[_planner_id], get_sys_clock()-prof_starttime);
         }
 
@@ -454,14 +581,17 @@ RC PlannerThread::run() {
                 txn_prof_starttime = get_sys_clock();
                 // create transaction context
                 // TODO(tq): here also we are dynamically allocting memory, we should use a pool recycle
-                prof_starttime = get_sys_clock();
-                transaction_context *tctx = NULL;
+//                prof_starttime = get_sys_clock();
+
 //                if (!work_queue.txn_ctx_free_list[_planner_id]->pop(tctx)){
-                tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
+//                tctx = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context));
 //                }
-                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
+                // Reset tctx memblock for reuse
+//                memset(tctx, 0, sizeof(transaction_context));
+                transaction_context *tctx = &txn_ctxs[batch_cnt];
+
+//                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;
-//                tctx->completion_cnt = 0;
                 tctx->completion_cnt.store(0);
                 tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
                 tctx->batch_id = batch_id;
@@ -512,6 +642,8 @@ RC PlannerThread::run() {
                     // entry is a sturct, need to double check if this works
                     mrange->add(*entry);
                     prof_starttime = get_sys_clock();
+
+                    // TODO(tq): optimize this by reusing a single memory block
                     mem_allocator.free(entry, sizeof(exec_queue_entry));
                     INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 }

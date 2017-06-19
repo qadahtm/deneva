@@ -74,6 +74,14 @@ struct batch_partition{
     atomic<uint64_t> * exec_qs_status;
 };
 
+
+struct priority_group{
+    uint64_t planner_id;
+    uint64_t batch_id;
+    uint64_t batch_txn_cnt;
+    transaction_context * txn_ctxs;
+};
+
 struct ArrayCompare
 {
     bool operator()(const Array<exec_queue_entry> &a1, const Array<exec_queue_entry> &a2) const

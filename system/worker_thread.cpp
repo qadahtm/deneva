@@ -376,35 +376,36 @@ RC WorkerThread::run() {
 
                     // Committing
                     // Sending response to client a
-                    quecc_prof_time = get_sys_clock();
-#if !SERVER_GENERATE_QUERIES
-                    Message * rsp_msg = Message::create_message(CL_RSP);
-                    rsp_msg->txn_id = exec_qe.txn_id;
-                    rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
-                    ((ClientResponseMessage *) rsp_msg)->client_startts = exec_qe.txn_ctx->client_startts;
-//                    ((ClientResponseMessage *) rsp_msg)->batch_id = wbatch_id;
-                    rsp_msg->lat_work_queue_time = 0;
-                    rsp_msg->lat_msg_queue_time = 0;
-                    rsp_msg->lat_cc_block_time = 0;
-                    rsp_msg->lat_cc_time = 0;
-                    rsp_msg->lat_process_time = 0;
-                    rsp_msg->lat_network_time = 0;
-                    rsp_msg->lat_other_time = 0;
+//                    quecc_prof_time = get_sys_clock();
+//#if !SERVER_GENERATE_QUERIES
+//                    Message * rsp_msg = Message::create_message(CL_RSP);
+//                    rsp_msg->txn_id = exec_qe.txn_id;
+//                    rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
+//                    ((ClientResponseMessage *) rsp_msg)->client_startts = exec_qe.txn_ctx->client_startts;
+////                    ((ClientResponseMessage *) rsp_msg)->batch_id = wbatch_id;
+//                    rsp_msg->lat_work_queue_time = 0;
+//                    rsp_msg->lat_msg_queue_time = 0;
+//                    rsp_msg->lat_cc_block_time = 0;
+//                    rsp_msg->lat_cc_time = 0;
+//                    rsp_msg->lat_process_time = 0;
+//                    rsp_msg->lat_network_time = 0;
+//                    rsp_msg->lat_other_time = 0;
+//
+//                    msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
+//                    INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
+//#endif
 
-                    msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
-#endif
-                    INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
                     INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
-                    INC_STATS(get_thd_id(), txn_cnt, 1);
+//                    INC_STATS(get_thd_id(), txn_cnt, 1);
 
                     // Free memory
                     // Free txn context
 //                    DEBUG_Q("ET_%ld : commtting txn_id = %ld with comp_cnt %ld\n", _thd_id, exec_qe.txn_ctx->txn_id, comp_cnt);
 
-                    quecc_mem_free_startts = get_sys_clock();
-                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
+//                    quecc_mem_free_startts = get_sys_clock();
+//                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
 //                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
-                    INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
+//                    INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
                     // we always commit
 //                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
                     //TODO(tq): how to handle logic-induced aborts
@@ -477,11 +478,15 @@ RC WorkerThread::run() {
         INC_STATS(_thd_id, exec_batch_part_cnt[_thd_id], 1);
 
         // before going to the next planner, spin here if not all other partitions of the same planners have completed
+        // we actually need to wait untill the priority group has been fully committed.
+        // TODO(tq): instead of waiting for this to become equal to g_thread_cnt it should be wait until it is equal to zero
         uint64_t priority_group = wplanner_id-1;
         while (work_queue.batch_map_comp_cnts[batch_slot][priority_group].load() != g_thread_cnt){
             // spinn
 //            DEBUG_Q("ET_%ld : Spinning waiting for priority group %ld to be COMPLETED\n", _thd_id, priority_group);
         }
+        priority_group++;
+        DEBUG_Q("ET_%ld : Going to process the next priority group %ld\n", _thd_id, priority_group);
 
 #elif CC_ALG == DUMMY_CC
         Message * msg = work_queue.dequeue(get_thd_id());

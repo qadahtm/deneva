@@ -97,6 +97,9 @@ public:
     // Each cell is reset by the commit thread.
     volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
 
+    // A map for holding arrays of transaction contexts
+    volatile atomic<uint64_t> batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
+
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it
     boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
