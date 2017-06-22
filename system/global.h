@@ -346,6 +346,13 @@ enum TsType {R_REQ = 0, W_REQ, P_REQ, XP_REQ};
 // constants for QueCC
 /************************************************/
 
+// Batch partition state
 #define AVAILABLE   0
 #define WORKING     1
 #define COMPLETED   2
+
+// Transaction states
+#define TXN_INITIALIZED 0
+#define TXN_STARTED 1
+#define TXN_READY_TO_COMMIT 2
+#define TXN_READY_TO_ABORT 3

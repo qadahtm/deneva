@@ -154,8 +154,8 @@
 #define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
-#define BATCH_SIZE 100 * 1000//MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_SIZE 1 * 1000//MAX_TXN_IN_FLIGHT * 0.9
+#define BATCH_MAP_LENGTH 128//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 // Controls the batching decition in the planning phase
@@ -394,10 +394,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 5 * BILLION // ~60 seconds
-#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
+#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 5 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

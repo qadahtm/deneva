@@ -9,9 +9,13 @@
 #include "thread.h"
 #include "message.h"
 #include "array.h"
+//TQ: we will use standard lib version for now. We can use optimized implementation later
+#include <unordered_map>
+#include <vector>
 
 class Workload;
 
+typedef std::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
 /**
  * TODO(tq): makes this more dynamic in terms of the number of fields and support TPCC
  * We will hardcode YCSB for now
@@ -49,9 +53,7 @@ struct exec_queue_entry {
     // This is different from ycsb_request spects where value is only 1 byte
     // here value consist of 10 fields and each is 100 bytes
 //    char ycsb_req_val[1000];
-    // Used to capture dependencies among data items within a transaction
 //    uint64_t ycsb_req_index;
-//    char dep_vector[10];
     uint64_t return_node_id;
 #endif
 };
@@ -80,6 +82,8 @@ struct priority_group{
     uint64_t batch_id;
     uint64_t batch_txn_cnt;
     transaction_context * txn_ctxs;
+    hash_table_t * txn_dep_graph;
+    uint64_t batch_starting_txn_id;
 };
 
 struct ArrayCompare
@@ -128,6 +132,23 @@ public:
 #endif
 private:
     uint64_t last_batchtime;
+
+    uint64_t batch_id = 0;
+    uint64_t planner_txn_id = 0;
+//    uint64_t batch_starting_txn_id = txn_prefix_planner_base;
+    uint64_t batch_start_time = 0;
+    uint64_t prof_starttime = 0;
+    uint64_t txn_prof_starttime = 0;
+    uint64_t plan_starttime = 0;
+    bool force_batch_delivery = false;
+    uint64_t idle_cnt = 0;
+    uint64_t expected = 0;
+    uint64_t desired = 0;
+    uint64_t slot_num = 0;
+
+    hash_table_t access_table;
+    hash_table_t * txn_dep_graph;
+
 };
 
 class CommitThread : public Thread {

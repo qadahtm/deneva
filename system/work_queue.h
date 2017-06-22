@@ -103,6 +103,8 @@ public:
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it
     boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
+    boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
+
     boost::lockfree::queue<transaction_context *> * completion_queue;
 
 

@@ -65,10 +65,12 @@ void QWorkQueue::init() {
   }
   // completion queue
   completion_queue = new boost::lockfree::queue<transaction_context *>(0);
-//  txn_ctx_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
-//  for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
-//    txn_ctx_free_list[i] = new boost::lockfree::queue<transaction_context *> (0);
-//  }
+
+//  txn_ctxs_freelist = new boost::lockfree::queue<transaction_context *> ;
+  txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
+  for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+    txn_ctxs_free_list[i] = new boost::lockfree::queue<transaction_context *> (0);
+  }
 
 #if QUECC_DEBUG
   inflight_msg.store(0);
