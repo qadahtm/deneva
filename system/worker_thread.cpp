@@ -237,6 +237,9 @@ RC WorkerThread::run() {
             if (idle_starttime == 0){
                 idle_starttime = get_sys_clock();
             }
+//            DEBUG_Q("ET_%ld: Got nothing from planning layer, wbatch_id = %ld,"
+//                            "\n",
+//                    _thd_id,  wbatch_id);
             continue;
         }
 
@@ -260,7 +263,7 @@ RC WorkerThread::run() {
                     M_ASSERT_V(false, "ET_%ld : Could not reserve exec_q at %ld, status = %ld, wbatch_id = %ld, batch_id = %ld\n",
                                _thd_id, w_exec_q_index, batch_part->exec_qs_status[w_exec_q_index].load(), wbatch_id, batch_part->batch_id);
                 }
-                exec_q = batch_part->exec_qs[w_exec_q_index];
+                exec_q = batch_part->exec_qs->get(w_exec_q_index);
             }
 
             // process exec_q
@@ -301,53 +304,9 @@ RC WorkerThread::run() {
 
                 //TODO(tq): check if this transaction is already aborted
 
-
                 // Use txnManager to execute transaction frament
                 rc = my_txn_man->run_quecc_txn(&exec_qe);
 
-//                row_t *quecc_row;
-//
-//                //TQ: dirty code: using a char buffer to store ycsb_request
-//                ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
-//
-//                quecc_prof_time = get_sys_clock();
-//                // get pointer to record in row
-//                YCSBWorkload *my_wl = (YCSBWorkload *) this->_wl;
-//                int part_id = my_wl->key_to_part(req->key);
-//
-//                itemid_t *item;
-//                INDEX *index = my_wl->the_index;
-//                index->index_read(req->key, item, part_id, _thd_id);
-//
-//                INC_STATS(_thd_id, exec_txn_index_lookup_time[_thd_id], get_sys_clock()-quecc_prof_time);
-//
-//                quecc_prof_time = get_sys_clock();
-//                // just access row, no need to go through lock manager path
-//                quecc_row = ((row_t *) item->location);
-//
-//                // perfrom access
-//                if (req->acctype == RD || req->acctype == SCAN) {
-//                    int fid = 0;
-//                    char *data = quecc_row->get_data();
-//                    //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is not used
-//                    uint64_t fval __attribute__ ((unused));
-//                    // TQ: perform the actual read by
-//                    // However this only reads 8 bytes of the data
-//                    fval = *(uint64_t *) (&data[fid * 100]);
-//
-//                } else {
-//                    assert(req->acctype == WR);
-//                    int fid = 0;
-//                    char *data = quecc_row->get_data();
-//                    //TQ: here the we are zeroing the first 8 bytes
-//                    // 100 below is the number of bytes for each field
-//                    *(uint64_t *) (&data[fid * 100]) = 0;
-//                }
-//                INC_STATS(_thd_id, exec_txn_proc_time[_thd_id], get_sys_clock()-quecc_prof_time);
-                // TQ: declare this operation as executed
-                // since we only have a single operation, we just increment by one
-//                DEBUG_Q("Executed QueCC txn(%ld,%ld,%ld)\n", wbatch_id, exec_qe.txn_id, exec_qe.req_id);
-//                assert(exec_qe.txn_id == exec_qe.txn_ctx->txn_id);
                 uint64_t comp_cnt;
                 if (rc == RCOK){
                     quecc_prof_time = get_sys_clock();
@@ -419,7 +378,7 @@ RC WorkerThread::run() {
             // recycle exec_q
             quecc_mem_free_startts = get_sys_clock();
             exec_q->clear();
-            while(!work_queue.exec_queue_free_list[_thd_id]->push(exec_q)) {};
+            while(!work_queue.exec_queue_free_list[wplanner_id]->push(exec_q)) {};
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 
             if (!batch_part->single_q){
@@ -446,6 +405,12 @@ RC WorkerThread::run() {
             }
         }
 
+        if (!batch_partition_done){
+            // this can only happen at the end of the simulation
+            continue;
+        }
+
+
 //                    DEBUG_Q("For batch %ld , batch partition processing complete at map slot [%ld][%ld][%ld] \n",
 //                            wbatch_id, batch_slot, _thd_id, wplanner_id);
 
@@ -461,9 +426,15 @@ RC WorkerThread::run() {
         if (!batch_part->single_q){
             // free batch_partition
             //TODO(tq): recycle batch_partition memory blocks
-            mem_allocator.free(batch_part->exec_qs, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
-            mem_allocator.free(batch_part->exec_qs_status, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+//            mem_allocator.free(batch_part->exec_qs, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
+            batch_part->exec_qs->clear();
+            while(!work_queue.exec_qs_free_list[wplanner_id]->push(batch_part->exec_qs)){
+                M_ASSERT_V(false, "Should not happen");
+            };
+            // TODO(tq): recycle insted
+            mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
         }
+
         // free batch_part
         mem_allocator.free(batch_part, sizeof(batch_partition));
 
@@ -473,7 +444,7 @@ RC WorkerThread::run() {
         // we actually need to wait untill the priority group has been fully committed.
         // TODO(tq): instead of waiting for this to become equal to g_thread_cnt it should be wait until it is equal to zero
 //        uint64_t priority_group = wplanner_id-1;
-        while (work_queue.batch_map_comp_cnts[batch_slot][wplanner_id].load() != 0){
+        while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot][wplanner_id].load() != 0){
             // spin
 //            DEBUG_Q("ET_%ld : Spinning waiting for priority group %ld to be COMMITTED\n", _thd_id, wplanner_id);
         }
@@ -624,7 +595,7 @@ RC WorkerThread::run() {
     }
 #endif
 
-    printf("FINISH ET %ld:%ld\n", _node_id, _thd_id);
+    printf("FINISH WT %ld:%ld\n", _node_id, _thd_id);
     fflush(stdout);
     return FINISH;
 }

@@ -23,21 +23,71 @@
 #include "message.h"
 #include "work_queue.h"
 #include "quecc_thread.h"
-#include <boost/heap/priority_queue.hpp>
 //TQ: we will use standard lib version for now. We can use optimized implementation later
 #include <unordered_map>
 
-void SplitEntry::printEntries(uint64_t i, uint64_t planner_id) const{
-//    if (children[0] != NULL){
-//        children[0]->printEntries(i+1, planner_id);
-//    }
-//    else if (children[0] != NULL){
-//        children[1]->printEntries(i+2, planner_id);
-//    }
+void assign_entry_clear(assign_entry * &a_entry){
+    a_entry->exec_qs = NULL;
+    a_entry->exec_thd_id = 0;
+    a_entry->curr_sum = 0;
+}
+
+void assign_entry_release(assign_entry * &a_entry){
+    delete a_entry->exec_qs;
+    mem_allocator.free(a_entry, sizeof(assign_entry));
+}
+
+void assign_entry_add(assign_entry * a_entry, Array<exec_queue_entry> * exec_q) {
+    a_entry->curr_sum += exec_q->size();
+    a_entry->exec_qs->add(exec_q);
+}
+
+void assign_entry_init(assign_entry * &a_entry, uint64_t thd_id){
+    if (!a_entry->exec_qs){
+        if (!work_queue.exec_qs_free_list[thd_id]->pop(a_entry->exec_qs)){
+//            DEBUG_Q("Allocating a_entry->exec_qs\n");
+            a_entry->exec_qs = new Array<Array<exec_queue_entry> *>();
+            a_entry->exec_qs->init(32);
+        }
+//        else {
+//            DEBUG_Q("Reusing a_entry->exec_qs\n");
+//        }
+    }
+    else{
+        a_entry->exec_qs->clear();
+    }
+
+}
+
+inline void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list){
+    if (!assign_entry_free_list->pop(a_entry)){
+        a_entry = (assign_entry *) mem_allocator.alloc(sizeof(assign_entry));
+//        DEBUG_Q("Allocating a_entry\n");
+    }
 //    else {
-    DEBUG_Q("Planner_%ld: mrange = %ld, exec_q size = %ld, from %ld to %ld\n", planner_id, i, exec_q->size(), range_start, range_end);
+//        DEBUG_Q("Reusing a_entry\n");
+//    }
+    memset(a_entry, 0, sizeof(assign_entry));
+}
+
+inline void split_entry_get_or_create(split_entry *&s_entry,
+                                      boost::lockfree::spsc_queue<split_entry *> * split_entry_free_list) {
+    if (!split_entry_free_list->pop(s_entry)){
+        s_entry = (split_entry *) mem_allocator.alloc(sizeof(split_entry));
+//        DEBUG_Q("Allocating s_entry\n");
+    }
+//    else {
+//        DEBUG_Q("Reusing s_entry\n");
 //    }
 }
+
+void split_entry_print(split_entry * ptr, uint64_t planner_id) {
+    DEBUG_Q("Planner_%ld: exec_q size = %ld, from %ld to %ld, range_size = %ld\n",
+            planner_id, ptr->exec_q->size(), ptr->range_start,
+            ptr->range_end, ptr->range_size);
+}
+
+
 void CommitThread::setup() {
 }
 
@@ -80,7 +130,7 @@ RC CommitThread::run() {
 //        while (tmp_p == 0  && !simulation->is_done()){
 //            tmp_p = work_queue.batch_pg_map[batch_slot][cplanner_id].load();
 //        }
-        M_ASSERT_V(tmp_p != 0, "CT_%ld : txn_ctxs is not inisitalized, batch_slot = %ld, batch_id = %ld, cplanner_id = %ld, tmp_p = %ld\n",
+        M_ASSERT_V(tmp_p != 0, "CT_%ld : planner_pg is not inisitalized, batch_slot = %ld, batch_id = %ld, cplanner_id = %ld, tmp_p = %ld\n",
                    _thd_id, batch_slot, batch_id, cplanner_id, tmp_p);
 
         planner_pg = ((priority_group *) tmp_p);
@@ -88,7 +138,7 @@ RC CommitThread::run() {
         M_ASSERT_V(batch_id == planner_pg->batch_id, "CT_%ld : batch_id mismatch, batch_slot = %ld, batch_id = %ld, pg_batch_id = %ld\n",
                    _thd_id, batch_slot, batch_id, planner_pg->batch_id);
 
-        M_ASSERT_V(cplanner_id == planner_pg->planner_id, "CT_%ld : txn_ctxs is not inisitalized, batch_slot = %ld, batch_id = %ld, cplanner_id = %ld, pg_planner_id = %ld\n",
+        M_ASSERT_V(cplanner_id == planner_pg->planner_id, "CT_%ld : planner_pg is not inisitalized, batch_slot = %ld, batch_id = %ld, cplanner_id = %ld, pg_planner_id = %ld\n",
                    _thd_id, batch_slot, batch_id, cplanner_id, planner_pg->planner_id);
 
         M_ASSERT_V(planner_pg->planner_id == cplanner_id, "CT_%ld : mismatch of planner id pg_plan_id(%ld) == cplan_id(%ld)\n",
@@ -104,7 +154,7 @@ RC CommitThread::run() {
             // TODO(tq): fix this to support other workloads
 
             if (txn_ctxs[i].txn_state == TXN_READY_TO_COMMIT){
-
+#if BUILD_TXN_DEPS
 //            if (txn_ctxs[i].completion_cnt.load() == REQ_PER_QUERY){
                 // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
                 // to check if we need to abort, we lookup transaction dependency graph
@@ -137,6 +187,7 @@ RC CommitThread::run() {
 //                        DEBUG_Q("CT_%ld :no dependent transactions for txn_id = %ld\n", _thd_id, txn_ctxs[i].txn_id);
 //                    }
                 }
+#endif
                 if (canCommit){
                     // Committing
                     // Sending response to client a
@@ -189,12 +240,13 @@ RC CommitThread::run() {
         // return txn_ctxs to the pool
         while(!work_queue.txn_ctxs_free_list[cplanner_id]->push(txn_ctxs)){}
 
-
+#if BUILD_TXN_DEPS
         // Clean up and clear txn_graph
         for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
             delete it->second;
         }
         delete planner_pg->txn_dep_graph;
+#endif
 
         expected = (uint64_t) planner_pg;
         desired = 0;
@@ -208,11 +260,8 @@ RC CommitThread::run() {
 //            );
         }
 //        DEBUG_Q("CT_%ld : Done processing priority group %ld for batch_id = %ld\n", _thd_id, cplanner_id, batch_id);
-
+        mem_allocator.free(planner_pg, sizeof(priority_group));
         cplanner_id++;
-//        if (idle_starttime == 0){
-//            idle_starttime = get_sys_clock();
-//        }
 
         if (cplanner_id == g_plan_thread_cnt){
             // proceed to the next batch
@@ -221,6 +270,8 @@ RC CommitThread::run() {
             cplanner_id = 0;
         }
     }
+
+    // cleanup
     desired8 = 0;
     desired = 0;
     for (uint64_t i = 0; i < g_batch_map_length; ++i){
@@ -261,6 +312,15 @@ uint32_t PlannerThread::get_split(uint64_t key, uint32_t range_cnt, uint64_t ran
     return 0;
 }
 
+uint32_t PlannerThread::get_split(uint64_t key, Array<uint64_t> * ranges) {
+    for (uint64_t i = 0; i < ranges->size(); i++){
+        if (key < ranges->get(i)){
+            return i;
+        }
+    }
+    M_ASSERT_V(false, "could not assign to range key = %ld\n", key);
+}
+
 RC PlannerThread::run() {
     tsetup();
 
@@ -276,13 +336,55 @@ RC PlannerThread::run() {
 
     DEBUG_Q("Planner_%ld thread started, txn_ids start at %ld \n", _planner_id, txn_prefix_planner_base);
     uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+#if SPLIT_MERGE_ENABLED
     uint64_t exec_queue_limit = planner_batch_size/g_thread_cnt;
+#endif
     // max capcity, assume YCSB workload
 //    uint64_t exec_queue_capacity = planner_batch_size*10;
-    uint64_t exec_queue_capacity = 1024 * 32;
+    uint64_t exec_queue_capacity = EQ_INIT_CAP;
 #if BATCHING_MODE == SIZE_BASED
     exec_queue_capacity = planner_batch_size * 10;
 #endif
+
+
+#if SPLIT_MERGE_ENABLED
+    split_max_heap_t pq_test;
+    split_min_heap_t range_sorted;
+    assign_ptr_min_heap_t assignment;
+//    Array<Array<exec_queue_entry> *> ** f_assign = (Array<Array<exec_queue_entry> *> **)
+//            mem_allocator.alloc(sizeof(Array<Array<exec_queue_entry> *> *)*g_thread_cnt);
+    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
+
+    boost::lockfree::spsc_queue<split_entry *> * split_entry_free_list =
+            new boost::lockfree::spsc_queue<split_entry *>(FREE_LIST_INITIAL_SIZE*10);
+
+    boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
+            new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
+
+
+//    boost::lockfree::spsc_queue<Array<Array<exec_queue_entry> *> *> * exec_qs_free_list =
+//        new boost::lockfree::spsc_queue<Array<Array<exec_queue_entry> *> *>(FREE_LIST_INITIAL_SIZE);
+
+    split_entry ** nsp_entries = (split_entry **) mem_allocator.alloc(sizeof(split_entry*)*2);
+
+    exec_queue_limit = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
+
+    volatile bool ranges_stored = false;
+
+#endif
+
+    // Array to track ranges
+    Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
+    exec_qs_ranges->init(g_thread_cnt*10);
+    for (uint64_t i =0; i<g_thread_cnt; ++i){
+
+        if (i == 0){
+            exec_qs_ranges->add(bucket_size);
+            continue;
+        }
+
+        exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
+    }
 
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
@@ -292,7 +394,11 @@ RC PlannerThread::run() {
 
 // implementtion using array class
     Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
-    exec_queues->init(g_thread_cnt);
+//#if SPLIT_MERGE_ENABLED
+    exec_queues->init(g_thread_cnt*10);
+//#else
+//    exec_queues->init(g_thread_cnt);
+//#endif
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
         Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
         exec_q->init(exec_queue_capacity);
@@ -301,24 +407,30 @@ RC PlannerThread::run() {
 
     // Pre-allocate execution queues to be used by planners and executors
     // this should eliminate the overhead of memory allocation
-    uint64_t  exec_queue_pool_size = 10;
-    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+    uint64_t  exec_queue_pool_size = FREE_LIST_INITIAL_SIZE;
+    boost::random::mt19937 plan_rng;
+    boost::random::uniform_int_distribution<> eq_idx_rand(0, g_thread_cnt-1);
+
+//    for (uint64_t i = 0; i < g_thread_cnt; i++) {
         for (uint64_t j = 0; j < exec_queue_pool_size; j++){
             Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
+//#if SPLIT_MERGE_ENABLED
+//            exec_q->init(planner_batch_size/g_thread_cnt);
+//#else
             exec_q->init(exec_queue_capacity);
-            while(!work_queue.exec_queue_free_list[i]->push(exec_q)){}
+//#endif
+
+            while(!work_queue.exec_queue_free_list[_planner_id]->push(exec_q)){}
         }
-    }
+//    }
 
     // Pre-allocate planner's transaction contexts
-    uint64_t  txn_ctxs_pool_size = 10;
-    for (uint64_t i = 0; i < g_plan_thread_cnt; i++) {
-        for (uint64_t j = 0; j < txn_ctxs_pool_size; j++){
-            transaction_context * txn_ctxs_tmp = (transaction_context *) mem_allocator.alloc(
-                    sizeof(transaction_context)*planner_batch_size);
-            memset(txn_ctxs_tmp, 0,sizeof(transaction_context)*planner_batch_size );
-            while(!work_queue.txn_ctxs_free_list[i]->push(txn_ctxs_tmp)){}
-        }
+    uint64_t  txn_ctxs_pool_size = FREE_LIST_INITIAL_SIZE;
+    for (uint64_t j = 0; j < txn_ctxs_pool_size; j++){
+        transaction_context * txn_ctxs_tmp = (transaction_context *) mem_allocator.alloc(
+                sizeof(transaction_context)*planner_batch_size);
+        memset(txn_ctxs_tmp, 0,sizeof(transaction_context)*planner_batch_size );
+        while(!work_queue.txn_ctxs_free_list[_planner_id]->push(txn_ctxs_tmp)){}
     }
 
     transaction_context * txn_ctxs = NULL;
@@ -333,19 +445,23 @@ RC PlannerThread::run() {
     planner_pg->txn_ctxs = txn_ctxs;
 
 #if DEBUG_QUECC
-    Array<uint64_t> mrange_cnts;
-    mrange_cnts.init(g_thread_cnt);
-
-    for (uint64_t i = 0; i < g_thread_cnt; i++) {
-        mrange_cnts.add(0);
-    }
+//    Array<uint64_t> mrange_cnts;
+//    mrange_cnts.init(g_thread_cnt);
+//
+//    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+//        mrange_cnts.add(0);
+//    }
     uint64_t total_msg_processed_cnt = 0;
     uint64_t total_access_cnt = 0;
 #endif
     planner_txn_id = txn_prefix_planner_base;
-    txn_dep_graph = new hash_table_t();
 
+#if BUILD_TXN_DEPS
+    txn_dep_graph = new hash_table_t();
+#endif
     uint64_t batch_starting_txn_id = planner_txn_id;
+
+    exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
 
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
@@ -393,208 +509,418 @@ RC PlannerThread::run() {
         force_batch_delivery = ((get_sys_clock() - batch_start_time) >= BATCH_COMP_TIMEOUT && batch_cnt > 0);
 #endif
 
-        if (force_batch_delivery){
+        if (force_batch_delivery) {
             slot_num = (batch_id % g_batch_map_length);
+
+//            DEBUG_Q("Ranges:\n");
+//            for (uint64_t i = 0; i < exec_qs_ranges->size(); i++){
+//                DEBUG_Q("PL_%ld : [%ld] %ld\n", _planner_id, i, exec_qs_ranges->get(i));
+//            }
 
             if (BATCHING_MODE == TIME_BASED) {
                 INC_STATS(_thd_id, plan_time_batch_cnts[_planner_id], 1)
                 force_batch_delivery = false;
-            } else{
+            } else {
                 INC_STATS(_thd_id, plan_size_batch_cnts[_planner_id], 1)
             }
 
 //            DEBUG_Q("Batch complete\n")
             // a batch is ready to be delivered to the the execution threads.
-            // we will have a batch queue for each of the planners and they are scanned in known order
+            // we will have a batch partition prepared by for each of the planners and they are scanned in known order
             // by execution threads
             // We also have a batch queue for each of the executor that is mapped to bucket
             // for now, we will assign a bucket to each executor
             // All we need to do is to automically CAS the pointer to the address of the accumulated batch
             // and the execution threads who are spinning can start execution
-
             // Here major ranges have one-to-one mapping to worker threads
+            // Split execution queues if needed
+
+            batch_partition *batch_part = NULL;
+
             prof_starttime = get_sys_clock();
+#if SPLIT_MERGE_ENABLED
+#if BATCHING_MODE != SIZE_BASED
+            exec_queue_limit = (batch_cnt/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
+#endif
+
+
+            // Splitting phase
+            if (ranges_stored) {
+
+
+                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+                    assign_entry *a_tmp;
+                    if (i < g_thread_cnt){
+
+                        assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+
+//                        if (!assign_entry_free_list->pop(a_tmp)) {
+//                            a_tmp = (assign_entry *) mem_allocator.alloc(sizeof(assign_entry));
+//                            memset(a_tmp, 0, sizeof(assign_entry));
+//                        }
+
+                        assign_entry_init(a_tmp, _planner_id);
+                        a_tmp->exec_thd_id = i;
+                        assign_entry_add(a_tmp, exec_queues->get(i));
+                        assignment.push((uint64_t) a_tmp);
+                    }
+                    else {
+                        a_tmp = (assign_entry *) assignment.top();
+                        assign_entry_add(a_tmp, exec_queues->get(i));
+                        assignment.pop();
+                        assignment.push((uint64_t) a_tmp);
+                    }
+                }
+
+            } else {
+
+                for (uint64_t i = 0; i < exec_queues->size(); i++) {
+    //                hasSplit = false;
+                    Array<exec_queue_entry> *exec_q = exec_queues->get(i);
+
+                    split_entry *root;
+                    split_entry_get_or_create(root, split_entry_free_list);
+
+                    root->exec_q = exec_q;
+                    root->range_start = (i * bucket_size);
+                    root->range_end = ((i + 1) * bucket_size);
+                    root->range_size = bucket_size;
+
+    //                if (ranges_stored){
+    //
+    //
+    //                    split_entry * tmp;
+    //                    split_entry_get_or_create(tmp, split_entry_free_list);
+    //
+    //                    tmp->exec_q = exec_queues->get(i);
+    //
+    //                    if (i == 0){
+    //                        tmp->range_start = 0;
+    //                        tmp->range_end = (exec_qs_ranges->get(i));
+    //                        tmp->range_size = (exec_qs_ranges->get(i));
+    //                    }
+    //                    else {
+    //                        tmp->range_start = (exec_qs_ranges->get(i-1));
+    //                        tmp->range_end = (exec_qs_ranges->get(i));
+    //                        tmp->range_size = (exec_qs_ranges->get(i)-exec_qs_ranges->get(i-1));
+    //                    }
+    //                    pq_test.push((uint64_t)tmp);
+    //
+    //                    continue;
+    //                }
+
+                    // Check if we need to split
+                    if (exec_queue_limit < exec_q->size()) {
+                        DEBUG_Q("Planner_%ld : We need to split current size = %ld, limit = %ld,"
+                                        " batch_cnt = %ld, planner_batch_size = %ld, batch_id = %ld"
+                                        "\n",
+                                _planner_id, exec_q->size(), exec_queue_limit, batch_cnt, planner_batch_size, batch_id);
+    //                    hasSplit = true;
+                        uint64_t split_rounds = 0;
+
+                        split_entry *top_entry = root;
+
+                        while (true) {
+
+                            // Allocate memory for new exec_qs
+                            Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+                                    sizeof(Array<exec_queue_entry> *) * 2);
+
+                            if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[0])) {
+                                nexec_qs[0]->clear();
+                            } else {
+                                nexec_qs[0] = new Array<exec_queue_entry>();
+                                nexec_qs[0]->init(exec_queue_capacity);
+                            }
+
+                            if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[1])) {
+                                nexec_qs[1]->clear();
+                            } else {
+                                nexec_qs[1] = new Array<exec_queue_entry>();
+                                nexec_qs[1]->init(exec_queue_capacity);
+                            }
+
+                            //split current exec_q
+                            // split current queue's range in half
+                            for (uint64_t j = 0; j < top_entry->exec_q->size(); j++) {
+                                exec_queue_entry exec_qe = top_entry->exec_q->get(j);
+                                ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
+                                uint32_t newrange = get_split(req->key, 2, top_entry->range_start, top_entry->range_end);
+                                nexec_qs[newrange]->add(exec_qe);
+                            }
+
+                            // Allocate memory for split_entry if none are available
+                            split_entry_get_or_create(nsp_entries[0], split_entry_free_list);
+
+                            uint64_t range_size = ((top_entry->range_end - top_entry->range_start) / 2);
+                            nsp_entries[0]->exec_q = nexec_qs[0];
+                            nsp_entries[0]->range_start = top_entry->range_start;
+                            nsp_entries[0]->range_end = range_size + top_entry->range_start;
+                            nsp_entries[0]->range_size = range_size;
+    //                        DEBUG_Q("PL_%ld : pushed split : mrange = %ld, range_start = %ld, range_end = %ld, range_size = %ld\n",
+    //                                _planner_id , i, nsp_entries[0]->range_start, nsp_entries[0]->range_end, nsp_entries[0]->range_size
+    //                        );
+                            pq_test.push((uint64_t) nsp_entries[0]);
+
+                            split_entry_get_or_create(nsp_entries[1], split_entry_free_list);
+                            nsp_entries[1]->exec_q = nexec_qs[1];
+                            nsp_entries[1]->range_start = range_size + top_entry->range_start;
+                            nsp_entries[1]->range_end = top_entry->range_end;
+                            nsp_entries[1]->range_size = range_size;
+    //                        DEBUG_Q("PL_%ld : pushed split : mrange = %ld,  range_start = %ld, range_end = %ld, range_size = %ld\n",
+    //                                _planner_id , i, nsp_entries[1]->range_start, nsp_entries[1]->range_end, nsp_entries[1]->range_size
+    //                        );
+                            pq_test.push((uint64_t) nsp_entries[1]);
+
+    //                        DEBUG_Q("Planner_%ld : We need to split for range %ld, current size = %ld, range_start = %ld, range_end = %ld"
+    //                                        ", into two: "
+    //                                        "[0] exec_q_size = %ld, range_start = %ld, range_end=%ld, range_size = %ld, "
+    //                                        "[1] exec_q_size = %ld, range_start = %ld, range_end=%ld, range_size = %ld\n",
+    //                                _planner_id, i, top_entry->exec_q->size(), top_entry->range_start, top_entry->range_end,
+    //                                nsp_entries[0]->exec_q->size(), nsp_entries[0]->range_start, nsp_entries[0]->range_end, nsp_entries[0]->range_size,
+    //                                nsp_entries[1]->exec_q->size(), nsp_entries[1]->range_start, nsp_entries[1]->range_end, nsp_entries[1]->range_size
+    //                        );
+
+
+                            // Recycle execution queue
+                            while (!work_queue.exec_queue_free_list[_planner_id]->push(top_entry->exec_q)) {};
+    //                        top_entry->exec_q = NULL;
+    //                        mem_allocator.free(top_entry, 0);
+                            if (!split_entry_free_list->push(top_entry)) {
+                                M_ASSERT_V(false,
+                                           "FREE_LIST_INITIAL_SIZE is not enough for holding split entries, increase the size")
+                            };
+
+                            top_entry = (split_entry *) pq_test.top();
+
+                            if (top_entry->exec_q->size() <= exec_queue_limit) {
+
+                                break;
+                            } else {
+
+                                split_rounds++;
+    //                            top_entry = new SplitEntry();
+    //                            top_entry->exec_q = pq_test.top().exec_q;
+    //                            top_entry->range_start = pq_test.top().range_start;
+    //                            top_entry->range_end = pq_test.top().range_end;
+    //                            DEBUG_Q("PL_%ld : poped : mrange = %ld, range_start = %ld, range_end = %ld, range_size = %ld\n",
+    //                                    _planner_id, i, top_entry->range_start, top_entry->range_end, top_entry->range_size
+    //                            );
+                                pq_test.pop();
+                            }
+
+                        }
+                    } else {
+                        split_entry *tmp;
+                        split_entry_get_or_create(tmp, split_entry_free_list);
+
+                        tmp->exec_q = exec_queues->get(i);
+                        tmp->range_start = (i * bucket_size);
+                        tmp->range_end = ((i + 1) * bucket_size);
+                        tmp->range_size = bucket_size;
+    //                    DEBUG_Q("PL_%ld : pushed original : mrange = %ld, range_start = %ld, range_end = %ld, range_size = %ld\n",
+    //                            _planner_id, i, tmp->range_start, tmp->range_end, tmp->range_size
+    //                    );
+                        pq_test.push((uint64_t) tmp);
+                    }
+                }
+
+                uint64_t pq_test_size UNUSED = pq_test.size();
+
+                if (!ranges_stored && pq_test.size() != g_thread_cnt) {
+                    // we have splits, we need to update ranges
+                    ranges_stored = true;
+                    uint64_t range_cnt = pq_test.size();
+
+                    exec_qs_ranges->release();
+                    exec_qs_ranges->init(range_cnt);
+
+                    while (!pq_test.empty()) {
+    //                    split_entry * s_tmp = (split_entry *)pq_test.top();
+                        range_sorted.push(pq_test.top());
+                        pq_test.pop();
+                    }
+
+                    M_ASSERT_V(pq_test_size == range_sorted.size(),
+                               "PL_%ld : pg_test_size = %ld, range_sorted_size = %ld\n",
+                               _planner_id, pq_test_size, range_sorted.size()
+                    );
+
+//                    uint64_t ranges_total_cnt UNUSED = 0;
+                    for (uint64_t i = 0; !range_sorted.empty(); ++i) {
+
+                        split_entry *s_tmp = (split_entry *) range_sorted.top();
+//                        DEBUG_Q("PL_%ld : pq_test: range_start = %ld, range_end = %ld, range_size = %ld, exec_q_size = %ld\n",
+//                                _planner_id, s_tmp->range_start, s_tmp->range_end, s_tmp->range_size, s_tmp->exec_q->size()
+//                        );
+//                        ranges_total_cnt = s_tmp->range_end;
+                        exec_qs_ranges->add(s_tmp->range_end);
+                        pq_test.push(range_sorted.top());
+                        range_sorted.pop();
+                    }
+
+                    exec_qs_ranges->set(exec_qs_ranges->size()-1, g_synth_table_size);
+
+                    M_ASSERT_V(exec_qs_ranges->get(exec_qs_ranges->size()-1) == g_synth_table_size, "PL_%ld: Mismatch table size and range total cnt, "
+                            "ranges_total_cnt = %ld, g_synth_table = %ld\n",
+                               _planner_id, exec_qs_ranges->get(exec_qs_ranges->size()-1), g_synth_table_size
+                    );
+                }
+
+            //TODO(tq): This can be optimized
+            // Merge and ET assignment phase
+            // We utilize two heap, a max-heap and a min-heap
+            // The max-heap is used to maintain the list of all EQs to be assigned
+            // The min-heap is used to maintain the list of assignment of EQs to ETs
+            // We use the min-heap to track the top candidate with the lowest number of operations
+            // in its assigned exec_queues, and assign the next largest EQ to it
+            // We do this until all EQs are assigned.
+            // This gives roughly a balanced assignment to all ETs but we probably need a formal proof of this.
+            // It is also useful to have a formal analysis of the time-complexity of this.
+
+            // Final list of EQs are maintained them in a max-heap sorted by their sizes
+
+
+            for (uint64_t i = 0; i < g_thread_cnt; ++i) {
+                assign_entry *a_tmp;
+                split_entry *s_tmp = ((split_entry *) pq_test.top());
+
+                assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+//                if (!assign_entry_free_list->pop(a_tmp)) {
+//                    a_tmp = (assign_entry *) mem_allocator.alloc(sizeof(assign_entry));
+//                    memset(a_tmp, 0, sizeof(assign_entry));
+//                }
+
+                assign_entry_init(a_tmp, _planner_id);
+                a_tmp->exec_thd_id = i;
+                assign_entry_add(a_tmp, s_tmp->exec_q);
+
+//                split_entry_print(s_tmp, _planner_id);
+                if (!split_entry_free_list->push(s_tmp)) {
+                    M_ASSERT_V(false,
+                               "FREE_LIST_INITIAL_SIZE is not enough for holding split entries, increase the size")
+                };
+                pq_test.pop();
+                assignment.push((uint64_t) a_tmp);
+            }
+
+            while (!pq_test.empty()) {
+                assign_entry *a_tmp = (assign_entry *) assignment.top();
+                split_entry *s_tmp = ((split_entry *) pq_test.top());
+//                split_entry_print(s_tmp, _planner_id);
+//                a_tmp->exec_thd_id = assignment.top()->exec_thd_id;
+//                for (uint64_t i=0; i < assignment.top()->exec_qs->size(); i++){
+//                    a_tmp->add(assignment.top()->exec_qs->get(i));
+//                }
+                assign_entry_add(a_tmp, s_tmp->exec_q);
+                assignment.pop();
+                assignment.push((uint64_t) a_tmp);
+
+                if (!split_entry_free_list->push(s_tmp)) {
+                    M_ASSERT_V(false,
+                               "FREE_LIST_INITIAL_SIZE is not enough for holding split entries, increase the size")
+                };
+                pq_test.pop();
+            }
+            M_ASSERT_V(pq_test.size() == 0, "PT_%ld: We have not assigned all splitted EQs", _planner_id);
+        }
+
+            // To produce the final assignment we do a heap-sort based on ET's id, this can be optimized further later
+            memset(f_assign, 0, sizeof(uint64_t)*g_thread_cnt);
+
+            while (!assignment.empty()){
+                assign_entry * te = (assign_entry *) assignment.top();
+                f_assign[te->exec_thd_id] = (uint64_t) te->exec_qs;
+                assignment.pop();
+                assign_entry_clear(te);
+                while(!assign_entry_free_list->push(te)){}
+            }
+//            M_ASSERT_V(final_assignment.size() == g_thread_cnt, "Planner_%ld : Assignment list size = %ld should equal to the thread_cnt = %d\n",
+//                    _planner_id, final_assignment.size(), g_thread_cnt
+//            );
+            M_ASSERT_V(assignment.size() == 0, "PT_%ld: We have not used all assignments in the final assignments", _planner_id);
+
+//            for (uint64_t i = 0; i < g_thread_cnt; i++){
+//                uint64_t eq_sum = 0;
+//                Array<Array<exec_queue_entry> *> * tmp_qs = (Array<Array<exec_queue_entry> *> *) f_assign[i];
+//                for (uint64_t j=0; j < tmp_qs->size(); ++j){
+//                    eq_sum += tmp_qs->get(j)->size();
+//                }
+//                DEBUG_Q("Planner_%ld : Assigned to ET_%ld, %ld exec_qs with total size = %ld\n",
+//                        _planner_id, i, tmp_qs->size(),
+//                        eq_sum
+//                );
+//            }
+
+//            DEBUG_Q("Planner_%ld : Going to assign the following EQs to ETs\n",
+//                    _planner_id);
+
+#endif // end of if SPLIT_MERGE_ENABLED
+
+            planner_pg->batch_txn_cnt = batch_cnt;
+            planner_pg->batch_id = batch_id;
+#if BUILD_TXN_DEPS
+            planner_pg->txn_dep_graph = txn_dep_graph;
+#endif
+            planner_pg->batch_starting_txn_id = batch_starting_txn_id;
+
+            // deilvery  phase
             for (uint64_t i = 0; i < g_thread_cnt; i++){
-//                DEBUG_Q("old value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, exe_q_ptr);
-//                DEBUG_Q("new value for ptr to  exec_q[%ld][%ld][%ld] is %ld\n", _planner_id, i, batch_id, (uint64_t) exec_queues->get(i));
 
-//                DEBUG_Q("Batch %ld is ready! setting map slot [%ld][%ld][%ld]\n", batch_id, i, _planner_id, slot_num);
-
-
-                Array<exec_queue_entry> * exec_q = exec_queues->get(i);
-                // use batch_partition
-                batch_partition * batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+                // create a new batch_partition
+                batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
                 batch_part->planner_id = _planner_id;
                 batch_part->batch_id = batch_id;
-                batch_part->exec_q = exec_q;
+//                batch_part->exec_q = exec_queues->get(i);
                 batch_part->single_q = true;
                 batch_part->batch_part_status.store(0);
                 batch_part->exec_q_status.store(0);
 
-                // Check if we need to split
-                // 10 is the number of operations in each transaction, we are assuming YCSB here
-                exec_queue_limit = (batch_cnt/g_thread_cnt) * 10 * EXECQ_CAP_FACTOR;
-
-                if (exec_queue_limit < exec_q->size()){
-//                    DEBUG_Q("Planner_%ld : We need to split for range %ld, current size = %ld, limit = %ld,"
-//                                    " batch_cnt = %ld, planner_batch_size = %ld, batch_id = %ld"
-//                                    "\n",
-//                            _planner_id, i, exec_q->size(), exec_queue_limit, batch_cnt, planner_batch_size, batch_id);
+#if SPLIT_MERGE_ENABLED
+                Array<Array<exec_queue_entry> *> * fa_execqs = ((Array<Array<exec_queue_entry> *> *)f_assign[i]);
+                if (fa_execqs->size() > 1){
 
                     batch_part->single_q = false;
-
-                    boost::heap::priority_queue<SplitEntry, boost::heap::compare<SplitEntryCompareSize>> pq;
-
-                    uint64_t split_rounds = 0;
-
-                    SplitEntry * root = new SplitEntry();
-                    root->exec_q = exec_q;
-                    root->range_start = (i*bucket_size);
-                    root->range_end = ((i+1)*bucket_size);
-                    root->range_size = bucket_size;
-                    SplitEntry * top_entry = root;
-
-                    while (true){
-                        //split current queue in half
-//                        Array<exec_queue_entry> * cexec_q = exec_queues->get(i);
-                        // Allocate memory for new exec_qs
-                        Array<exec_queue_entry> ** nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(sizeof(Array<exec_queue_entry> *)*2);
-
-                        if (work_queue.exec_queue_free_list[i]->pop(nexec_qs[0])){
-                            nexec_qs[0]->clear();
-                        }
-                        else{
-                            nexec_qs[0] = new Array<exec_queue_entry>();
-                            nexec_qs[0]->init(exec_queue_capacity);
-                        }
-
-                        if (work_queue.exec_queue_free_list[i]->pop(nexec_qs[1])){
-                            nexec_qs[1]->clear();
-                        }
-                        else{
-                            nexec_qs[1] = new Array<exec_queue_entry>();
-                            nexec_qs[1]->init(exec_queue_capacity);
-                        }
-
-                        //split current exec_q
-                        for (uint64_t j = 0; j < top_entry->exec_q->size(); j++){
-                            exec_queue_entry exec_qe = top_entry->exec_q->get(j);
-                            ycsb_request *req = (ycsb_request *) &exec_qe.req_buffer;
-//                        uint32_t get_split(uint64_t key, uint_32_t range_cnt, uint64_t range_start, uint64_t range_end);
-                            uint32_t newrange = get_split(req->key, 2, top_entry->range_start, top_entry->range_end);
-//                            min_range_cnts[newrange]++;
-                            nexec_qs[newrange]->add(exec_qe);
-                        }
-
-                        //TODO(tq), use je_malloc instead of new?
-                        SplitEntry * nsp_entries = new SplitEntry[2];
-                        uint64_t range_size = ((top_entry->range_end - top_entry->range_start)/2);
-                        nsp_entries[0].exec_q = nexec_qs[0];
-                        nsp_entries[0].range_start = top_entry->range_start;
-                        nsp_entries[0].range_end = range_size+top_entry->range_start;
-                        nsp_entries[0].range_size = range_size;
-                        nsp_entries[0].children[0] = NULL;
-                        nsp_entries[0].children[1] = NULL;
-
-                        nsp_entries[1].exec_q = nexec_qs[1];
-                        nsp_entries[1].range_start = range_size+top_entry->range_start;
-                        nsp_entries[1].range_end = top_entry->range_end;
-                        nsp_entries[1].range_size = range_size;
-                        nsp_entries[1].children[0] = NULL;
-                        nsp_entries[1].children[1] = NULL;
-
-
-                        pq.push(nsp_entries[0]);
-                        pq.push(nsp_entries[1]);
-
-                        // update top entry with new ranges
-                        top_entry->children[0] = &nsp_entries[0];
-                        top_entry->children[1] = &nsp_entries[1];
-//                        top_entry->exec_q->release();
-
-//                        DEBUG_Q("Planner_%ld : Split exec_q of mrange(%ld), pq.size = %ld, split rounds = %ld, into 2 subranges, "
-//                                        "parent : size = %ld, rs = %ld, re = %ld, "
-//                                        "child_0 : size = %ld, rs = %ld, re = %ld, "
-//                                        "child_1 : size = %ld, rs = %ld, re = %ld"
-//                                        "\n",
-//                                _planner_id, i, pq.size(), split_rounds,
-//                                top_entry->exec_q->size(), top_entry->range_start, top_entry->range_end,
-//                                top_entry->children[0]->exec_q->size(), top_entry->children[0]->range_start, top_entry->children[0]->range_end,
-//                                top_entry->children[1]->exec_q->size(), top_entry->children[1]->range_start, top_entry->children[1]->range_end
-//                        );
-
-                        // Recucle execution queue
-//                        if (split_rounds != 0){
-                            // skip the root, for now
-                            while(!work_queue.exec_queue_free_list[i]->push(top_entry->exec_q)) {};
-//                        }
-                        top_entry->exec_q = NULL;
-
-                        if(pq.top().exec_q->size() <= exec_queue_limit){
-
-                            break;
-                        }
-                        else {
-                            split_rounds++;
-                            top_entry = new SplitEntry();
-                            top_entry->exec_q = pq.top().exec_q;
-                            top_entry->range_start = pq.top().range_start;
-                            top_entry->range_end = pq.top().range_end;
-                            top_entry->children[0] = pq.top().children[0];
-                            top_entry->children[1] = pq.top().children[1];
-
-                            pq.pop();
-                        }
-
-                    }
-
-                    // Visualize the exec_queues
-//                    DEBUG_Q("Planner_%ld : Visualizing splits of mrange %ld at batch_id: %ld\n", _planner_id, i, batch_id);
-//                    boost::heap::priority_queue<SplitEntry, boost::heap::compare<SplitEntryCompareStartRange>> sorted;
-//                    while (!pq.empty()){
-//                        sorted.push(pq.top());
-//                        pq.pop();
-//                    }
-//                    while (!sorted.empty()){
-//                        sorted.top().printEntries(i, _planner_id);;
-//                        sorted.pop();
-//                    }
-
                     // Allocate memory for exec_qs
-                    batch_part->sub_exec_qs_cnt = pq.size();
-
-                    batch_part->exec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
-                            sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
-                    memset(batch_part->exec_qs, 0, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
+                    batch_part->sub_exec_qs_cnt = fa_execqs->size();
+//                    batch_part->exec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+//                            sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
+//                    memset(batch_part->exec_qs, 0, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
+                    batch_part->exec_qs = fa_execqs;
 
                     batch_part->exec_qs_status = (atomic<uint64_t> *) mem_allocator.alloc(
                             sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
                     memset(batch_part->exec_qs_status, 0, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
 
-                    for (uint64_t j = 0; j < batch_part->sub_exec_qs_cnt; j++){
-                        batch_part->exec_qs[j] = pq.top().exec_q;
-                        pq.pop();
-                        batch_part->exec_qs_status[j].store(AVAILABLE);
-//                        uint64_t tmp_pq_size = pq.size();
-//                        assert((tmp_pq_size-j-1) == (batch_part->sub_exec_qs_cnt-j-2));
-                    }
-
-
-//                    uint64_t j = 0;
-//                    for (boost::heap::priority_queue<SplitEntry, boost::heap::compare<SplitEntryCompare>>::iterator it = pq.begin(); it != pq.end(); ++it){
-//                        DEBUG_Q("Planner_%ld : of mrange(%ld), subrange_cnt(%ld) = %ld"
-//                                        "\n",
-//                                _planner_id, i,j, ((SplitEntry *) *it).exec_q->size()
-//                        );
-//                        j++;
+//                    for (uint64_t j = 0; j < batch_part->sub_exec_qs_cnt; j++){
+//                        batch_part->exec_qs[j] = fa_execqs->get(j);
+//                        batch_part->exec_qs_status[j].store(AVAILABLE);
 //                    }
-//                    mem_allocator.free(min_range_cnts, sizeof(uint64_t)*2);
+                }
+                else{
+                    batch_part->exec_q = fa_execqs->get(0);
+                    // recycle fa_exec_q
+                    fa_execqs->clear();
+                    while(!work_queue.exec_qs_free_list[_planner_id]->push(fa_execqs)){
+                        M_ASSERT_V(false, "Should not happen");
+                    };
                 }
 
+//                fa_execqs->clear();
+//                while(!exec_qs_free_list->push(fa_execqs)){}
+#else
+                batch_part->exec_q = exec_queues->get(i);
+#endif
+                batch_part->planner_pg = planner_pg;
+//                DEBUG_Q("Planner_%ld : Assigned to ET_%ld, %ld exec_qs with total size = %ld\n",
+//                        _planner_id, final_assignment.top().exec_thd_id, final_assignment.top().exec_qs.size(),
+//                        final_assignment.top().curr_sum
+//                );
+
+
+                // In case batch slot is not ready, spin!
                 expected = 0;
                 desired = (uint64_t) batch_part;
-                //TODO(tq): make sure we need these memory fences
-//                std::atomic_thread_fence(std::memory_order_seq_cst);
                 while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0) {
                     if(idle_starttime == 0){
                         idle_starttime = get_sys_clock();
@@ -608,27 +934,17 @@ RC PlannerThread::run() {
                     idle_starttime = 0;
                 }
 
-//                if (batch_id == 1024){
-//                    DEBUG_Q("PT_%ld : For batch %ld : failing to SET batch_pg_map slot [%ld][%ld]\n", _planner_id, batch_id, slot_num, _planner_id);
-//                }
-
                 // Deliver batch partition to the repective ET
                 while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(
                         expected, desired)){
                     // this should not happen after spinning but can happen if simulation is done
 //                    M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
                 }
-//                std::atomic_thread_fence(std::memory_order_seq_cst);
 //                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
+
             }
 
-            planner_pg->batch_txn_cnt = batch_cnt;
-            planner_pg->batch_id = batch_id;
-            planner_pg->txn_dep_graph = txn_dep_graph;
-            planner_pg->batch_starting_txn_id = batch_starting_txn_id;
-
-
-            // Spin here
+            // Spin here if PG map slot is not available
             while(work_queue.batch_pg_map[slot_num][_planner_id].load() != 0) {
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
@@ -676,9 +992,9 @@ RC PlannerThread::run() {
             // reset data structures and execution queues for the new batch
             prof_starttime = get_sys_clock();
             exec_queues->clear();
-            for (uint64_t i = 0; i < g_thread_cnt; i++) {
-                Array<exec_queue_entry> * exec_q = NULL;
-                if (work_queue.exec_queue_free_list[i]->pop(exec_q)){
+            for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
+                Array<exec_queue_entry> * exec_q;
+                if (work_queue.exec_queue_free_list[_planner_id]->pop(exec_q)){
                     exec_q->clear();
 //                    DEBUG_Q("Planner_%ld : Reusing exec_q\n", _planner_id);
                     INC_STATS(_thd_id, plan_reuse_exec_queue_cnt[_planner_id], 1);
@@ -691,10 +1007,11 @@ RC PlannerThread::run() {
                 }
                 exec_queues->add(exec_q);
             }
+
             INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
             INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
             INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
-
+#if BUILD_TXN_DEPS
             for (auto it = access_table.begin(); it != access_table.end(); ++it){
                 delete it->second;
             }
@@ -703,7 +1020,7 @@ RC PlannerThread::run() {
             txn_dep_graph = new hash_table_t();
             M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
             M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");
-
+#endif
             batch_starting_txn_id = planner_txn_id+1;
             batch_id++;
             batch_cnt = 0;
@@ -749,29 +1066,34 @@ RC PlannerThread::run() {
                  */
                 YCSBClientQueryMessage *ycsb_msg = ((YCSBClientQueryMessage *) msg);
                 for (uint64_t j = 0; j < ycsb_msg->requests.size(); j++) {
+                    memset(entry, 0, sizeof(exec_queue_entry));
                     ycsb_request *ycsb_req = ycsb_msg->requests.get(j);
                     uint64_t key = ycsb_req->key;
 //                    DEBUG_Q("Planner_%d looking up bucket for key %ld\n", _planner_id, key);
-                    uint64_t idx = get_bucket(key);
+
+                    // TODO(tq): use get split with dynamic ranges
+                    uint64_t idx = get_split(key, exec_qs_ranges);
+//                    uint64_t idx = get_bucket(key);
+
 //                    DEBUG_Q("Planner_%d using bucket %ld for key %ld\n", _planner_id,idx, key);
 
                     // TODO(tq): move to statitic module
 #if DEBUG_QUECC
-                    uint64_t nval = mrange_cnts.get(idx) + 1;
-                    mrange_cnts.set(idx, nval);
+//                    uint64_t nval = mrange_cnts.get(idx) + 1;
+//                    mrange_cnts.set(idx, nval);
                     total_access_cnt++;
 #endif
 
                     // create execution entry, for now it will contain only one request
                     // we dont need to allocate memory here
                     prof_starttime = get_sys_clock();
-                    exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
                     INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                     Array<exec_queue_entry> *mrange = exec_queues->get(idx);
                     // increment of batch mrange to use the next entry slot
                     entry->txn_id = planner_txn_id;
                     entry->txn_ctx = tctx;
                     entry->batch_id = batch_id;
+                    assert(tctx->batch_id == batch_id);
 #if !SERVER_GENERATE_QUERIES
                     assert(msg->return_node_id != g_node_id);
 #endif
@@ -789,10 +1111,10 @@ RC PlannerThread::run() {
                     prof_starttime = get_sys_clock();
 
                     // TODO(tq): optimize this by reusing a single memory block
-                    mem_allocator.free(entry, sizeof(exec_queue_entry));
+//                    mem_allocator.free(entry, sizeof(exec_queue_entry));
                     INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
 
-
+#if BUILD_TXN_DEPS
                     // add to dependency graph if needed
                     // lookup key in the access_table
                     // if key is not found:
@@ -843,8 +1165,7 @@ RC PlannerThread::run() {
                             access_table.insert({ycsb_req->key, txn_list});
                         }
                     }
-
-
+#endif
                 }
 
 #if DEBUG_QUECC
@@ -863,13 +1184,31 @@ RC PlannerThread::run() {
         }
 
     }
+
+    mem_allocator.free(entry, sizeof(exec_queue_entry));
     INC_STATS(_thd_id, plan_total_time[_planner_id], get_sys_clock()-plan_starttime);
 #if DEBUG_QUECC
     DEBUG_Q("Planner_%ld: Total access cnt = %ld, and processed %ld msgs\n", _planner_id, total_access_cnt, total_msg_processed_cnt);
-    for (uint64_t i = 0; i < g_thread_cnt; i++) {
-        DEBUG_Q("Planner_%ld: Access cnt for bucket_%ld = %ld\n",_planner_id, i, mrange_cnts.get(i));
+//    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+//        DEBUG_Q("Planner_%ld: Access cnt for bucket_%ld = %ld\n",_planner_id, i, mrange_cnts.get(i));
+//    }
+    uint64_t txn_free_list_cnt = 0;
+    transaction_context * txn_ctxs_tmp = NULL;
+    while(work_queue.txn_ctxs_free_list[_planner_id]->pop(txn_ctxs_tmp)){
+        txn_free_list_cnt++;
     }
+
+    DEBUG_Q("Planner_%ld: created %ld txn_ctxs\n",_planner_id, txn_free_list_cnt);
+
+
+//    uint64_t exec_q_free_list_cnt = 0;
+//    while(work_queue.exec_queue_free_list[wplanner_id]->pop(exec_q)){
+//        exec_q_free_list_cnt++;
+//    }
+//    DEBUG_Q("PT_%ld: free %ld exec_q\n",_planner_id, exec_q_free_list_cnt);
 #endif
+
+
     printf("FINISH PT %ld:%ld\n",_node_id,_thd_id);
     fflush(stdout);
     return FINISH;

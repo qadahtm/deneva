@@ -15,7 +15,7 @@ from pprint import pprint
 import time
 from datetime import timedelta
 
-def set_config(ncc_alg, wthd_cnt):
+def set_config(ncc_alg, wthd_cnt, theta):
     print('set config: CC_ALG={}, THREAD_CNT={}'.format(ncc_alg, wthd_cnt))
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -35,7 +35,10 @@ def set_config(ncc_alg, wthd_cnt):
         if (ccalg_m):
             print(ccalg_m.group(1))
             nline = '#define CC_ALG {}\n'.format(ncc_alg)
-
+        theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d)', line.strip())
+        if (theta_m):
+            print(theta_m.group(1))
+            nline = '#define ZIPF_THETA {}\n'.format(theta)
         nconf.write(nline)
     nconf.close()
     oconf.close()
@@ -58,7 +61,7 @@ def build_project():
     print('Building project')
     os.chdir(WORK_DIR+'/'+DENEVA_DIR_PREFIX)
     print(os.getcwd())
-    cmd = 'make clean; make -j'
+    cmd = 'make clean; make -j -s'
     exec_cmd(cmd, env)
 
 def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir):
@@ -125,6 +128,7 @@ def get_df_csv(outdir):
               'trial_no':[],
               'tput':[],
               'cc_alg':[],
+              'zipf_theta':[],
               'max_txn_inflight':[],
               'send_thd_cnt':[],
               'recv_thd_cnt':[],
@@ -233,8 +237,13 @@ num_trials = 3;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
 cc_algs = ['NO_WAIT', 'QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC' , 'MAAT' ]
 # cc_algs = ['NO_WAIT']
-wthreads = [1,2,4,8,16,32]
+# wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
+wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60, 62, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124] # x1.32xlarge
 # wthreads = [1,2]
+# zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+zipftheta = [0.0,0.3,0.6,0.7,0.9]
+write_perc = [0.0,0.25,0.5,0.75,1.0]
+mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 procs = []
 seq_no = 0
 
@@ -251,21 +260,24 @@ exec_cmd('mkdir {}'.format(outdir), env)
 stime = time.time()
 for ncc_alg in cc_algs:
     for wthd in wthreads:
-        runexp = True
-        if wthd == 1  and ncc_alg != 'QUECC':
-            #Don't run other CCs with 1 thread 
-            runexp = False
+        for theta in zipftheta:
+            runexp = True
+            if wthd == 1  and ncc_alg != 'QUECC':
+                #Don't run other CCs with 1 thread 
+                runexp = False
 
-        if wthd == 32 and ncc_alg == 'QUECC':
-            #Don't run QueCC with 32 threads 
-            runexp = False
-        if runexp:       
-            set_config(ncc_alg, wthd)
-            # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-            build_project()
-            for trial in list(range(num_trials)):
-                run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir)
-                seq_no = seq_no + 1           
+            if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
+            # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
+                #Don't run QueCC with more than 30 threads 
+                runexp = False
+            if runexp:       
+                set_config(ncc_alg, wthd, theta)
+                # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                build_project()
+                for trial in list(range(num_trials)):
+                    # run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir)
+                    print('Dry run: {}, {}, {}, t{}'.format(ncc_alg, str(wthd), str(theta), str(trial)))
+                    seq_no = seq_no + 1           
 res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)

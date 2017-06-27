@@ -59,9 +59,11 @@ void QWorkQueue::init() {
   }
 
   // QueCC execution queue free list
-  exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [g_thread_cnt];
-  for ( uint64_t i = 0; i < g_thread_cnt; i++) {
-    exec_queue_free_list[i] = new boost::lockfree::queue<Array<exec_queue_entry> *> (0);
+  exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [g_plan_thread_cnt];
+  exec_qs_free_list = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> * [g_plan_thread_cnt];
+  for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+    exec_queue_free_list[i] = new boost::lockfree::queue<Array<exec_queue_entry> *> (FREE_LIST_INITIAL_SIZE);
+    exec_qs_free_list[i] = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *>(FREE_LIST_INITIAL_SIZE);
   }
   // completion queue
   completion_queue = new boost::lockfree::queue<transaction_context *>(0);
@@ -69,7 +71,7 @@ void QWorkQueue::init() {
 //  txn_ctxs_freelist = new boost::lockfree::queue<transaction_context *> ;
   txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
   for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
-    txn_ctxs_free_list[i] = new boost::lockfree::queue<transaction_context *> (0);
+    txn_ctxs_free_list[i] = new boost::lockfree::queue<transaction_context *> (FREE_LIST_INITIAL_SIZE);
   }
 
 #if QUECC_DEBUG

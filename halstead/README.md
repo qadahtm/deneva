@@ -109,7 +109,7 @@ $ tar -xf deps/jemalloc-4.5.0.tar.bz2 -C ../; cd ../jemalloc-4.5.0/
 Similarly, you can refer to the `INSTALL` instruction to build jemalloc. Below are the commands that you can use, which should work with the current configuration. You need to subtitute the absolute directory path without square brackets. 
 
 ```bash
-$ ./configure --prefix=[absolute_dir_path]/deps/jemalloc-4.5.0 --with-jemalloc-prefix=je_
+$ ./configure --prefix=[absolute_dir_path]/deps/jemalloc-4.5.0 --with-jemalloc-prefix=je_ --enable-prof
 $ make; make install
 ```
 

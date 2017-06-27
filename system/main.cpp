@@ -39,6 +39,7 @@
 #include "maat.h"
 #include "client_query.h"
 #include "quecc_thread.h"
+#include <jemalloc/jemalloc.h>
 
 void network_test();
 void network_test_recv();
@@ -438,6 +439,10 @@ int main(int argc, char* argv[])
   msg_pool.free_all();
   qry_pool.free_all();
   */
+
+    //JEMALLOC
+//    je_malloc_stats_print(NULL, NULL, NULL);
+    je_mallctl("prof.dump", NULL, NULL, NULL, 0);
 	return 0;
 }
 
