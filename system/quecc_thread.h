@@ -112,10 +112,7 @@ inline void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::
 void assign_entry_init(assign_entry * &a_entry, uint64_t thd_id);
 void assign_entry_add(assign_entry * a_entry, Array<exec_queue_entry> * exec_q);
 void assign_entry_clear(assign_entry * &a_entry);
-void assign_entry_release(assign_entry * &a_entry);
-
-
-
+//void assign_entry_release(assign_entry * &a_entry);
 
 struct AssignEntryCompareSum{
     bool operator()(const uint64_t e1, const uint64_t e2) const
@@ -123,31 +120,6 @@ struct AssignEntryCompareSum{
         return ((assign_entry*)e1)->curr_sum > ((assign_entry*)e2)->curr_sum;
     }
 };
-
-//class SplitEntry {
-//public:
-//    Array<exec_queue_entry> * exec_q;
-//    void printEntries(uint64_t i, uint64_t planner_id) const;
-//    uint64_t range_start;
-//    uint64_t range_end;
-//    uint64_t range_size;
-//
-//    SplitEntry();
-//    ~SplitEntry();
-//};
-//
-//struct SplitEntryCompareSize{
-//    bool operator()(const SplitEntry &e1, const SplitEntry &e2) const
-//    {
-//        return e1.exec_q->size() < e2.exec_q->size();
-//    }
-//};
-//struct SplitEntryCompareStartRange{
-//    bool operator()(const SplitEntry &e1, const SplitEntry &e2) const
-//    {
-//        return e1.range_start < e2.range_start;
-//    }
-//};
 
 struct split_entry {
     Array<exec_queue_entry> * exec_q;
@@ -172,12 +144,18 @@ struct SplitEntryCompareStartRange{
 };
 
 void split_entry_get_or_create(split_entry *&s_entry, boost::lockfree::spsc_queue<split_entry *> *split_entry_free_list);
-
 void split_entry_print(split_entry * ptr, uint64_t planner_id);
 
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCompareSize>> split_max_heap_t;
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCompareStartRange>> split_min_heap_t;
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<AssignEntryCompareSum>> assign_ptr_min_heap_t;
+
+inline void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
+void exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
+
+
+inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
+void txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id);
 
 class PlannerThread : public Thread {
 public:

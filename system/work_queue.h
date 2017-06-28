@@ -104,6 +104,7 @@ public:
     // Use this instead of freeing memory and reallocating it
     boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
     boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
+    boost::lockfree::queue<priority_group *> ** pg_free_list;
     boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
 
 

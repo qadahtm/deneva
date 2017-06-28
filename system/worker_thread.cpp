@@ -377,8 +377,9 @@ RC WorkerThread::run() {
             }
             // recycle exec_q
             quecc_mem_free_startts = get_sys_clock();
-            exec_q->clear();
-            while(!work_queue.exec_queue_free_list[wplanner_id]->push(exec_q)) {};
+//            exec_q->clear();
+//            while(!work_queue.exec_queue_free_list[wplanner_id]->push(exec_q)) {};
+            exec_queue_release(exec_q, wplanner_id);
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 
             if (!batch_part->single_q){
@@ -448,7 +449,6 @@ RC WorkerThread::run() {
             // spin
 //            DEBUG_Q("ET_%ld : Spinning waiting for priority group %ld to be COMMITTED\n", _thd_id, wplanner_id);
         }
-//        priority_group++;
 //        DEBUG_Q("ET_%ld : Going to process the next priority group %ld in batch_id = %ld\n", _thd_id, priority_group, wbatch_id);
 
         // go to the next batch partition prepared by the next planner since the previous one has been committed

@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 60
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -112,7 +112,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-#define CC_ALG NO_WAIT
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -157,16 +157,16 @@
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 #define BATCH_SIZE 10 * 1000//MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 128//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 2//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-// Controls the batching decition in the planning phase
+// Controls the batching decitions in the planning phase
 #define BATCHING_MODE SIZE_BASED
 #define TIME_BASED 1
 #define SIZE_BASED 2
-#define SPLIT_MERGE_ENABLED true
-#define CT_ENABLED true
-#define BUILD_TXN_DEPS true
+#define SPLIT_MERGE_ENABLED false
+#define CT_ENABLED false
+#define BUILD_TXN_DEPS false
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
@@ -198,7 +198,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    1 * MILLION
+#define MAX_TXN_PER_PART    0.1 * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -211,9 +211,9 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
