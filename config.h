@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 30
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -164,9 +164,9 @@
 #define BATCHING_MODE SIZE_BASED
 #define TIME_BASED 1
 #define SIZE_BASED 2
-#define SPLIT_MERGE_ENABLED false
-#define CT_ENABLED false
-#define BUILD_TXN_DEPS false
+#define SPLIT_MERGE_ENABLED true
+#define CT_ENABLED true
+#define BUILD_TXN_DEPS true
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
@@ -211,9 +211,9 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5

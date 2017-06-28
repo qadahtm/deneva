@@ -1,0 +1,320 @@
+CC Alg 1
+g_done_timer 60000000000
+g_thread_cnt 62
+g_abort_penalty 10000000
+g_zipf_theta 0.600000
+g_node_id 0
+g_client_rem_thread_cnt 2
+g_client_send_thread_cnt 2
+g_max_txn_per_part 100000
+g_load_per_server 100
+g_inflight_max 1000000
+g_mpr 1.000000
+g_mpitem 0.010000
+g_part_per_txn 1
+g_req_per_query 10
+g_client_node_cnt 1
+g_rem_thread_cnt 1
+g_send_thread_cnt 1
+g_client_thread_cnt 4
+g_num_wh 1
+g_perc_payment 0.000000
+g_wh_update 1
+g_part_cnt 1
+g_node_cnt 1
+g_thread_cnt 62
+g_query_intvl 1
+g_prt_lat_distr 0
+g_part_alloc 0
+g_mem_pad 1
+g_perc_multi_part 0.000000
+g_tup_read_perc 0.500000
+g_tup_write_perc 0.500000
+g_txn_read_perc 0.500000
+g_txn_write_perc 0.500000
+g_synth_table_size 16777216
+g_max_part_key 10000
+g_max_product_key 1000
+g_max_supplier_key 1000
+g_field_per_tuple 10
+g_data_perc 100.000000
+g_access_perc 100.000000
+g_strict_ppt 1
+g_network_delay 0
+g_total_thread_cnt 63
+g_total_client_thread_cnt 8
+g_total_node_cnt 2
+g_seq_batch_time_limit 5000000
+Random seed: 41281782357783
+Initializing stats... Done
+Initializing global manager... Done
+Initializing transport manager... Tport Init 0: 6
+Reading ifconfig file: ./ifconfig.txt
+0: 172.31.8.74
+1: 172.31.8.74
+Port ID:  0, 1 -> 0 : 17001
+Sock Binding to tcp://172.31.8.74:17001 0
+Port ID:  1, 1 -> 0 : 17005
+Sock Binding to tcp://172.31.8.74:17005 0
+Port ID:  0, 0 -> 1 : 17002
+Sock Connecting to tcp://172.31.8.74;172.31.8.74:17002 0 -> 1
+Done
+Initializing simulation... Done
+Initializing schema... Index init with 16777216 buckets
+Done
+Initializing table... Thd 1 inserted 500000 keys 1.622266
+Thd 6 inserted 500000 keys 2.124436
+Thd 4 inserted 500000 keys 2.125019
+Thd 7 inserted 500000 keys 2.150465
+Thd 5 inserted 500000 keys 2.160414
+Thd 0 inserted 500000 keys 2.164960
+Thd 2 inserted 500000 keys 2.172973
+Thd 3 inserted 500000 keys 2.186056
+Thd 1 inserted 1000000 keys 3.130341
+Thd 4 inserted 1000000 keys 4.056293
+Thd 7 inserted 1000000 keys 4.056312
+Thd 6 inserted 1000000 keys 4.081561
+Thd 5 inserted 1000000 keys 4.092809
+Thd 2 inserted 1000000 keys 4.107379
+Thd 0 inserted 1000000 keys 4.122948
+Thd 3 inserted 1000000 keys 4.161256
+Thd 1 inserted 1500000 keys 4.646334
+Thd 7 inserted 1500000 keys 6.130491
+Thd 5 inserted 1500000 keys 6.139713
+Thd 6 inserted 1500000 keys 6.152843
+Thd 1 inserted 2000000 keys 6.152937
+Thd 4 inserted 1500000 keys 6.155660
+Thd 0 inserted 1500000 keys 6.221201
+Thd 2 inserted 1500000 keys 6.221372
+Thd 3 inserted 1500000 keys 6.246292
+Thd 1 inserted 2097152 keys
+Thd 6 inserted 2000000 keys 7.846157
+Thd 7 inserted 2000000 keys 7.849560
+Thd 5 inserted 2000000 keys 7.858237
+Thd 4 inserted 2000000 keys 7.891715
+Thd 2 inserted 2000000 keys 7.955891
+Thd 3 inserted 2000000 keys 7.956706
+Thd 0 inserted 2000000 keys 7.972356
+Thd 6 inserted 2097152 keys
+Thd 7 inserted 2097152 keys
+Thd 5 inserted 2097152 keys
+Thd 4 inserted 2097152 keys
+Thd 2 inserted 2097152 keys
+Thd 3 inserted 2097152 keys
+Thd 0 inserted 2097152 keys
+Done
+Workload initialized!
+Initializing work queue... Done
+Initializing abort queue... Done
+Initializing message queue... Done
+Initializing transaction manager pool... Done
+Initializing transaction pool... Done
+Initializing row pool... Done
+Initializing access pool... Done
+Initializing txn node table pool... Done
+Initializing query pool... Done
+Initializing msg pool... Done
+Initializing transaction table... Done
+Initializing client query queue... Done
+Initialization Time = 16719205437
+Setup 0:0
+Setup 0:2
+Setup 0:1
+Setup 0:3
+Setup 0:4
+Setup 0:5
+Setup 0:6
+Setup 0:7
+Setup 0:8
+Setup 0:9
+Setup 0:12
+Setup 0:11
+Setup 0:10
+Setup 0:13
+Setup 0:14
+Setup 0:16
+Setup 0:15
+Setup 0:17
+Setup 0:18
+Setup 0:19
+Setup 0:21
+Setup 0:20
+Setup 0:22
+Setup 0:23
+Setup 0:24
+Setup 0:25
+Setup 0:26
+Setup 0:27
+Setup 0:28
+Setup 0:29
+Setup 0:30
+Setup 0:31
+Setup 0:32
+Setup 0:33
+Setup 0:34
+Setup 0:35
+Setup 0:36
+Setup 0:37
+Setup 0:38
+Setup 0:39
+Setup 0:40
+Setup 0:42
+Setup 0:41
+Setup 0:43
+Setup 0:46
+Setup 0:44
+Setup 0:48
+Setup 0:47
+Setup 0:50
+Setup 0:51
+Setup 0:52
+Setup 0:53
+Setup 0:54
+Setup 0:55
+Setup 0:57
+Setup 0:49
+Setup 0:58
+Setup 0:59
+Setup 0:61
+Setup 0:60
+Setup 0:45
+Setup 0:62
+Setup 0:56
+Running 0:17
+Send INIT_DONE to 1
+Running 0:16
+Running 0:21
+Running 0:24
+Running 0:29
+Running 0:27
+Running 0:34
+Running 0:20
+Running 0:39
+Running 0:7
+Running 0:59
+Running 0:58
+Running 0:61
+Running 0:26
+Running 0:33
+Running 0:36
+Running 0:42
+Running 0:10
+Running 0:43
+Running 0:9
+Running 0:44
+Running 0:1
+Running 0:53
+Running 0:57
+Running 0:60
+Running 0:47
+Running 0:3
+Running 0:35
+Running 0:31
+Running 0:50
+Running 0:56
+Running 0:5
+Running 0:62
+Running 0:55
+Running 0:11
+Running 0:37
+Running 0:38
+Running 0:32
+Running 0:22
+Running 0:12
+Running 0:49
+Running 0:0
+Running 0:8
+Running 0:48
+Running 0:25
+Running 0:51
+Running 0:2
+Running 0:52
+Running 0:28
+Running 0:45
+Running 0:18
+Running 0:4
+Running 0:40
+Running 0:30
+Running 0:41
+Running 0:6
+Running 0:23
+Running 0:46
+Running 0:14
+Running 0:19
+Running 0:54
+Running 0:15
+Running 0:13
+Starttime set to 41298505199171
+Running WorkerThread 5
+Running WorkerThread 17
+Running WorkerThread 47
+Running WorkerThread 22
+Running WorkerThread 1
+Running WorkerThread 16
+Running WorkerThread 39
+Running WorkerThread 50
+Running WorkerThread 49
+Running WorkerThread 41
+Running WorkerThread 34
+Running WorkerThread 2
+Running WorkerThread 48
+Running WorkerThread 55
+Running WorkerThread 59
+Running WorkerThread 56
+Running WorkerThread 58
+Running WorkerThread 25
+Running WorkerThread 53
+Running WorkerThread 54
+Running WorkerThread 60
+Running WorkerThread 30
+Running WorkerThread 52
+Running WorkerThread 12
+Running WorkerThread 44
+Running WorkerThread 46
+Running WorkerThread 31
+Running WorkerThread 18
+Running WorkerThread 15
+Running WorkerThread 33
+Running WorkerThread 32
+Running WorkerThread 36
+Running WorkerThread 7
+Running WorkerThread 29
+Running WorkerThread 23
+Running WorkerThread 13
+Running WorkerThread 42
+Running WorkerThread 38
+Running WorkerThread 10
+Running WorkerThread 3
+Running WorkerThread 27
+Running WorkerThread 4
+Running WorkerThread 35
+Running WorkerThread 8
+Running WorkerThread 19
+Running AbortThread 62
+Running WorkerThread 21
+Running WorkerThread 0
+Running WorkerThread 57
+Running WorkerThread 26
+Running WorkerThread 40
+Running WorkerThread 20
+Running WorkerThread 9
+Running WorkerThread 28
+Running WorkerThread 43
+Running WorkerThread 37
+Running WorkerThread 51
+Running WorkerThread 61
+Running WorkerThread 24
+Running WorkerThread 14
+Running WorkerThread 6
+Running WorkerThread 45
+Running WorkerThread 11
+[prog] total_runtime=0.000000,tput=0.000000,txn_cnt=0,remote_txn_cnt=0,local_txn_cnt=0,local_txn_start_cnt=0,total_txn_commit_cnt=0,local_txn_commit_cnt=0,remote_txn_commit_cnt=0,total_txn_abort_cnt=0,unique_txn_abort_cnt=0,local_txn_abort_cnt=0,remote_txn_abort_cnt=0,txn_run_time=0.000000,txn_run_avg_time=0.000000,multi_part_txn_cnt=0,multi_part_txn_run_time=0.000000,multi_part_txn_avg_time=0.000000,single_part_txn_cnt=0,single_part_txn_run_time=0.000000,single_part_txn_avg_time=0.000000,txn_write_cnt=0,record_write_cnt=0,parts_touched=0,avg_parts_touched=0.000000,ts_alloc_time=0.000000,abort_time=0.000000,txn_manager_time=0.000000,txn_index_time=0.000000,txn_validate_time=0.000000,txn_cleanup_time=0.000000,txn_total_process_time=0.000000,txn_process_time=0.000000,txn_total_local_wait_time=0.000000,txn_local_wait_time=0.000000,txn_total_remote_wait_time=0.000000,txn_remote_wait_time=0.000000,txn_total_twopc_time=0.000000,txn_twopc_time=0.000000,txn_total_process_time_avg=0.000000,txn_process_time_avg=0.000000,txn_total_local_wait_time_avg=0.000000,txn_local_wait_time_avg=0.000000,txn_total_remote_wait_time_avg=0.000000,txn_remote_wait_time_avg=0.000000,txn_total_twopc_time_avg=0.000000,txn_twopc_time_avg=0.000000,abort_queue_enqueue_cnt=0,abort_queue_dequeue_cnt=0,abort_queue_enqueue_time=0.000000,abort_queue_dequeue_time=0.000000,abort_queue_penalty=0.000000,abort_queue_penalty_extra=0.000000,abort_queue_penalty_avg=0.000000,abort_queue_penalty_extra_avg=0.000000,work_queue_wait_time=0.000000,work_queue_cnt=0,work_queue_enq_cnt=0,work_queue_wait_avg_time=0.000000,work_queue_mtx_wait_time=0.000000,work_queue_mtx_wait_avg=0.000000,work_queue_new_cnt=0,work_queue_new_wait_time=0.000000,work_queue_new_wait_avg_time=0.000000,work_queue_old_cnt=0,work_queue_old_wait_time=0.000000,work_queue_old_wait_avg_time=0.000000,work_queue_enqueue_time=0.000000,work_queue_dequeue_time=0.000000,work_queue_conflict_cnt=0,worker_idle_time=0.000000,worker_activate_txn_time=0.000000,worker_deactivate_txn_time=0.000000,worker_release_msg_time=0.000000,worker_process_time=0.000000,worker_process_cnt=0,worker_process_avg_time=0.000000,proc_cnt_type0=0,proc_time_type0=0.000000,proc_cnt_type1=0,proc_time_type1=0.000000,proc_cnt_type2=0,proc_time_type2=0.000000,proc_cnt_type3=0,proc_time_type3=0.000000,proc_cnt_type4=0,proc_time_type4=0.000000,proc_cnt_type5=0,proc_time_type5=0.000000,proc_cnt_type6=0,proc_time_type6=0.000000,proc_cnt_type7=0,proc_time_type7=0.000000,proc_cnt_type8=0,proc_time_type8=0.000000,proc_cnt_type9=0,proc_time_type9=0.000000,proc_cnt_type10=0,proc_time_type10=0.000000,proc_cnt_type11=0,proc_time_type11=0.000000,proc_cnt_type12=0,proc_time_type12=0.000000,proc_cnt_type13=0,proc_time_type13=0.000000,proc_cnt_type14=0,proc_time_type14=0.000000,proc_cnt_type15=0,proc_time_type15=0.000000,proc_cnt_type16=0,proc_time_type16=0.000000,proc_cnt_type17=0,proc_time_type17=0.000000,proc_cnt_type18=0,proc_time_type18=0.000000,proc_cnt_type19=0,proc_time_type19=0.000000,proc_cnt_type20=0,proc_time_type20=0.000000,proc_cnt_type21=0,proc_time_type21=0.000000,proc_cnt_type22=0,proc_time_type22=0.000000,proc_cnt_type23=0,proc_time_type23=0.000000,proc_cnt_type24=0,proc_time_type24=0.000000,msg_queue_delay_time=0.000000,msg_queue_cnt=0,msg_queue_enq_cnt=0,msg_queue_delay_time_avg=0.000000,msg_send_time=0.000000,msg_send_time_avg=0.000000,msg_recv_time=0.000000,msg_recv_time_avg=0.000000,msg_recv_idle_time=0.000000,msg_batch_cnt=0,msg_batch_size_msgs=0,msg_batch_size_msgs_avg=0.000000,msg_batch_size_bytes=0,msg_batch_size_bytes_avg=0.000000,msg_batch_size_bytes_to_server=0,msg_batch_size_bytes_to_client=0,msg_send_cnt=0,msg_recv_cnt=0,msg_unpack_time=0.000000,msg_unpack_time_avg=0.000000,mbuf_send_intv_time=0.000000,mbuf_send_intv_time_avg=0.000000,msg_copy_output_time=0.000000,cc_conflict_cnt=0,txn_wait_cnt=0,txn_conflict_cnt=0,twopl_already_owned_cnt=0,twopl_owned_cnt=0,twopl_sh_owned_cnt=0,twopl_ex_owned_cnt=0,twopl_sh_bypass_cnt=0,twopl_owned_time=0.000000,twopl_sh_owned_time=0.000000,twopl_ex_owned_time=0.000000,twopl_sh_owned_avg_time=0.000000,twopl_ex_owned_avg_time=0.000000,twopl_diff_time=0.000000,twopl_wait_time=0.000000,twopl_getlock_cnt=0,twopl_getlock_time=0.000000,twopl_release_cnt=0,twopl_release_time=0.000000,log_write_cnt=0,log_write_time=0.000000,log_write_avg_time=0.000000,log_flush_cnt=0,log_flush_time=0.000000,log_flush_avg_time=0.000000,log_process_time=0.000000,txn_table_new_cnt=0,txn_table_get_cnt=0,txn_table_release_cnt=0,txn_table_cflt_cnt=0,txn_table_cflt_size=0,txn_table_get_time=0.000000,txn_table_release_time=0.000000,txn_table_min_ts_time=0.000000,txn_table_get_avg_time=0.000000,txn_table_release_avg_time=0.000000,mtx0=0.000000,mtx1=0.000000,mtx2=0.000000,mtx3=0.000000,mtx4=0.000000,mtx5=0.000000,mtx6=0.000000,mtx7=0.000000,mtx8=0.000000,mtx9=0.000000,mtx10=0.000000,mtx11=0.000000,mtx12=0.000000,mtx13=0.000000,mtx14=0.000000,mtx15=0.000000,mtx16=0.000000,mtx17=0.000000,mtx18=0.000000,mtx19=0.000000,mtx20=0.000000,mtx21=0.000000,mtx22=0.000000,mtx23=0.000000,mtx24=0.000000,mtx25=0.000000,mtx26=0.000000,mtx27=0.000000,mtx28=0.000000,mtx29=0.000000,mtx30=0.000000,mtx31=0.000000,mtx32=0.000000,mtx33=0.000000,mtx34=0.000000,mtx35=0.000000,mtx36=0.000000,mtx37=0.000000,mtx38=0.000000,mtx39=0.000000,lat_work_queue_time=0.000000,lat_msg_queue_time=0.000000,lat_cc_block_time=0.000000,lat_cc_time=0.000000,lat_process_time=0.000000,lat_abort_time=0.000000,lat_network_time=0.000000,lat_other_time=0.000000,lat_l_loc_work_queue_time=0.000000,lat_l_loc_msg_queue_time=0.000000,lat_l_loc_cc_block_time=0.000000,lat_l_loc_cc_time=0.000000,lat_l_loc_process_time=0.000000,lat_l_loc_abort_time=0.000000,lat_short_work_queue_time=0.000000,lat_short_msg_queue_time=0.000000,lat_short_cc_block_time=0.000000,lat_short_cc_time=0.000000,lat_short_process_time=0.000000,lat_short_network_time=0.000000,lat_short_batch_time=0.000000,lat_s_loc_work_queue_time=0.000000,lat_s_loc_msg_queue_time=0.000000,lat_s_loc_cc_block_time=0.000000,lat_s_loc_cc_time=0.000000,lat_s_loc_process_time=0.000000,lat_l_rem_work_queue_time=0.000000,lat_l_rem_msg_queue_time=0.000000,lat_l_rem_cc_block_time=0.000000,lat_l_rem_cc_time=0.000000,lat_l_rem_process_time=0.000000,lat_s_rem_work_queue_time=0.000000,lat_s_rem_msg_queue_time=0.000000,lat_s_rem_cc_block_time=0.000000,lat_s_rem_cc_time=0.000000,lat_s_rem_process_time=0.000000,virt_mem_usage=31799324,phys_mem_usage=29124336,cpu_ttl=0.000053
+
+[prog] total_runtime=0.000000,tput=0.000000,txn_cnt=0,remote_txn_cnt=0,local_txn_cnt=0,local_txn_start_cnt=0,total_txn_commit_cnt=0,local_txn_commit_cnt=0,remote_txn_commit_cnt=0,total_txn_abort_cnt=0,unique_txn_abort_cnt=0,local_txn_abort_cnt=0,remote_txn_abort_cnt=0,txn_run_time=0.000000,txn_run_avg_time=0.000000,multi_part_txn_cnt=0,multi_part_txn_run_time=0.000000,multi_part_txn_avg_time=0.000000,single_part_txn_cnt=0,single_part_txn_run_time=0.000000,single_part_txn_avg_time=0.000000,txn_write_cnt=0,record_write_cnt=0,parts_touched=0,avg_parts_touched=0.000000,ts_alloc_time=0.000000,abort_time=0.000000,txn_manager_time=0.000000,txn_index_time=0.000000,txn_validate_time=0.000000,txn_cleanup_time=0.000000,txn_total_process_time=0.000000,txn_process_time=0.000000,txn_total_local_wait_time=0.000000,txn_local_wait_time=0.000000,txn_total_remote_wait_time=0.000000,txn_remote_wait_time=0.000000,txn_total_twopc_time=0.000000,txn_twopc_time=0.000000,txn_total_process_time_avg=0.000000,txn_process_time_avg=0.000000,txn_total_local_wait_time_avg=0.000000,txn_local_wait_time_avg=0.000000,txn_total_remote_wait_time_avg=0.000000,txn_remote_wait_time_avg=0.000000,txn_total_twopc_time_avg=0.000000,txn_twopc_time_avg=0.000000,abort_queue_enqueue_cnt=0,abort_queue_dequeue_cnt=0,abort_queue_enqueue_time=0.000000,abort_queue_dequeue_time=0.000000,abort_queue_penalty=0.000000,abort_queue_penalty_extra=0.000000,abort_queue_penalty_avg=0.000000,abort_queue_penalty_extra_avg=0.000000,work_queue_wait_time=0.000000,work_queue_cnt=0,work_queue_enq_cnt=0,work_queue_wait_avg_time=0.000000,work_queue_mtx_wait_time=0.000000,work_queue_mtx_wait_avg=0.000000,work_queue_new_cnt=0,work_queue_new_wait_time=0.000000,work_queue_new_wait_avg_time=0.000000,work_queue_old_cnt=0,work_queue_old_wait_time=0.000000,work_queue_old_wait_avg_time=0.000000,work_queue_enqueue_time=0.000000,work_queue_dequeue_time=0.000000,work_queue_conflict_cnt=0,worker_idle_time=0.000000,worker_activate_txn_time=0.000000,worker_deactivate_txn_time=0.000000,worker_release_msg_time=0.000000,worker_process_time=0.000000,worker_process_cnt=0,worker_process_avg_time=0.000000,proc_cnt_type0=0,proc_time_type0=0.000000,proc_cnt_type1=0,proc_time_type1=0.000000,proc_cnt_type2=0,proc_time_type2=0.000000,proc_cnt_type3=0,proc_time_type3=0.000000,proc_cnt_type4=0,proc_time_type4=0.000000,proc_cnt_type5=0,proc_time_type5=0.000000,proc_cnt_type6=0,proc_time_type6=0.000000,proc_cnt_type7=0,proc_time_type7=0.000000,proc_cnt_type8=0,proc_time_type8=0.000000,proc_cnt_type9=0,proc_time_type9=0.000000,proc_cnt_type10=0,proc_time_type10=0.000000,proc_cnt_type11=0,proc_time_type11=0.000000,proc_cnt_type12=0,proc_time_type12=0.000000,proc_cnt_type13=0,proc_time_type13=0.000000,proc_cnt_type14=0,proc_time_type14=0.000000,proc_cnt_type15=0,proc_time_type15=0.000000,proc_cnt_type16=0,proc_time_type16=0.000000,proc_cnt_type17=0,proc_time_type17=0.000000,proc_cnt_type18=0,proc_time_type18=0.000000,proc_cnt_type19=0,proc_time_type19=0.000000,proc_cnt_type20=0,proc_time_type20=0.000000,proc_cnt_type21=0,proc_time_type21=0.000000,proc_cnt_type22=0,proc_time_type22=0.000000,proc_cnt_type23=0,proc_time_type23=0.000000,proc_cnt_type24=0,proc_time_type24=0.000000,msg_queue_delay_time=0.000000,msg_queue_cnt=0,msg_queue_enq_cnt=0,msg_queue_delay_time_avg=0.000000,msg_send_time=0.000000,msg_send_time_avg=0.000000,msg_recv_time=0.000000,msg_recv_time_avg=0.000000,msg_recv_idle_time=0.000000,msg_batch_cnt=0,msg_batch_size_msgs=0,msg_batch_size_msgs_avg=0.000000,msg_batch_size_bytes=0,msg_batch_size_bytes_avg=0.000000,msg_batch_size_bytes_to_server=0,msg_batch_size_bytes_to_client=0,msg_send_cnt=0,msg_recv_cnt=0,msg_unpack_time=0.000000,msg_unpack_time_avg=0.000000,mbuf_send_intv_time=0.000000,mbuf_send_intv_time_avg=0.000000,msg_copy_output_time=0.000000,cc_conflict_cnt=0,txn_wait_cnt=0,txn_conflict_cnt=0,twopl_already_owned_cnt=0,twopl_owned_cnt=0,twopl_sh_owned_cnt=0,twopl_ex_owned_cnt=0,twopl_sh_bypass_cnt=0,twopl_owned_time=0.000000,twopl_sh_owned_time=0.000000,twopl_ex_owned_time=0.000000,twopl_sh_owned_avg_time=0.000000,twopl_ex_owned_avg_time=0.000000,twopl_diff_time=0.000000,twopl_wait_time=0.000000,twopl_getlock_cnt=0,twopl_getlock_time=0.000000,twopl_release_cnt=0,twopl_release_time=0.000000,log_write_cnt=0,log_write_time=0.000000,log_write_avg_time=0.000000,log_flush_cnt=0,log_flush_time=0.000000,log_flush_avg_time=0.000000,log_process_time=0.000000,txn_table_new_cnt=0,txn_table_get_cnt=0,txn_table_release_cnt=0,txn_table_cflt_cnt=0,txn_table_cflt_size=0,txn_table_get_time=0.000000,txn_table_release_time=0.000000,txn_table_min_ts_time=0.000000,txn_table_get_avg_time=0.000000,txn_table_release_avg_time=0.000000,mtx0=0.000000,mtx1=0.000000,mtx2=0.000000,mtx3=0.000000,mtx4=0.000000,mtx5=0.000000,mtx6=0.000000,mtx7=0.000000,mtx8=0.000000,mtx9=0.000000,mtx10=0.000000,mtx11=0.000000,mtx12=0.000000,mtx13=0.000000,mtx14=0.000000,mtx15=0.000000,mtx16=0.000000,mtx17=0.000000,mtx18=0.000000,mtx19=0.000000,mtx20=0.000000,mtx21=0.000000,mtx22=0.000000,mtx23=0.000000,mtx24=0.000000,mtx25=0.000000,mtx26=0.000000,mtx27=0.000000,mtx28=0.000000,mtx29=0.000000,mtx30=0.000000,mtx31=0.000000,mtx32=0.000000,mtx33=0.000000,mtx34=0.000000,mtx35=0.000000,mtx36=0.000000,mtx37=0.000000,mtx38=0.000000,mtx39=0.000000,lat_work_queue_time=0.000000,lat_msg_queue_time=0.000000,lat_cc_block_time=0.000000,lat_cc_time=0.000000,lat_process_time=0.000000,lat_abort_time=0.000000,lat_network_time=0.000000,lat_other_time=0.000000,lat_l_loc_work_queue_time=0.000000,lat_l_loc_msg_queue_time=0.000000,lat_l_loc_cc_block_time=0.000000,lat_l_loc_cc_time=0.000000,lat_l_loc_process_time=0.000000,lat_l_loc_abort_time=0.000000,lat_short_work_queue_time=0.000000,lat_short_msg_queue_time=0.000000,lat_short_cc_block_time=0.000000,lat_short_cc_time=0.000000,lat_short_process_time=0.000000,lat_short_network_time=0.000000,lat_short_batch_time=0.000000,lat_s_loc_work_queue_time=0.000000,lat_s_loc_msg_queue_time=0.000000,lat_s_loc_cc_block_time=0.000000,lat_s_loc_cc_time=0.000000,lat_s_loc_process_time=0.000000,lat_l_rem_work_queue_time=0.000000,lat_l_rem_msg_queue_time=0.000000,lat_l_rem_cc_block_time=0.000000,lat_l_rem_cc_time=0.000000,lat_l_rem_process_time=0.000000,lat_s_rem_work_queue_time=0.000000,lat_s_rem_msg_queue_time=0.000000,lat_s_rem_cc_block_time=0.000000,lat_s_rem_cc_time=0.000000,lat_s_rem_process_time=0.000000,virt_mem_usage=33830940,phys_mem_usage=31277304,cpu_ttl=61.805029
+
+[prog] total_runtime=0.000000,tput=0.000000,txn_cnt=0,remote_txn_cnt=0,local_txn_cnt=0,local_txn_start_cnt=0,total_txn_commit_cnt=0,local_txn_commit_cnt=0,remote_txn_commit_cnt=0,total_txn_abort_cnt=0,unique_txn_abort_cnt=0,local_txn_abort_cnt=0,remote_txn_abort_cnt=0,txn_run_time=0.000000,txn_run_avg_time=0.000000,multi_part_txn_cnt=0,multi_part_txn_run_time=0.000000,multi_part_txn_avg_time=0.000000,single_part_txn_cnt=0,single_part_txn_run_time=0.000000,single_part_txn_avg_time=0.000000,txn_write_cnt=0,record_write_cnt=0,parts_touched=0,avg_parts_touched=0.000000,ts_alloc_time=0.000000,abort_time=0.000000,txn_manager_time=0.000000,txn_index_time=0.000000,txn_validate_time=0.000000,txn_cleanup_time=0.000000,txn_total_process_time=0.000000,txn_process_time=0.000000,txn_total_local_wait_time=0.000000,txn_local_wait_time=0.000000,txn_total_remote_wait_time=0.000000,txn_remote_wait_time=0.000000,txn_total_twopc_time=0.000000,txn_twopc_time=0.000000,txn_total_process_time_avg=0.000000,txn_process_time_avg=0.000000,txn_total_local_wait_time_avg=0.000000,txn_local_wait_time_avg=0.000000,txn_total_remote_wait_time_avg=0.000000,txn_remote_wait_time_avg=0.000000,txn_total_twopc_time_avg=0.000000,txn_twopc_time_avg=0.000000,abort_queue_enqueue_cnt=0,abort_queue_dequeue_cnt=0,abort_queue_enqueue_time=0.000000,abort_queue_dequeue_time=0.000000,abort_queue_penalty=0.000000,abort_queue_penalty_extra=0.000000,abort_queue_penalty_avg=0.000000,abort_queue_penalty_extra_avg=0.000000,work_queue_wait_time=0.000000,work_queue_cnt=0,work_queue_enq_cnt=0,work_queue_wait_avg_time=0.000000,work_queue_mtx_wait_time=0.000000,work_queue_mtx_wait_avg=0.000000,work_queue_new_cnt=0,work_queue_new_wait_time=0.000000,work_queue_new_wait_avg_time=0.000000,work_queue_old_cnt=0,work_queue_old_wait_time=0.000000,work_queue_old_wait_avg_time=0.000000,work_queue_enqueue_time=0.000000,work_queue_dequeue_time=0.000000,work_queue_conflict_cnt=0,worker_idle_time=0.000000,worker_activate_txn_time=0.000000,worker_deactivate_txn_time=0.000000,worker_release_msg_time=0.000000,worker_process_time=0.000000,worker_process_cnt=0,worker_process_avg_time=0.000000,proc_cnt_type0=0,proc_time_type0=0.000000,proc_cnt_type1=0,proc_time_type1=0.000000,proc_cnt_type2=0,proc_time_type2=0.000000,proc_cnt_type3=0,proc_time_type3=0.000000,proc_cnt_type4=0,proc_time_type4=0.000000,proc_cnt_type5=0,proc_time_type5=0.000000,proc_cnt_type6=0,proc_time_type6=0.000000,proc_cnt_type7=0,proc_time_type7=0.000000,proc_cnt_type8=0,proc_time_type8=0.000000,proc_cnt_type9=0,proc_time_type9=0.000000,proc_cnt_type10=0,proc_time_type10=0.000000,proc_cnt_type11=0,proc_time_type11=0.000000,proc_cnt_type12=0,proc_time_type12=0.000000,proc_cnt_type13=0,proc_time_type13=0.000000,proc_cnt_type14=0,proc_time_type14=0.000000,proc_cnt_type15=0,proc_time_type15=0.000000,proc_cnt_type16=0,proc_time_type16=0.000000,proc_cnt_type17=0,proc_time_type17=0.000000,proc_cnt_type18=0,proc_time_type18=0.000000,proc_cnt_type19=0,proc_time_type19=0.000000,proc_cnt_type20=0,proc_time_type20=0.000000,proc_cnt_type21=0,proc_time_type21=0.000000,proc_cnt_type22=0,proc_time_type22=0.000000,proc_cnt_type23=0,proc_time_type23=0.000000,proc_cnt_type24=0,proc_time_type24=0.000000,msg_queue_delay_time=0.000000,msg_queue_cnt=0,msg_queue_enq_cnt=0,msg_queue_delay_time_avg=0.000000,msg_send_time=0.000000,msg_send_time_avg=0.000000,msg_recv_time=0.000000,msg_recv_time_avg=0.000000,msg_recv_idle_time=0.000000,msg_batch_cnt=0,msg_batch_size_msgs=0,msg_batch_size_msgs_avg=0.000000,msg_batch_size_bytes=0,msg_batch_size_bytes_avg=0.000000,msg_batch_size_bytes_to_server=0,msg_batch_size_bytes_to_client=0,msg_send_cnt=0,msg_recv_cnt=0,msg_unpack_time=0.000000,msg_unpack_time_avg=0.000000,mbuf_send_intv_time=0.000000,mbuf_send_intv_time_avg=0.000000,msg_copy_output_time=0.000000,cc_conflict_cnt=0,txn_wait_cnt=0,txn_conflict_cnt=0,twopl_already_owned_cnt=0,twopl_owned_cnt=0,twopl_sh_owned_cnt=0,twopl_ex_owned_cnt=0,twopl_sh_bypass_cnt=0,twopl_owned_time=0.000000,twopl_sh_owned_time=0.000000,twopl_ex_owned_time=0.000000,twopl_sh_owned_avg_time=0.000000,twopl_ex_owned_avg_time=0.000000,twopl_diff_time=0.000000,twopl_wait_time=0.000000,twopl_getlock_cnt=0,twopl_getlock_time=0.000000,twopl_release_cnt=0,twopl_release_time=0.000000,log_write_cnt=0,log_write_time=0.000000,log_write_avg_time=0.000000,log_flush_cnt=0,log_flush_time=0.000000,log_flush_avg_time=0.000000,log_process_time=0.000000,txn_table_new_cnt=0,txn_table_get_cnt=0,txn_table_release_cnt=0,txn_table_cflt_cnt=0,txn_table_cflt_size=0,txn_table_get_time=0.000000,txn_table_release_time=0.000000,txn_table_min_ts_time=0.000000,txn_table_get_avg_time=0.000000,txn_table_release_avg_time=0.000000,mtx0=0.000000,mtx1=0.000000,mtx2=0.000000,mtx3=0.000000,mtx4=0.000000,mtx5=0.000000,mtx6=0.000000,mtx7=0.000000,mtx8=0.000000,mtx9=0.000000,mtx10=0.000000,mtx11=0.000000,mtx12=0.000000,mtx13=0.000000,mtx14=0.000000,mtx15=0.000000,mtx16=0.000000,mtx17=0.000000,mtx18=0.000000,mtx19=0.000000,mtx20=0.000000,mtx21=0.000000,mtx22=0.000000,mtx23=0.000000,mtx24=0.000000,mtx25=0.000000,mtx26=0.000000,mtx27=0.000000,mtx28=0.000000,mtx29=0.000000,mtx30=0.000000,mtx31=0.000000,mtx32=0.000000,mtx33=0.000000,mtx34=0.000000,mtx35=0.000000,mtx36=0.000000,mtx37=0.000000,mtx38=0.000000,mtx39=0.000000,lat_work_queue_time=0.000000,lat_msg_queue_time=0.000000,lat_cc_block_time=0.000000,lat_cc_time=0.000000,lat_process_time=0.000000,lat_abort_time=0.000000,lat_network_time=0.000000,lat_other_time=0.000000,lat_l_loc_work_queue_time=0.000000,lat_l_loc_msg_queue_time=0.000000,lat_l_loc_cc_block_time=0.000000,lat_l_loc_cc_time=0.000000,lat_l_loc_process_time=0.000000,lat_l_loc_abort_time=0.000000,lat_short_work_queue_time=0.000000,lat_short_msg_queue_time=0.000000,lat_short_cc_block_time=0.000000,lat_short_cc_time=0.000000,lat_short_process_time=0.000000,lat_short_network_time=0.000000,lat_short_batch_time=0.000000,lat_s_loc_work_queue_time=0.000000,lat_s_loc_msg_queue_time=0.000000,lat_s_loc_cc_block_time=0.000000,lat_s_loc_cc_time=0.000000,lat_s_loc_process_time=0.000000,lat_l_rem_work_queue_time=0.000000,lat_l_rem_msg_queue_time=0.000000,lat_l_rem_cc_block_time=0.000000,lat_l_rem_cc_time=0.000000,lat_l_rem_process_time=0.000000,lat_s_rem_work_queue_time=0.000000,lat_s_rem_msg_queue_time=0.000000,lat_s_rem_cc_block_time=0.000000,lat_s_rem_cc_time=0.000000,lat_s_rem_process_time=0.000000,virt_mem_usage=35993628,phys_mem_usage=33628408,cpu_ttl=68.220256
+
+[prog] total_runtime=0.000000,tput=0.000000,txn_cnt=0,remote_txn_cnt=0,local_txn_cnt=0,local_txn_start_cnt=0,total_txn_commit_cnt=0,local_txn_commit_cnt=0,remote_txn_commit_cnt=0,total_txn_abort_cnt=0,unique_txn_abort_cnt=0,local_txn_abort_cnt=0,remote_txn_abort_cnt=0,txn_run_time=0.000000,txn_run_avg_time=0.000000,multi_part_txn_cnt=0,multi_part_txn_run_time=0.000000,multi_part_txn_avg_time=0.000000,single_part_txn_cnt=0,single_part_txn_run_time=0.000000,single_part_txn_avg_time=0.000000,txn_write_cnt=0,record_write_cnt=0,parts_touched=0,avg_parts_touched=0.000000,ts_alloc_time=0.000000,abort_time=0.000000,txn_manager_time=0.000000,txn_index_time=0.000000,txn_validate_time=0.000000,txn_cleanup_time=0.000000,txn_total_process_time=0.000000,txn_process_time=0.000000,txn_total_local_wait_time=0.000000,txn_local_wait_time=0.000000,txn_total_remote_wait_time=0.000000,txn_remote_wait_time=0.000000,txn_total_twopc_time=0.000000,txn_twopc_time=0.000000,txn_total_process_time_avg=0.000000,txn_process_time_avg=0.000000,txn_total_local_wait_time_avg=0.000000,txn_local_wait_time_avg=0.000000,txn_total_remote_wait_time_avg=0.000000,txn_remote_wait_time_avg=0.000000,txn_total_twopc_time_avg=0.000000,txn_twopc_time_avg=0.000000,abort_queue_enqueue_cnt=0,abort_queue_dequeue_cnt=0,abort_queue_enqueue_time=0.000000,abort_queue_dequeue_time=0.000000,abort_queue_penalty=0.000000,abort_queue_penalty_extra=0.000000,abort_queue_penalty_avg=0.000000,abort_queue_penalty_extra_avg=0.000000,work_queue_wait_time=0.000000,work_queue_cnt=0,work_queue_enq_cnt=0,work_queue_wait_avg_time=0.000000,work_queue_mtx_wait_time=0.000000,work_queue_mtx_wait_avg=0.000000,work_queue_new_cnt=0,work_queue_new_wait_time=0.000000,work_queue_new_wait_avg_time=0.000000,work_queue_old_cnt=0,work_queue_old_wait_time=0.000000,work_queue_old_wait_avg_time=0.000000,work_queue_enqueue_time=0.000000,work_queue_dequeue_time=0.000000,work_queue_conflict_cnt=0,worker_idle_time=0.000000,worker_activate_txn_time=0.000000,worker_deactivate_txn_time=0.000000,worker_release_msg_time=0.000000,worker_process_time=0.000000,worker_process_cnt=0,worker_process_avg_time=0.000000,proc_cnt_type0=0,proc_time_type0=0.000000,proc_cnt_type1=0,proc_time_type1=0.000000,proc_cnt_type2=0,proc_time_type2=0.000000,proc_cnt_type3=0,proc_time_type3=0.000000,proc_cnt_type4=0,proc_time_type4=0.000000,proc_cnt_type5=0,proc_time_type5=0.000000,proc_cnt_type6=0,proc_time_type6=0.000000,proc_cnt_type7=0,proc_time_type7=0.000000,proc_cnt_type8=0,proc_time_type8=0.000000,proc_cnt_type9=0,proc_time_type9=0.000000,proc_cnt_type10=0,proc_time_type10=0.000000,proc_cnt_type11=0,proc_time_type11=0.000000,proc_cnt_type12=0,proc_time_type12=0.000000,proc_cnt_type13=0,proc_time_type13=0.000000,proc_cnt_type14=0,proc_time_type14=0.000000,proc_cnt_type15=0,proc_time_type15=0.000000,proc_cnt_type16=0,proc_time_type16=0.000000,proc_cnt_type17=0,proc_time_type17=0.000000,proc_cnt_type18=0,proc_time_type18=0.000000,proc_cnt_type19=0,proc_time_type19=0.000000,proc_cnt_type20=0,proc_time_type20=0.000000,proc_cnt_type21=0,proc_time_type21=0.000000,proc_cnt_type22=0,proc_time_type22=0.000000,proc_cnt_type23=0,proc_time_type23=0.000000,proc_cnt_type24=0,proc_time_type24=0.000000,msg_queue_delay_time=0.000000,msg_queue_cnt=0,msg_queue_enq_cnt=0,msg_queue_delay_time_avg=0.000000,msg_send_time=0.000000,msg_send_time_avg=0.000000,msg_recv_time=0.000000,msg_recv_time_avg=0.000000,msg_recv_idle_time=0.000000,msg_batch_cnt=0,msg_batch_size_msgs=0,msg_batch_size_msgs_avg=0.000000,msg_batch_size_bytes=0,msg_batch_size_bytes_avg=0.000000,msg_batch_size_bytes_to_server=0,msg_batch_size_bytes_to_client=0,msg_send_cnt=0,msg_recv_cnt=0,msg_unpack_time=0.000000,msg_unpack_time_avg=0.000000,mbuf_send_intv_time=0.000000,mbuf_send_intv_time_avg=0.000000,msg_copy_output_time=0.000000,cc_conflict_cnt=0,txn_wait_cnt=0,txn_conflict_cnt=0,twopl_already_owned_cnt=0,twopl_owned_cnt=0,twopl_sh_owned_cnt=0,twopl_ex_owned_cnt=0,twopl_sh_bypass_cnt=0,twopl_owned_time=0.000000,twopl_sh_owned_time=0.000000,twopl_ex_owned_time=0.000000,twopl_sh_owned_avg_time=0.000000,twopl_ex_owned_avg_time=0.000000,twopl_diff_time=0.000000,twopl_wait_time=0.000000,twopl_getlock_cnt=0,twopl_getlock_time=0.000000,twopl_release_cnt=0,twopl_release_time=0.000000,log_write_cnt=0,log_write_time=0.000000,log_write_avg_time=0.000000,log_flush_cnt=0,log_flush_time=0.000000,log_flush_avg_time=0.000000,log_process_time=0.000000,txn_table_new_cnt=0,txn_table_get_cnt=0,txn_table_release_cnt=0,txn_table_cflt_cnt=0,txn_table_cflt_size=0,txn_table_get_time=0.000000,txn_table_release_time=0.000000,txn_table_min_ts_time=0.000000,txn_table_get_avg_time=0.000000,txn_table_release_avg_time=0.000000,mtx0=0.000000,mtx1=0.000000,mtx2=0.000000,mtx3=0.000000,mtx4=0.000000,mtx5=0.000000,mtx6=0.000000,mtx7=0.000000,mtx8=0.000000,mtx9=0.000000,mtx10=0.000000,mtx11=0.000000,mtx12=0.000000,mtx13=0.000000,mtx14=0.000000,mtx15=0.000000,mtx16=0.000000,mtx17=0.000000,mtx18=0.000000,mtx19=0.000000,mtx20=0.000000,mtx21=0.000000,mtx22=0.000000,mtx23=0.000000,mtx24=0.000000,mtx25=0.000000,mtx26=0.000000,mtx27=0.000000,mtx28=0.000000,mtx29=0.000000,mtx30=0.000000,mtx31=0.000000,mtx32=0.000000,mtx33=0.000000,mtx34=0.000000,mtx35=0.000000,mtx36=0.000000,mtx37=0.000000,mtx38=0.000000,mtx39=0.000000,lat_work_queue_time=0.000000,lat_msg_queue_time=0.000000,lat_cc_block_time=0.000000,lat_cc_time=0.000000,lat_process_time=0.000000,lat_abort_time=0.000000,lat_network_time=0.000000,lat_other_time=0.000000,lat_l_loc_work_queue_time=0.000000,lat_l_loc_msg_queue_time=0.000000,lat_l_loc_cc_block_time=0.000000,lat_l_loc_cc_time=0.000000,lat_l_loc_process_time=0.000000,lat_l_loc_abort_time=0.000000,lat_short_work_queue_time=0.000000,lat_short_msg_queue_time=0.000000,lat_short_cc_block_time=0.000000,lat_short_cc_time=0.000000,lat_short_process_time=0.000000,lat_short_network_time=0.000000,lat_short_batch_time=0.000000,lat_s_loc_work_queue_time=0.000000,lat_s_loc_msg_queue_time=0.000000,lat_s_loc_cc_block_time=0.000000,lat_s_loc_cc_time=0.000000,lat_s_loc_process_time=0.000000,lat_l_rem_work_queue_time=0.000000,lat_l_rem_msg_queue_time=0.000000,lat_l_rem_cc_block_time=0.000000,lat_l_rem_cc_time=0.000000,lat_l_rem_process_time=0.000000,lat_s_rem_work_queue_time=0.000000,lat_s_rem_msg_queue_time=0.000000,lat_s_rem_cc_block_time=0.000000,lat_s_rem_cc_time=0.000000,lat_s_rem_process_time=0.000000,virt_mem_usage=39667740,phys_mem_usage=36877280,cpu_ttl=86.243386
+
+[prog] total_runtime=0.000000,tput=0.000000,txn_cnt=0,remote_txn_cnt=0,local_txn_cnt=0,local_txn_start_cnt=0,total_txn_commit_cnt=0,local_txn_commit_cnt=0,remote_txn_commit_cnt=0,total_txn_abort_cnt=0,unique_txn_abort_cnt=0,local_txn_abort_cnt=0,remote_txn_abort_cnt=0,txn_run_time=0.000000,txn_run_avg_time=0.000000,multi_part_txn_cnt=0,multi_part_txn_run_time=0.000000,multi_part_txn_avg_time=0.000000,single_part_txn_cnt=0,single_part_txn_run_time=0.000000,single_part_txn_avg_time=0.000000,txn_write_cnt=0,record_write_cnt=0,parts_touched=0,avg_parts_touched=0.000000,ts_alloc_time=0.000000,abort_time=0.000000,txn_manager_time=0.000000,txn_index_time=0.000000,txn_validate_time=0.000000,txn_cleanup_time=0.000000,txn_total_process_time=0.000000,txn_process_time=0.000000,txn_total_local_wait_time=0.000000,txn_local_wait_time=0.000000,txn_total_remote_wait_time=0.000000,txn_remote_wait_time=0.000000,txn_total_twopc_time=0.000000,txn_twopc_time=0.000000,txn_total_process_time_avg=0.000000,txn_process_time_avg=0.000000,txn_total_local_wait_time_avg=0.000000,txn_local_wait_time_avg=0.000000,txn_total_remote_wait_time_avg=0.000000,txn_remote_wait_time_avg=0.000000,txn_total_twopc_time_avg=0.000000,txn_twopc_time_avg=0.000000,abort_queue_enqueue_cnt=0,abort_queue_dequeue_cnt=0,abort_queue_enqueue_time=0.000000,abort_queue_dequeue_time=0.000000,abort_queue_penalty=0.000000,abort_queue_penalty_extra=0.000000,abort_queue_penalty_avg=0.000000,abort_queue_penalty_extra_avg=0.000000,work_queue_wait_time=0.000000,work_queue_cnt=0,work_queue_enq_cnt=0,work_queue_wait_avg_time=0.000000,work_queue_mtx_wait_time=0.000000,work_queue_mtx_wait_avg=0.000000,work_queue_new_cnt=0,work_queue_new_wait_time=0.000000,work_queue_new_wait_avg_time=0.000000,work_queue_old_cnt=0,work_queue_old_wait_time=0.000000,work_queue_old_wait_avg_time=0.000000,work_queue_enqueue_time=0.000000,work_queue_dequeue_time=0.000000,work_queue_conflict_cnt=0,worker_idle_time=0.000000,worker_activate_txn_time=0.000000,worker_deactivate_txn_time=0.000000,worker_release_msg_time=0.000000,worker_process_time=0.000000,worker_process_cnt=0,worker_process_avg_time=0.000000,proc_cnt_type0=0,proc_time_type0=0.000000,proc_cnt_type1=0,proc_time_type1=0.000000,proc_cnt_type2=0,proc_time_type2=0.000000,proc_cnt_type3=0,proc_time_type3=0.000000,proc_cnt_type4=0,proc_time_type4=0.000000,proc_cnt_type5=0,proc_time_type5=0.000000,proc_cnt_type6=0,proc_time_type6=0.000000,proc_cnt_type7=0,proc_time_type7=0.000000,proc_cnt_type8=0,proc_time_type8=0.000000,proc_cnt_type9=0,proc_time_type9=0.000000,proc_cnt_type10=0,proc_time_type10=0.000000,proc_cnt_type11=0,proc_time_type11=0.000000,proc_cnt_type12=0,proc_time_type12=0.000000,proc_cnt_type13=0,proc_time_type13=0.000000,proc_cnt_type14=0,proc_time_type14=0.000000,proc_cnt_type15=0,proc_time_type15=0.000000,proc_cnt_type16=0,proc_time_type16=0.000000,proc_cnt_type17=0,proc_time_type17=0.000000,proc_cnt_type18=0,proc_time_type18=0.000000,proc_cnt_type19=0,proc_time_type19=0.000000,proc_cnt_type20=0,proc_time_type20=0.000000,proc_cnt_type21=0,proc_time_type21=0.000000,proc_cnt_type22=0,proc_time_type22=0.000000,proc_cnt_type23=0,proc_time_type23=0.000000,proc_cnt_type24=0,proc_time_type24=0.000000,msg_queue_delay_time=0.000000,msg_queue_cnt=0,msg_queue_enq_cnt=0,msg_queue_delay_time_avg=0.000000,msg_send_time=0.000000,msg_send_time_avg=0.000000,msg_recv_time=0.000000,msg_recv_time_avg=0.000000,msg_recv_idle_time=0.000000,msg_batch_cnt=0,msg_batch_size_msgs=0,msg_batch_size_msgs_avg=0.000000,msg_batch_size_bytes=0,msg_batch_size_bytes_avg=0.000000,msg_batch_size_bytes_to_server=0,msg_batch_size_bytes_to_client=0,msg_send_cnt=0,msg_recv_cnt=0,msg_unpack_time=0.000000,msg_unpack_time_avg=0.000000,mbuf_send_intv_time=0.000000,mbuf_send_intv_time_avg=0.000000,msg_copy_output_time=0.000000,cc_conflict_cnt=0,txn_wait_cnt=0,txn_conflict_cnt=0,twopl_already_owned_cnt=0,twopl_owned_cnt=0,twopl_sh_owned_cnt=0,twopl_ex_owned_cnt=0,twopl_sh_bypass_cnt=0,twopl_owned_time=0.000000,twopl_sh_owned_time=0.000000,twopl_ex_owned_time=0.000000,twopl_sh_owned_avg_time=0.000000,twopl_ex_owned_avg_time=0.000000,twopl_diff_time=0.000000,twopl_wait_time=0.000000,twopl_getlock_cnt=0,twopl_getlock_time=0.000000,twopl_release_cnt=0,twopl_release_time=0.000000,log_write_cnt=0,log_write_time=0.000000,log_write_avg_time=0.000000,log_flush_cnt=0,log_flush_time=0.000000,log_flush_avg_time=0.000000,log_process_time=0.000000,txn_table_new_cnt=0,txn_table_get_cnt=0,txn_table_release_cnt=0,txn_table_cflt_cnt=0,txn_table_cflt_size=0,txn_table_get_time=0.000000,txn_table_release_time=0.000000,txn_table_min_ts_time=0.000000,txn_table_get_avg_time=0.000000,txn_table_release_avg_time=0.000000,mtx0=0.000000,mtx1=0.000000,mtx2=0.000000,mtx3=0.000000,mtx4=0.000000,mtx5=0.000000,mtx6=0.000000,mtx7=0.000000,mtx8=0.000000,mtx9=0.000000,mtx10=0.000000,mtx11=0.000000,mtx12=0.000000,mtx13=0.000000,mtx14=0.000000,mtx15=0.000000,mtx16=0.000000,mtx17=0.000000,mtx18=0.000000,mtx19=0.000000,mtx20=0.000000,mtx21=0.000000,mtx22=0.000000,mtx23=0.000000,mtx24=0.000000,mtx25=0.000000,mtx26=0.000000,mtx27=0.000000,mtx28=0.000000,mtx29=0.000000,mtx30=0.000000,mtx31=0.000000,mtx32=0.000000,mtx33=0.000000,mtx34=0.000000,mtx35=0.000000,mtx36=0.000000,mtx37=0.000000,mtx38=0.000000,mtx39=0.000000,lat_work_queue_time=0.000000,lat_msg_queue_time=0.000000,lat_cc_block_time=0.000000,lat_cc_time=0.000000,lat_process_time=0.000000,lat_abort_time=0.000000,lat_network_time=0.000000,lat_other_time=0.000000,lat_l_loc_work_queue_time=0.000000,lat_l_loc_msg_queue_time=0.000000,lat_l_loc_cc_block_time=0.000000,lat_l_loc_cc_time=0.000000,lat_l_loc_process_time=0.000000,lat_l_loc_abort_time=0.000000,lat_short_work_queue_time=0.000000,lat_short_msg_queue_time=0.000000,lat_short_cc_block_time=0.000000,lat_short_cc_time=0.000000,lat_short_process_time=0.000000,lat_short_network_time=0.000000,lat_short_batch_time=0.000000,lat_s_loc_work_queue_time=0.000000,lat_s_loc_msg_queue_time=0.000000,lat_s_loc_cc_block_time=0.000000,lat_s_loc_cc_time=0.000000,lat_s_loc_process_time=0.000000,lat_l_rem_work_queue_time=0.000000,lat_l_rem_msg_queue_time=0.000000,lat_l_rem_cc_block_time=0.000000,lat_l_rem_cc_time=0.000000,lat_l_rem_process_time=0.000000,lat_s_rem_work_queue_time=0.000000,lat_s_rem_msg_queue_time=0.000000,lat_s_rem_cc_block_time=0.000000,lat_s_rem_cc_time=0.000000,lat_s_rem_process_time=0.000000,virt_mem_usage=43366428,phys_mem_usage=39878064,cpu_ttl=78.325608
+

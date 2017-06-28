@@ -359,7 +359,8 @@ uint32_t PlannerThread::get_split(uint64_t key, Array<uint64_t> * ranges) {
             return i;
         }
     }
-    M_ASSERT_V(false, "could not assign to range key = %ld\n", key);
+//    M_ASSERT_V(false, "could not assign to range key = %ld\n", key);
+    return ranges->size()-1;
 }
 
 RC PlannerThread::run() {

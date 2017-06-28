@@ -16,7 +16,7 @@ import time
 from datetime import timedelta
 
 def set_config(ncc_alg, wthd_cnt, theta):
-    print('set config: CC_ALG={}, THREAD_CNT={}'.format(ncc_alg, wthd_cnt))
+    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}'.format(ncc_alg, wthd_cnt, theta))
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
     oofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'oconfig.h'
@@ -28,16 +28,16 @@ def set_config(ncc_alg, wthd_cnt, theta):
         #change worker threads
         m = re.search('#define THREAD_CNT\s+(\d+)', line.strip())
         if m:
-            print(m.group(1))
+            # print(m.group(1))
             nline = '#define THREAD_CNT {}\n'.format(wthd_cnt)
         #changing cc_alg
         ccalg_m = re.search('#define CC_ALG\s+(\S+)', line.strip())
         if (ccalg_m):
-            print(ccalg_m.group(1))
+            # print(ccalg_m.group(1))
             nline = '#define CC_ALG {}\n'.format(ncc_alg)
         theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d)', line.strip())
         if (theta_m):
-            print(theta_m.group(1))
+            # print(theta_m.group(1))
             nline = '#define ZIPF_THETA {}\n'.format(theta)
         nconf.write(nline)
     nconf.close()
@@ -51,9 +51,9 @@ def exec_cmd(cmd, env):
     print('Output:')
     for ol in p.stdout:
         print(ol.decode(encoding="utf-8", errors="strict"), end='')
-    print('Error:')
-    for el in p.stderr:
-        print(el.decode(encoding="utf-8", errors="strict"), end='')
+    # print('Error:')
+    # for el in p.stderr:
+        # print(el.decode(encoding="utf-8", errors="strict"), end='')
 
 def build_project():
     env = dict(os.environ)
@@ -233,15 +233,18 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-num_trials = 3;
+num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-cc_algs = ['NO_WAIT', 'QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC' , 'MAAT' ]
+# cc_algs = ['NO_WAIT', 'QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
+cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
 # cc_algs = ['NO_WAIT']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
-wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60, 62, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124] # x1.32xlarge
+# wthreads = [2,4,8,15,16,24,30,32,48,56,60] # for m4.16xlarge
+wthreads = [4,8,16,32,48,62,80,96,112,124] # x1.32xlarge
 # wthreads = [1,2]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
-zipftheta = [0.0,0.3,0.6,0.7,0.9]
+# zipftheta = [0.0,0.3,0.6,0.7,0.9]
+zipftheta = [0.0,0.6,0.9]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 procs = []
@@ -262,12 +265,12 @@ for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:
             runexp = True
-            if wthd == 1  and ncc_alg != 'QUECC':
+            if wthd == 4  and ncc_alg != 'QUECC':
                 #Don't run other CCs with 1 thread 
                 runexp = False
 
-            if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
-            # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
+            # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
+            if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
                 #Don't run QueCC with more than 30 threads 
                 runexp = False
             if runexp:       
@@ -275,8 +278,8 @@ for ncc_alg in cc_algs:
                 # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
                 build_project()
                 for trial in list(range(num_trials)):
-                    # run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir)
-                    print('Dry run: {}, {}, {}, t{}'.format(ncc_alg, str(wthd), str(theta), str(trial)))
+                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir)
+                    # print('Dry run: {}, {}, {}, t{}'.format(ncc_alg, str(wthd), str(theta), str(trial)))
                     seq_no = seq_no + 1           
 res = get_df_csv(outdir)
 eltime = time.time() - stime
