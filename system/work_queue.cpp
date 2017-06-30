@@ -50,7 +50,7 @@ void QWorkQueue::init() {
     }
   }
 
-  //TODO(tq): is this cache-aware?
+  //TODO(tq): is this cache-aware? Need to study and figure out hte optimal layout
   for (uint64_t i=0; i < g_batch_map_length ; i++){
 #if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
       (batch_map_comp_cnts[i]).store(0);
@@ -59,7 +59,13 @@ void QWorkQueue::init() {
 #if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
       (batch_map_comp_cnts[i][j]).store(0);
 #endif
+        // pointer-based implementation of PG_MAP
+        // with static allocation there is no need fo this
+#if BATCHING_MODE == SIZE_BASED
+      (batch_pg_map[i][j]).status.store(0);
+#else
       (batch_pg_map[i][j]).store(0);
+#endif
     }
   }
 

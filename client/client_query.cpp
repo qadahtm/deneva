@@ -38,6 +38,9 @@ Client_query_queue::init(Workload * h_wl) {
 #else
   size = g_servers_per_client;
 #endif
+#if CC_ALG == QUECC
+    size = g_plan_thread_cnt;
+#endif
   query_cnt = new uint64_t * [size];
   for ( UInt32 id = 0; id < size; id ++) {
     std::vector<BaseQuery*> new_queries(g_max_txn_per_part+4,NULL);

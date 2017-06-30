@@ -90,6 +90,7 @@ public:
     // QueCC batch slot map
 // Layout of the batch map is imporatant to avoid potential tharshing
     volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+//    batch_partition batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
 
     // Use to synchronize between ETs so that a priority group will need to be completed before any transaction
     // from the next one starts to process
@@ -103,7 +104,13 @@ public:
 
 
     // A map for holding arrays of transaction contexts
+#if BATCHING_MODE == SIZE_BASED
+    priority_group batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
+#else
     volatile atomic<uint64_t> batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
+#endif
+
+
 
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it

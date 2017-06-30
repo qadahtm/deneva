@@ -30,6 +30,7 @@ typedef std::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
 struct transaction_context {
     uint64_t txn_id;
 //    uint64_t completion_cnt;
+// this need to be reset on reuse
     boost::atomic<uint64_t> completion_cnt;
     uint64_t client_startts;
     uint64_t batch_id;
@@ -65,15 +66,20 @@ struct priority_group{
     uint64_t planner_id;
     uint64_t batch_id;
     uint64_t batch_txn_cnt;
-    transaction_context * txn_ctxs;
+    atomic<uint64_t> status;
     hash_table_t * txn_dep_graph;
     uint64_t batch_starting_txn_id;
+#if BATCHING_MODE == SIZE_BASED
+    transaction_context txn_ctxs[BATCH_SIZE/PLAN_THREAD_CNT];
+#else
+    transaction_context * txn_ctxs;
+#endif
 };
 
 struct batch_partition{
     uint64_t planner_id;
     uint64_t batch_id;
-    atomic<uint64_t> batch_part_status;
+    atomic<uint64_t> status;
     priority_group * planner_pg;
 
     // A small optimization in case there is only a single exec_q
@@ -104,8 +110,6 @@ struct assign_entry{
     Array<Array<exec_queue_entry> *> * exec_qs;
     uint64_t curr_sum;
     uint64_t exec_thd_id;
-
-
 };
 
 inline void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list);

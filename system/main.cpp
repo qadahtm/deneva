@@ -78,6 +78,10 @@ int main(int argc, char* argv[])
 	srand(seed);
 	printf("Random seed: %ld\n",seed);
 
+#if CC_ALG == QUECC && BATCHING_MODE == SIZE_BASED
+    M_ASSERT_V(g_batch_size % g_plan_thread_cnt == 0, "(BATCH_SIZE) remainder PLAN_THREAD_CNT != 0,"
+            " please configure them proparly, remainder = %d", g_batch_size % g_plan_thread_cnt)
+#endif
 	int64_t starttime;
 	int64_t endtime;
   starttime = get_server_clock();

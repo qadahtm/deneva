@@ -292,13 +292,13 @@ RC WorkerThread::run() {
                 exec_queue_entry exec_qe = exec_q->get(i);
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
                 M_ASSERT_V(exec_qe.txn_id == exec_qe.txn_ctx->txn_id,
-                           "ET_%ld : Executed QueCC txn fragment, wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
+                           "ET_%ld : Executed QueCC txn fragment, txn_id mismatch, wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
                            _thd_id, wbatch_id, exec_qe.txn_ctx->batch_id, exec_qe.txn_id, exec_qe.txn_ctx->txn_id);
                 M_ASSERT_V(exec_qe.txn_ctx->batch_id == wbatch_id,
-                           "ET_%ld : Executed QueCC txn fragment, wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
+                           "ET_%ld : Executed QueCC txn fragment, batch_id mismatch wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
                            _thd_id, wbatch_id, exec_qe.txn_ctx->batch_id, exec_qe.txn_id, exec_qe.txn_ctx->txn_id);
 
-                M_ASSERT_V(exec_qe.batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
+                M_ASSERT_V(exec_qe.batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld], batch_id mismatch"
                         " wbatch_id=%ld, ebatch_id = %ld, at exec_q_entry[%ld]\n",
                            batch_slot,_thd_id, wplanner_id, wbatch_id, exec_qe.batch_id, i);
 
@@ -323,7 +323,12 @@ RC WorkerThread::run() {
                 // Execution thrad that will execute the last operation will commit
 
                 if (comp_cnt == (REQ_PER_QUERY-1)) {
-//                    quecc_commit_starttime = get_sys_clock();
+#if CT_ENABLED
+                    INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
+                    exec_qe.txn_ctx->txn_state = TXN_READY_TO_COMMIT;
+#else
+
+                    quecc_commit_starttime = get_sys_clock();
 //                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
 //                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
 //                          txn_man->return_id, exec_qe.return_node_id, g_node_id);
@@ -335,29 +340,28 @@ RC WorkerThread::run() {
 
                     // Committing
                     // Sending response to client a
-//                    quecc_prof_time = get_sys_clock();
-//#if !SERVER_GENERATE_QUERIES
-//                    Message * rsp_msg = Message::create_message(CL_RSP);
-//                    rsp_msg->txn_id = exec_qe.txn_id;
-//                    rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
-//                    ((ClientResponseMessage *) rsp_msg)->client_startts = exec_qe.txn_ctx->client_startts;
-////                    ((ClientResponseMessage *) rsp_msg)->batch_id = wbatch_id;
-//                    rsp_msg->lat_work_queue_time = 0;
-//                    rsp_msg->lat_msg_queue_time = 0;
-//                    rsp_msg->lat_cc_block_time = 0;
-//                    rsp_msg->lat_cc_time = 0;
-//                    rsp_msg->lat_process_time = 0;
-//                    rsp_msg->lat_network_time = 0;
-//                    rsp_msg->lat_other_time = 0;
-//
-//                    msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
-//                    INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
-//#endif
+                    quecc_prof_time = get_sys_clock();
+#if !SERVER_GENERATE_QUERIES
+                    Message * rsp_msg = Message::create_message(CL_RSP);
+                    rsp_msg->txn_id = exec_qe.txn_id;
+                    rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
+                    ((ClientResponseMessage *) rsp_msg)->client_startts = exec_qe.txn_ctx->client_startts;
+//                    ((ClientResponseMessage *) rsp_msg)->batch_id = wbatch_id;
+                    rsp_msg->lat_work_queue_time = 0;
+                    rsp_msg->lat_msg_queue_time = 0;
+                    rsp_msg->lat_cc_block_time = 0;
+                    rsp_msg->lat_cc_time = 0;
+                    rsp_msg->lat_process_time = 0;
+                    rsp_msg->lat_network_time = 0;
+                    rsp_msg->lat_other_time = 0;
 
-                    INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
-                    exec_qe.txn_ctx->txn_state = TXN_READY_TO_COMMIT;
-//                    INC_STATS(get_thd_id(), txn_cnt, 1);
+                    msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
+                    INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
+#endif
 
+                    INC_STATS(get_thd_id(), txn_cnt, 1);
+
+                    //TODO(tq): how to handle txn_contexts in this case
                     // Free memory
                     // Free txn context
 //                    DEBUG_Q("ET_%ld : commtting txn_id = %ld with comp_cnt %ld\n", _thd_id, exec_qe.txn_ctx->txn_id, comp_cnt);
@@ -367,12 +371,13 @@ RC WorkerThread::run() {
 //                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
 //                    INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
                     // we always commit
-//                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
+                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
                     //TODO(tq): how to handle logic-induced aborts
+#endif
                 }
-                else if (comp_cnt == 0){
-                    exec_qe.txn_ctx->txn_state = TXN_STARTED;
-                }
+//                else if (comp_cnt == 0){
+//                    exec_qe.txn_ctx->txn_state = TXN_STARTED;
+//                }
 
             }
             // recycle exec_q
