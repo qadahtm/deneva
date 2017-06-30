@@ -95,13 +95,19 @@ public:
     // from the next one starts to process
     // Each cell in this map is increamed atomically by an ET
     // Each cell is reset by the commit thread.
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
     volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
+#elif CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+    volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH];
+#endif
+
 
     // A map for holding arrays of transaction contexts
     volatile atomic<uint64_t> batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
 
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it
+    // TODO(tq): refactor all free_lists to pool.h
     boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
     boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
     boost::lockfree::queue<priority_group *> ** pg_free_list;

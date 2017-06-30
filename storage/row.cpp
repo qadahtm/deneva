@@ -204,7 +204,7 @@ RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
 	row = this;
     return rc;
 #endif
-
+//TODO(tq): We should use this to support aborts
 #if CC_ALG == QUECC || CC_ALG == DUMMY_CC
 	// For QueCC no locking needed
 	// This line is added just to compile

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import socket
 import re
 import shlex, subprocess
@@ -14,6 +15,7 @@ import json
 from pprint import pprint
 import time
 from datetime import timedelta
+import multiprocessing
 
 def set_config(ncc_alg, wthd_cnt, theta):
     print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}'.format(ncc_alg, wthd_cnt, theta))
@@ -64,22 +66,24 @@ def build_project():
     cmd = 'make clean; make -j -s'
     exec_cmd(cmd, env)
 
-def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir):
+def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, prefix):
     if not server_only:
 #         clcmd = "ssh {:s} 'cd {}; ./runcl -nid1 > {}/results/pyscript/{}_{}_t{}_{}.txt'"
-        clcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./runcl -nid1 > {}/{}_{}_t{}_{}.txt'"
-    dbcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./rundb -nid0 > {}/{}_{}_t{}_{}.txt'"
+        clcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./runcl -nid1 > {}/{}{}_{}_t{}_{}.txt'"
+    dbcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./rundb -nid0 > {}/{}{}_{}_t{}_{}_{}.txt'"
     for i in range(ip_cnt):
         #run processes
         if (i < S_NODE_CNT):
             #run a server process
 #             print("server {}".format(fnode_list[i]['ip']))
+            core_cnt = multiprocessing.cpu_count();
             print("server {}".format(fnode_list[i]))
             fscmd = dbcmd.format(fnode_list[i],
                                  WORK_DIR+'/'+DENEVA_DIR_PREFIX,
                                  outdir,
+                                 prefix,
                                  # WORK_DIR, 
-                                 cc_alg.replace('_',''), 's', trial, seq_num)
+                                 cc_alg.replace('_',''), 's', trial, seq_num, core_cnt)
             print(fscmd)
             p = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
             procs.append(p);
@@ -90,6 +94,7 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir):
                 fscmd = clcmd.format(fnode_list[i],
                                      WORK_DIR+'/'+DENEVA_DIR_PREFIX,
                                      outdir,
+                                     prefix,
                                      # WORK_DIR, 
                                      cc_alg.replace('_',''), 'c', trial, seq_num)
                 print(fscmd)
@@ -235,16 +240,21 @@ env = dict(os.environ)
 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-# cc_algs = ['NO_WAIT', 'QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
-cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
-# cc_algs = ['NO_WAIT']
+cc_algs = ['QUECC', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
+# cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
+# cc_algs = ['QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
-# wthreads = [2,4,8,15,16,24,30,32,48,56,60] # for m4.16xlarge
-wthreads = [4,8,16,32,48,62,80,96,112,124] # x1.32xlarge
+#8 data points
+wthreads = [20,40] # for m4.16xlarge all
+# wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
+# wthreads = [4,8,10,12,15,24,28,30] # for m4.16xlarge for QueCC
+# wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
+# wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
 # wthreads = [1,2]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
-zipftheta = [0.0,0.6,0.9]
+# zipftheta = [0.0,0.9]
+zipftheta = [0.6]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 procs = []
@@ -261,16 +271,19 @@ odirname = str(time.strftime('%Y-%m-%d-%I-%M-%S-%p'))
 outdir = '/home/ubuntu/results/' + odirname
 exec_cmd('mkdir {}'.format(outdir), env)
 stime = time.time()
+prefix = ""
+if (len(sys.argv) == 2):
+    prefix = sys.argv[1]
 for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:
             runexp = True
-            if wthd == 4  and ncc_alg != 'QUECC':
+            if wthd == 20  and ncc_alg != 'QUECC':
                 #Don't run other CCs with 1 thread 
                 runexp = False
 
-            # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
-            if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
+            if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
+            # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
                 #Don't run QueCC with more than 30 threads 
                 runexp = False
             if runexp:       
@@ -278,11 +291,11 @@ for ncc_alg in cc_algs:
                 # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
                 build_project()
                 for trial in list(range(num_trials)):
-                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir)
+                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, prefix)
                     # print('Dry run: {}, {}, {}, t{}'.format(ncc_alg, str(wthd), str(theta), str(trial)))
                     seq_no = seq_no + 1           
-res = get_df_csv(outdir)
+# res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
-send_email(subject, res)
+send_email(subject, '')
 exec_cmd('sudo shutdown -h now', env)

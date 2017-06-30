@@ -216,7 +216,10 @@ int main(int argc, char* argv[])
 #if CC_ALG == QUECC
     all_thd_cnt += g_plan_thread_cnt;
     all_thd_cnt -= 1; // to remove abort thread for QueCC but there is a logger
+#if CT_ENABLED
     all_thd_cnt += 1; // add commit thread
+#endif
+
 #endif
 
 #if CC_ALG == DUMMY_CC
@@ -248,7 +251,10 @@ int main(int argc, char* argv[])
 
 #if CC_ALG == QUECC
     planner_thds = new PlannerThread[g_plan_thread_cnt];
+#if CT_ENABLED
     commit_thds = new CommitThread[1];
+#endif // CT_ENABLED
+
 #endif
 	// query_queue should be the last one to be initialized!!!
 	// because it collects txn latency
@@ -393,7 +399,7 @@ int main(int argc, char* argv[])
         pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
         pthread_setname_np(p_thds[id-1], "s_planner");
     }
-
+#if CT_ENABLED
 // Initialize and start commit threads
 #if SET_AFFINITY
     CPU_ZERO(&cpus);
@@ -404,7 +410,7 @@ int main(int argc, char* argv[])
     commit_thds[0].init(id,g_node_id,m_wl);
     pthread_create(&p_thds[id++], &attr, run_thread, (void *)&commit_thds[0]);
     pthread_setname_np(p_thds[id-1], "s_commit");
-
+#endif // #if CT_ENABLED
     DEBUG_Q("DONE: Initilizing Quecc threads\n");
     DEBUG_Q("total thread count = %ld, ids = %ld\n", all_thd_cnt, id);
 #endif

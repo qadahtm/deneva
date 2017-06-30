@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 30
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -153,11 +153,11 @@
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
 // [QUECC]
-#define PLAN_THREAD_CNT THREAD_CNT
+#define PLAN_THREAD_CNT 4//THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 #define BATCH_SIZE 10 * 1000//MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 2//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 8//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 // Controls the batching decitions in the planning phase
@@ -166,7 +166,7 @@
 #define SIZE_BASED 2
 #define SPLIT_MERGE_ENABLED true
 #define CT_ENABLED true
-#define BUILD_TXN_DEPS true
+#define BUILD_TXN_DEPS false
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
@@ -174,6 +174,16 @@
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
+
+// Commit behavior configuration. This controls the commit during execution.
+// This should be used along with the CT_ENABLED parameter, and it is only activated if
+// the CT_ENABLED = TRUE
+// AFTER_PG_COMP: means that ETs will wait for a PG to complete before proceeding
+// AFTER_BATCH_COMP: means that ETs will wait for a batch to complete before proceeding.
+
+#define AFTER_PG_COMP       0
+#define AFTER_BATCH_COMP    1
+#define COMMIT_BEHAVIOR     AFTER_BATCH_COMP
 
 
 

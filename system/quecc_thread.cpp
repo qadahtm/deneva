@@ -156,10 +156,15 @@ RC CommitThread::run() {
 //        heartbeat();
 //        DEBUG_Q("CT_%ld : Going to spin waiting for priority group %ld to be COMPLETED , batch_id = %ld, batch_slot = %ld\n",
 //                _thd_id, cplanner_id, batch_id, batch_slot);
+#if COMMIT_BEHAVIOR == AFTER_PG_COMP
         if (work_queue.batch_map_comp_cnts[batch_slot][cplanner_id].load() != g_thread_cnt){
             continue;
         }
-
+#elif COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+        if (work_queue.batch_map_comp_cnts[batch_slot].load() != g_thread_cnt){
+            continue;
+        }
+#endif
 //        DEBUG_Q("CT_%ld : Ready to process priority group %ld for batch_id = %ld, batch_slot = %ld\n",
 //                _thd_id, cplanner_id, batch_id, batch_slot);
 
@@ -265,6 +270,8 @@ RC CommitThread::run() {
 //                    " current value = %d, expected = %d\n",
 //                       _thd_id, batch_id, batch_slot, cplanner_id,
 //                       work_queue.batch_map_comp_cnts[batch_slot][cplanner_id].load(), expected8);
+
+#if COMMIT_BEHAVIOR == AFTER_PG_COMP
         desired8 = 0;
         expected8 = (uint8_t) g_thread_cnt;
         while(!work_queue.batch_map_comp_cnts[batch_slot][cplanner_id].compare_exchange_strong(
@@ -276,9 +283,11 @@ RC CommitThread::run() {
                        work_queue.batch_map_comp_cnts[batch_slot][cplanner_id].load(), expected8);
 
         }
+#endif
         // return txn_ctxs to the pool
 //        while(!work_queue.txn_ctxs_free_list[cplanner_id]->push(txn_ctxs)){}
         txn_ctxs_release(txn_ctxs, cplanner_id);
+
 
 #if BUILD_TXN_DEPS
         // Clean up and clear txn_graph
@@ -305,6 +314,20 @@ RC CommitThread::run() {
         cplanner_id++;
 
         if (cplanner_id == g_plan_thread_cnt){
+#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+            desired8 = 0;
+            expected8 = (uint8_t) g_thread_cnt;
+            while(!work_queue.batch_map_comp_cnts[batch_slot].compare_exchange_strong(
+                expected8, desired8)){
+            // this should not happen
+            M_ASSERT_V(false, "CT_%ld : For batch %ld : failing to RESET batch_map_comp_cnts slot [%ld][%ld],"
+                    " current value = %d, expected = %d\n",
+                       _thd_id, batch_id, batch_slot, cplanner_id,
+                       work_queue.batch_map_comp_cnts[batch_slot].load(), expected8);
+
+        }
+#endif
+
             // proceed to the next batch
             batch_id++;
             batch_slot = batch_id % g_batch_map_length;
@@ -316,9 +339,14 @@ RC CommitThread::run() {
     desired8 = 0;
     desired = 0;
     for (uint64_t i = 0; i < g_batch_map_length; ++i){
+#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+        work_queue.batch_map_comp_cnts[i].store(desired8);
+#endif
         for (uint64_t j = 0; j < g_plan_thread_cnt; ++j){
             // we need to signal all ETs that are spinning
+#if COMMIT_BEHAVIOR == AFTER_PG_COMP
             work_queue.batch_map_comp_cnts[i][j].store(desired8);
+#endif
             // Signal all spinning PTs
             work_queue.batch_pg_map[i][j].store(desired);
         }
@@ -948,8 +976,8 @@ RC PlannerThread::run() {
                 while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0) {
                     if(idle_starttime == 0){
                         idle_starttime = get_sys_clock();
+                        DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
                     }
-//                    DEBUG_Q("PT_%ld: SPIN!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
                 }
 
                 // include idle time from spinning above

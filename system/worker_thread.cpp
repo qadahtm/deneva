@@ -437,23 +437,31 @@ RC WorkerThread::run() {
         }
 
         // free batch_part
+        //TODO(tq): use pool and recycle
         mem_allocator.free(batch_part, sizeof(batch_partition));
-
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
         work_queue.batch_map_comp_cnts[batch_slot][wplanner_id].fetch_add(1);
 
         // before going to the next planner, spin here if not all other partitions of the same planners have completed
         // we actually need to wait untill the priority group has been fully committed.
-        // TODO(tq): instead of waiting for this to become equal to g_thread_cnt it should be wait until it is equal to zero
-//        uint64_t priority_group = wplanner_id-1;
+
         while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot][wplanner_id].load() != 0){
             // spin
 //            DEBUG_Q("ET_%ld : Spinning waiting for priority group %ld to be COMMITTED\n", _thd_id, wplanner_id);
         }
 //        DEBUG_Q("ET_%ld : Going to process the next priority group %ld in batch_id = %ld\n", _thd_id, priority_group, wbatch_id);
-
+#endif
         // go to the next batch partition prepared by the next planner since the previous one has been committed
         wplanner_id++;
         if (wplanner_id == g_plan_thread_cnt) {
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+            work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);
+            //TODO(tq) fix stat collection for idle time to include the spinning below
+            while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot].load() != 0){
+                // spin
+//            DEBUG_Q("ET_%ld : Spinning waiting for batch %ld to be COMMITTED at slot %ld\n", _thd_id, wbatch_id, batch_slot);
+            }
+#endif
             wbatch_id++;
             batch_slot =  wbatch_id % g_batch_map_length;
             wplanner_id = 0;
