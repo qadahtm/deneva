@@ -126,7 +126,7 @@ inline void pg_get_or_create(priority_group * &pg, uint64_t planner_id){
 void pg_release(priority_group * &pg, uint64_t planner_id){
     while(!work_queue.pg_free_list[planner_id]->push(pg)){};
 }
-
+#if CT_ENABLED
 void CommitThread::setup() {
 }
 
@@ -314,7 +314,7 @@ RC CommitThread::run() {
         cplanner_id++;
 
         if (cplanner_id == g_plan_thread_cnt){
-#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
             desired8 = 0;
             expected8 = (uint8_t) g_thread_cnt;
             while(!work_queue.batch_map_comp_cnts[batch_slot].compare_exchange_strong(
@@ -339,12 +339,12 @@ RC CommitThread::run() {
     desired8 = 0;
     desired = 0;
     for (uint64_t i = 0; i < g_batch_map_length; ++i){
-#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
         work_queue.batch_map_comp_cnts[i].store(desired8);
 #endif
         for (uint64_t j = 0; j < g_plan_thread_cnt; ++j){
             // we need to signal all ETs that are spinning
-#if COMMIT_BEHAVIOR == AFTER_PG_COMP
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
             work_queue.batch_map_comp_cnts[i][j].store(desired8);
 #endif
             // Signal all spinning PTs
@@ -357,6 +357,8 @@ RC CommitThread::run() {
     return FINISH;
 
 }
+
+#endif //CT_ENABLED
 
 void PlannerThread::setup() {
 }

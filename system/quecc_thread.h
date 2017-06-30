@@ -191,10 +191,12 @@ private:
 #endif
 };
 
+#if CT_ENABLED
 class CommitThread : public Thread {
 public:
     RC run();
     void setup();
 };
+#endif //CT_ENABLED
 
 #endif //_QUECC_THREAD_H

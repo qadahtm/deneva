@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 12
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -165,7 +165,7 @@
 #define TIME_BASED 1
 #define SIZE_BASED 2
 #define SPLIT_MERGE_ENABLED true
-#define CT_ENABLED true
+#define CT_ENABLED false
 #define BUILD_TXN_DEPS false
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000

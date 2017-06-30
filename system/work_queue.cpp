@@ -52,11 +52,11 @@ void QWorkQueue::init() {
 
   //TODO(tq): is this cache-aware?
   for (uint64_t i=0; i < g_batch_map_length ; i++){
-#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
       (batch_map_comp_cnts[i]).store(0);
 #endif
     for (uint64_t j=0; j < g_plan_thread_cnt; j++){
-#if COMMIT_BEHAVIOR == AFTER_PG_COMP
+#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
       (batch_map_comp_cnts[i][j]).store(0);
 #endif
       (batch_pg_map[i][j]).store(0);

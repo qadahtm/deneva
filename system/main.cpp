@@ -58,7 +58,9 @@ CalvinSequencerThread * calvin_seq_thds;
 
 #if CC_ALG == QUECC
 PlannerThread * planner_thds;
+#if CT_ENABLED
 CommitThread * commit_thds;
+#endif
 #endif
 
 // defined in parser.cpp
