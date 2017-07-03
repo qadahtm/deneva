@@ -239,10 +239,254 @@ int main(int argc, char* argv[])
 
     DEBUG_Q("all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n", all_thd_cnt, g_this_total_thread_cnt);
     assert(all_thd_cnt == g_this_total_thread_cnt);
-	
-    pthread_t * p_thds =
-    (pthread_t *) malloc(sizeof(pthread_t) * (all_thd_cnt));
+
+    pthread_t * p_thds;
     pthread_attr_t attr;
+    uint64_t id = 0;
+
+#if SET_AFFINITY
+    uint64_t cpu_cnt = 0;
+    cpu_set_t cpus;
+    CPU_ZERO(&cpus);
+    CPU_SET(cpu_cnt, &cpus);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
+    cpu_cnt++;
+#endif
+
+#if MODE == FIXED_MODE && CC_ALG == QUECC
+
+    planner_thds = new PlannerThread[g_plan_thread_cnt];
+    worker_thds = new WorkerThread[wthd_cnt];
+    wthd_cnt = g_plan_thread_cnt;
+    starttime = get_server_clock();
+
+    printf("Warm Up Start: PT Initialization Time = %ld, warmup = %d, warmup_done = %d\n",
+           starttime, simulation->warmup, simulation->is_warmup_done());
+    fflush(stdout);
+
+    // Initialize barrier for PTs
+    if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
+        M_ASSERT_V(false, "barriar init failed\n");
+    }
+
+    p_thds =
+            (pthread_t *) malloc(sizeof(pthread_t) * (g_plan_thread_cnt));
+    pthread_attr_init(&attr);
+
+    starttime = get_server_clock();
+    for (uint64_t j = 0; j < wthd_cnt; j++) {
+#if SET_AFFINITY
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu_cnt, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        cpu_cnt++;
+#endif
+        planner_thds[j].init(id,g_node_id,m_wl);
+        planner_thds[j]._planner_id = j;
+        pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
+        pthread_setname_np(p_thds[id-1], "s_planner");
+    }
+    // Wait untill all PTs are done for all batches
+
+    for (uint64_t i = 0; i < wthd_cnt ; i++){
+        pthread_join(p_thds[i], NULL);
+    }
+
+//    endtime = get_server_clock();
+//    printf("Warm Up End: PT Initialization Time = %ld, warmup = %d, warmup_done = %d\n",
+//           (endtime - starttime/ BILLION), simulation->warmup, simulation->is_warmup_done());
+//    fflush(stdout);
+
+    // destory PT barrier and create ET barrier, this is needed when the numbers of PTs and ETs are not equal
+    if (pthread_barrier_destroy(&warmup_bar)){
+        M_ASSERT_V(false, "barriar destroy failed\n");
+    }
+
+    wthd_cnt = g_thread_cnt;
+    if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
+        M_ASSERT_V(false, "barriar init failed\n");
+    }
+    // TODO(tq): we probably don't need to free this
+    free(p_thds);
+    p_thds =
+            (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
+    pthread_attr_init(&attr);
+    id = 0;
+    cpu_cnt = 1; // restart from cpu 1
+
+    for (uint64_t i = 0; i < wthd_cnt; i++) {
+#if SET_AFFINITY
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu_cnt, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        cpu_cnt++;
+#endif
+        assert(id >= 0 && id < wthd_cnt);
+        worker_thds[i].init(id,g_node_id,m_wl);
+        pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
+        pthread_setname_np(p_thds[id-1], "s_worker");
+    }
+
+
+    // Wait until all ETs are done
+    for (uint64_t i = 0; i < wthd_cnt ; i++){
+        pthread_join(p_thds[i], NULL);
+    }
+
+    simulation->run_starttime = starttime;
+    ATOM_CAS(simulation->warmup_end_time,0,get_sys_clock());
+    ATOM_CAS(simulation->warmup,false,true);
+
+    endtime = get_server_clock();
+
+    stats.totals->clear();
+    for(uint64_t i = 0; i < g_total_thread_cnt; i++){
+        stats.totals->combine(stats._stats[i]);
+    }
+
+    printf("Warm Up Done !! in total Time = %ld secs, processed %ld txns, starting measured stage\n",
+           (endtime - starttime)/BILLION, stats.totals->txn_cnt);
+    fflush(stdout);
+
+    // destory last barrier
+    if (pthread_barrier_destroy(&warmup_bar)){
+        M_ASSERT_V(false, "barriar destroy failed\n");
+    }
+
+
+    // Reset PG map and batch map
+
+    // TODO(tq): Refactor this into a cleanup function
+
+    for (uint64_t i =0; i < g_batch_map_length; ++i){
+        for (uint64_t j=0; j< g_plan_thread_cnt; ++j){
+            work_queue.batch_pg_map[i][j].status.store(0);
+        }
+    }
+
+    for (uint64_t i=0; i < g_batch_map_length ; i++){
+        for (uint64_t j=0; j < g_thread_cnt; j++){
+            for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
+                (work_queue.batch_map[i][j][k]).store(0);
+            }
+        }
+    }
+
+    // reset stats
+    for (uint64_t i =0; i < g_total_thread_cnt; ++i){
+        stats._stats[i]->clear();
+    }
+
+    wthd_cnt = g_plan_thread_cnt;
+
+    // create a new barrier for PT
+    if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
+        M_ASSERT_V(false, "barriar init failed\n");
+    }
+    // Run PTs first
+    free(p_thds);
+    p_thds =
+    (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
+    pthread_attr_init(&attr);
+    id = 0;
+    cpu_cnt = 1; // restart from cpu 1
+
+    starttime = get_server_clock();
+    for (uint64_t j = 0; j < wthd_cnt; j++) {
+#if SET_AFFINITY
+      CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+#endif
+        planner_thds[j].init(id,g_node_id,m_wl);
+        planner_thds[j]._planner_id = j;
+        pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
+        pthread_setname_np(p_thds[id-1], "s_planner");
+    }
+    // Wait untill all PTs are done for all batches
+
+    for (uint64_t i = 0; i < wthd_cnt ; i++){
+        pthread_join(p_thds[i], NULL);
+    }
+
+    endtime = get_server_clock();
+    float pt_total_runtime = (float)(endtime - starttime);
+
+    if (pthread_barrier_destroy(&warmup_bar)){
+        M_ASSERT_V(false, "barriar destroy failed\n");
+    }
+
+    // Run ETs
+    wthd_cnt = g_thread_cnt;
+    if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
+        M_ASSERT_V(false, "barriar init failed\n");
+    }
+    free(p_thds);
+    p_thds =
+            (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
+    pthread_attr_init(&attr);
+
+    id = 0;
+    cpu_cnt = 1; // restart from cpu 1
+    starttime = get_server_clock();
+      for (uint64_t i = 0; i < wthd_cnt; i++) {
+    #if SET_AFFINITY
+          CPU_ZERO(&cpus);
+          CPU_SET(cpu_cnt, &cpus);
+          pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+          cpu_cnt++;
+    #endif
+          assert(id >= 0 && id < wthd_cnt);
+          worker_thds[i].init(id,g_node_id,m_wl);
+          pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
+          pthread_setname_np(p_thds[id-1], "s_worker");
+        }
+
+
+    // Wait until all ETs are done
+    for (uint64_t i = 0; i < wthd_cnt ; i++){
+        pthread_join(p_thds[i], NULL);
+    }
+
+    // Exit and print status.
+
+
+	endtime = get_server_clock();
+    float et_total_runtime = (float)(endtime - starttime);
+    fflush(stdout);
+    float total_runtime =  et_total_runtime + pt_total_runtime;
+    stats.totals->clear();
+    for(uint64_t i = 0; i < g_total_thread_cnt; i++){
+        stats.totals->combine(stats._stats[i]);
+    }
+    float pt_total_runtime_sec = (pt_total_runtime / BILLION);
+    float et_total_runtime_sec = (et_total_runtime / BILLION);
+    float pt_tput = (float) stats.totals->txn_cnt / (pt_total_runtime_sec);
+    float et_tput = (float) stats.totals->txn_cnt / (et_total_runtime_sec);
+    float tput = (float) stats.totals->txn_cnt / (total_runtime / BILLION);
+    printf("PASS!,SimTime=%f,total_time=%f,pt_time=%f,et_time=%f,total_tput=%f,pt_tput=%f,et_tput=%f, txn_cnt=%ld\n",
+           total_runtime / BILLION,
+           pt_total_runtime_sec+et_total_runtime_sec,
+           pt_total_runtime_sec,
+           et_total_runtime_sec,
+           tput, pt_tput, et_tput,
+           stats.totals->txn_cnt
+    );
+
+    if (STATS_ENABLE){
+        stats.print(false);
+    }
+    printf("\n");
+    fflush(stdout);
+    // Free things
+    m_wl->index_delete_all();
+
+    return 0;
+#else
+
+    p_thds =
+    (pthread_t *) malloc(sizeof(pthread_t) * (all_thd_cnt));
     pthread_attr_init(&attr);
 
     worker_thds = new WorkerThread[wthd_cnt];
@@ -288,19 +532,10 @@ int main(int argc, char* argv[])
     warmup_done = true;
     pthread_barrier_init( &warmup_bar, NULL, all_thd_cnt);
 
-#if SET_AFFINITY
-  uint64_t cpu_cnt = 0;
-  cpu_set_t cpus;
-  CPU_ZERO(&cpus);
-  CPU_SET(cpu_cnt, &cpus);
-  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
-  cpu_cnt++;
-#endif
   // spawn and run txns again.
   starttime = get_server_clock();
   simulation->run_starttime = starttime;
 
-  uint64_t id = 0;
   for (uint64_t i = 0; i < wthd_cnt; i++) {
 #if SET_AFFINITY
       CPU_ZERO(&cpus);
@@ -454,8 +689,9 @@ int main(int argc, char* argv[])
 
     //JEMALLOC
 //    je_malloc_stats_print(NULL, NULL, NULL);
-    je_mallctl("prof.dump", NULL, NULL, NULL, 0);
+//    je_mallctl("prof.dump", NULL, NULL, NULL, 0);
 	return 0;
+#endif
 }
 
 void * run_thread(void * id) {

@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 6
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -153,11 +153,11 @@
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
 // [QUECC]
-#define PLAN_THREAD_CNT 10//THREAD_CNT
+#define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
-#define BATCH_SIZE 12 * 1000//MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 8//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_SIZE 12 * 1024 * 5 * 16//MAX_TXN_IN_FLIGHT * 0.9
+#define BATCH_MAP_LENGTH 17//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 // Controls the batching decitions in the planning phase
@@ -166,7 +166,7 @@
 // IMPORTATN: For Size-based batching, BATCH_SIZE must be divisable by PLAN_THREAD_CNT
 #define SIZE_BASED 2
 #define SPLIT_MERGE_ENABLED true
-#define CT_ENABLED true
+#define CT_ENABLED false
 #define BUILD_TXN_DEPS false
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
@@ -184,6 +184,7 @@
 
 #define AFTER_PG_COMP       0
 #define AFTER_BATCH_COMP    1
+#define IMMEDIATE           2
 #define COMMIT_BEHAVIOR     AFTER_BATCH_COMP
 
 #define PG_AVAILABLE 0
@@ -224,10 +225,10 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+#define ZIPF_THETA 0.6//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
@@ -333,7 +334,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -345,7 +346,11 @@ enum PPSTxnType {PPS_ALL = 0,
 // SIMPLE Immediately send OK back to client
 // NOCC Don't do CC
 // NORMAL normal operation
-#define MODE NORMAL_MODE
+// FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
+// on the total. Currently, only QUECC is supported.
+// TODO(tq): support other CC_ALGs
+//#define MODE NORMAL_MODE
+#define MODE FIXED_MODE
 
 
 /***********************************************/
@@ -386,6 +391,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define QRY_ONLY_MODE 3
 #define SETUP_MODE 4
 #define SIMPLE_MODE 5
+#define FIXED_MODE 6
 // SKEW METHODS
 #define ZIPF 1
 #define HOT 2

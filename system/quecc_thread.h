@@ -174,6 +174,9 @@ public:
     uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
 
 #endif
+
+    RC run_fixed_mode();
+    RC run_normal_mode();
 private:
     uint64_t last_batchtime;
 

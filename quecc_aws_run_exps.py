@@ -240,21 +240,23 @@ env = dict(os.environ)
 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-cc_algs = ['QUECC', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
+# cc_algs = ['QUECC', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
-# cc_algs = ['QUECC']
+cc_algs = ['QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
-wthreads = [20,40] # for m4.16xlarge all
+# wthreads = [20,40] # for m4.16xlarge all
 # wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
-# wthreads = [4,8,10,12,15,24,28,30] # for m4.16xlarge for QueCC
+wthreads = [8,16,24,32,40,48,56,62] # for m4.16xlarge for QueCC
+pt_perc = [0.25,0.5,0.75]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
 # wthreads = [1,2]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
-zipftheta = [0.6]
+et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
+zipftheta = [0.0,0.6]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 procs = []

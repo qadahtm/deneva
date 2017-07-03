@@ -26,6 +26,8 @@ class Message;
 class WorkerThread : public Thread {
 public:
     RC run();
+    RC run_normal_mode();
+    RC run_fixed_mode();
     void setup();
     void process(Message * msg);
     void check_if_done(RC rc);

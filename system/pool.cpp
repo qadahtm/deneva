@@ -30,6 +30,9 @@
 
 #define TRY_LIMIT 10
 
+
+
+
 void TxnManPool::init(Workload * wl, uint64_t size) {
   _wl = wl;
 #if CC_ALG == CALVIN

@@ -96,9 +96,9 @@ public:
     // from the next one starts to process
     // Each cell in this map is increamed atomically by an ET
     // Each cell is reset by the commit thread.
-#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
+#if COMMIT_BEHAVIOR == AFTER_PG_COMP
     volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
-#elif CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#elif COMMIT_BEHAVIOR == AFTER_BATCH_COMP
     volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH];
 #endif
 

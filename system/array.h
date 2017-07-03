@@ -81,7 +81,8 @@ public:
   }
 
   void add(T item){
-    assert(count < capacity);
+//    assert(count < capacity);
+    M_ASSERT_V(count < capacity, "count < capacity failed, count = %ld, capacity = %ld\n", count, capacity);
     items[count] = item;
     ++count;
   }

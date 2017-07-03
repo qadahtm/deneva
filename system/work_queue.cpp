@@ -52,11 +52,11 @@ void QWorkQueue::init() {
 
   //TODO(tq): is this cache-aware? Need to study and figure out hte optimal layout
   for (uint64_t i=0; i < g_batch_map_length ; i++){
-#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
       (batch_map_comp_cnts[i]).store(0);
 #endif
     for (uint64_t j=0; j < g_plan_thread_cnt; j++){
-#if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
+#if COMMIT_BEHAVIOR == AFTER_PG_COMP
       (batch_map_comp_cnts[i][j]).store(0);
 #endif
         // pointer-based implementation of PG_MAP
