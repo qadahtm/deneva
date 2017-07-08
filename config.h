@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 36
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -156,8 +156,8 @@
 #define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
-#define BATCH_SIZE 12 * 1024 * 5 * 16//MAX_TXN_IN_FLIGHT * 0.9
-#define BATCH_MAP_LENGTH 17//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_SIZE 5*56*6*3*6//MAX_TXN_IN_FLIGHT * 0.9
+#define BATCH_MAP_LENGTH 300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 // Controls the batching decitions in the planning phase
@@ -165,13 +165,14 @@
 #define TIME_BASED 1
 // IMPORTATN: For Size-based batching, BATCH_SIZE must be divisable by PLAN_THREAD_CNT
 #define SIZE_BASED 2
-#define SPLIT_MERGE_ENABLED true
+#define SPLIT_MERGE_ENABLED false
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS false
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
 #define EXECQ_CAP_FACTOR 1.1
+#define EXEC_QS_CAP 16
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
@@ -228,7 +229,7 @@
 //#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 #define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define ZIPF_THETA 0.6//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
@@ -334,7 +335,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

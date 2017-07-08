@@ -26,46 +26,26 @@
 //TQ: we will use standard lib version for now. We can use optimized implementation later
 #include <unordered_map>
 
-
-inline void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t exec_queue_capacity) {
-    if (!work_queue.exec_queue_free_list[planner_id]->pop(exec_q)){
-        exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
-        exec_q->init(exec_queue_capacity);
-//        DEBUG_Q("Allocating exec_q\n");
-    }
-    else {
-        exec_q->clear();
-//        DEBUG_Q("Reusing exec_q\n");
-    }
-}
-
-void exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id) {
-    exec_q->clear();
-    while(!work_queue.exec_queue_free_list[planner_id]->push(exec_q)){};
-}
-
 void assign_entry_clear(assign_entry * &a_entry){
     a_entry->exec_qs = NULL;
     a_entry->exec_thd_id = 0;
     a_entry->curr_sum = 0;
 }
 
+//void assign_entry_release(assign_entry * &a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list, uint64_t pt_thd_id ){
+//    quecc_pool.exec_qs_release(a_entry->exec_qs, pt_thd_id);
+//    assign_entry_clear(a_entry);
+//    while(!assign_entry_free_list->push(a_entry));
+//}
 
 void assign_entry_add(assign_entry * a_entry, Array<exec_queue_entry> * exec_q) {
     a_entry->curr_sum += exec_q->size();
     a_entry->exec_qs->add(exec_q);
 }
 
-void assign_entry_init(assign_entry * &a_entry, uint64_t thd_id){
+void assign_entry_init(assign_entry * &a_entry, uint64_t pt_thd_id){
     if (!a_entry->exec_qs){
-        if (!work_queue.exec_qs_free_list[thd_id]->pop(a_entry->exec_qs)){
-//            DEBUG_Q("Allocating a_entry->exec_qs\n");
-            a_entry->exec_qs = new Array<Array<exec_queue_entry> *>();
-            a_entry->exec_qs->init(32);
-        }
-//        else {
-//            DEBUG_Q("Reusing a_entry->exec_qs\n");
-//        }
+        quecc_pool.exec_qs_get_or_create(a_entry->exec_qs, pt_thd_id);
     }
     else{
         a_entry->exec_qs->clear();
@@ -100,32 +80,6 @@ void split_entry_print(split_entry * ptr, uint64_t planner_id) {
             ptr->range_end, ptr->range_size);
 }
 
-inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id){
-    if (!work_queue.txn_ctxs_free_list[planner_id]->pop(txn_ctxs)){
-//        DEBUG_Q("Allocating txn_ctxs\n");
-        txn_ctxs = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context)*length);
-    }
-//    else {
-//        DEBUG_Q("Reusing txn_ctxs\n");
-//    }
-    memset(txn_ctxs, 0,sizeof(transaction_context)*length);
-}
-
-void txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id){
-    while(!work_queue.txn_ctxs_free_list[planner_id]->push(txn_ctxs));
-}
-
-inline void pg_get_or_create(priority_group * &pg, uint64_t planner_id){
-    if (!work_queue.pg_free_list[planner_id]->pop(pg)){
-        pg = (priority_group *) mem_allocator.alloc(sizeof(priority_group));
-        DEBUG_Q("Allocating priority group\n");
-    }
-    memset(pg, 0,sizeof(priority_group));
-}
-
-void pg_release(priority_group * &pg, uint64_t planner_id){
-    while(!work_queue.pg_free_list[planner_id]->push(pg)){};
-}
 #if CT_ENABLED
 void CommitThread::setup() {
 }
@@ -452,10 +406,20 @@ RC PlannerThread::run_fixed_mode() {
     uint64_t exec_queue_limit = planner_batch_size/g_thread_cnt;
 #endif
     // max capcity, assume YCSB workload
-    uint64_t exec_queue_capacity;
+//    uint64_t exec_queue_capacity;
 #if BATCHING_MODE == SIZE_BASED
 //    exec_queue_capacity = planner_batch_size * (REQ_PER_QUERY / g_thread_cnt);
-    exec_queue_capacity = (planner_batch_size) * (5);
+//    if (g_zipf_theta > 0){
+//        exec_queue_capacity = (planner_batch_size) * (10);
+//    }
+//    else{
+//        if (g_plan_thread_cnt <= 2){
+//            exec_queue_capacity = (planner_batch_size) * (10);
+//        }
+//        else{
+//            exec_queue_capacity = (planner_batch_size) * (3);
+//        }
+//    }
 #endif
 
 
@@ -505,26 +469,32 @@ RC PlannerThread::run_fixed_mode() {
 //#else
 //    exec_queues->init(g_thread_cnt);
 //#endif
+
+    uint64_t et_id = 0;
+
+#if SPLIT_MERGE_ENABLED
+    Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+            sizeof(Array<exec_queue_entry> *) * 2);
+#endif
+
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
-//        Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
         Array<exec_queue_entry> * exec_q;
-        exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
-//        exec_q->init(exec_queue_capacity);
+//        exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+        quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i);
         exec_queues->add(exec_q);
     }
 
     // Pre-allocate execution queues to be used by planners and executors
     // this should eliminate the overhead of memory allocation
-    uint64_t  exec_queue_pool_size = FREE_LIST_INITIAL_SIZE;
+//    uint64_t  exec_queue_pool_size = FREE_LIST_INITIAL_SIZE;
     boost::random::mt19937 plan_rng;
     boost::random::uniform_int_distribution<> eq_idx_rand(0, g_thread_cnt-1);
 
-    for (uint64_t j = 0; j < exec_queue_pool_size; j++){
-//            Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
-        Array<exec_queue_entry> * exec_q;
-        exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
-        exec_queue_release(exec_q, _planner_id);
-    }
+//    for (uint64_t j = 0; j < exec_queue_pool_size; j++){
+//        Array<exec_queue_entry> * exec_q;
+//        exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+//        exec_queue_release(exec_q, _planner_id);
+//    }
 
     // Pre-allocate planner's transaction contexts
     // TODO(tq): refacgtor this to be in pool.h
@@ -551,11 +521,10 @@ RC PlannerThread::run_fixed_mode() {
     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
 
     for (uint64_t slot_num = 0; slot_num < g_batch_map_length; ++slot_num){
-        DEBUG_Q("PL_%ld: Starting to work on planner_pg with slot_num =%ld\n", _planner_id, slot_num);
+//        DEBUG_Q("PL_%ld: Starting to work on planner_pg with slot_num =%ld\n", _planner_id, slot_num);
         planner_pg = &work_queue.batch_pg_map[slot_num][_planner_id];
         txn_ctxs = planner_pg->txn_ctxs;
-        planner_pg->planner_id = _planner_id;
-
+//        planner_pg->planner_id = _planner_id;
 
         while (true){
             msg = work_queue.plan_dequeue(_thd_id, _planner_id);
@@ -570,7 +539,7 @@ RC PlannerThread::run_fixed_mode() {
 
                 prof_starttime = get_sys_clock();
 #if SPLIT_MERGE_ENABLED
-                // Splitting phase
+                // Splitting phase (and merge if there is no need to split)
                 if (ranges_stored) {
 
                     for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
@@ -620,22 +589,27 @@ RC PlannerThread::run_fixed_mode() {
                             while (true) {
 
                                 // Allocate memory for new exec_qs
-                                Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
-                                        sizeof(Array<exec_queue_entry> *) * 2);
+//                                Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+//                                        sizeof(Array<exec_queue_entry> *) * 2);
 
-                                if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[0])) {
-                                    nexec_qs[0]->clear();
-                                } else {
-                                    nexec_qs[0] = new Array<exec_queue_entry>();
-                                    nexec_qs[0]->init(exec_queue_capacity);
-                                }
+                                et_id = eq_idx_rand(plan_rng);
+                                quecc_pool.exec_queue_get_or_create(nexec_qs[0], _planner_id, et_id);
+                                et_id = eq_idx_rand(plan_rng);
+                                quecc_pool.exec_queue_get_or_create(nexec_qs[1], _planner_id, et_id);
 
-                                if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[1])) {
-                                    nexec_qs[1]->clear();
-                                } else {
-                                    nexec_qs[1] = new Array<exec_queue_entry>();
-                                    nexec_qs[1]->init(exec_queue_capacity);
-                                }
+//                                if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[0])) {
+//                                    nexec_qs[0]->clear();
+//                                } else {
+//                                    nexec_qs[0] = new Array<exec_queue_entry>();
+//                                    nexec_qs[0]->init(exec_queue_capacity);
+//                                }
+//
+//                                if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[1])) {
+//                                    nexec_qs[1]->clear();
+//                                } else {
+//                                    nexec_qs[1] = new Array<exec_queue_entry>();
+//                                    nexec_qs[1]->init(exec_queue_capacity);
+//                                }
 
                                 //split current exec_q
                                 // split current queue's range in half
@@ -680,7 +654,9 @@ RC PlannerThread::run_fixed_mode() {
 
 
                                 // Recycle execution queue
-                                while (!work_queue.exec_queue_free_list[_planner_id]->push(top_entry->exec_q)) {};
+//                                while (!work_queue.exec_queue_free_list[_planner_id]->push(top_entry->exec_q)) {};
+                                et_id = eq_idx_rand(plan_rng);
+                                quecc_pool.exec_queue_release(top_entry->exec_q, _planner_id, et_id);
 
                                 if (!split_entry_free_list->push(top_entry)) {
                                     M_ASSERT_V(false,
@@ -822,8 +798,8 @@ RC PlannerThread::run_fixed_mode() {
 
 #endif // end of if SPLIT_MERGE_ENABLED
 
-                planner_pg->batch_txn_cnt = batch_cnt;
-                planner_pg->batch_id = batch_id;
+//                planner_pg->batch_txn_cnt = batch_cnt;
+//                planner_pg->batch_id = batch_id;
 #if BUILD_TXN_DEPS
                 planner_pg->txn_dep_graph = txn_dep_graph;
 #endif
@@ -833,9 +809,10 @@ RC PlannerThread::run_fixed_mode() {
                 for (uint64_t i = 0; i < g_thread_cnt; i++){
 
                     // create a new batch_partition
-                    batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
-                    batch_part->planner_id = _planner_id;
-                    batch_part->batch_id = batch_id;
+//                    batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+                    quecc_pool.batch_part_get_or_create(batch_part, _planner_id, i);
+//                    batch_part->planner_id = _planner_id;
+//                    batch_part->batch_id = batch_id;
                     batch_part->single_q = true;
                     batch_part->status.store(0);
                     batch_part->exec_q_status.store(0);
@@ -858,9 +835,11 @@ RC PlannerThread::run_fixed_mode() {
                         batch_part->exec_q = fa_execqs->get(0);
                         // recycle fa_exec_q
                         fa_execqs->clear();
-                        while(!work_queue.exec_qs_free_list[_planner_id]->push(fa_execqs)){
-                            M_ASSERT_V(false, "Should not happen");
-                        };
+                        quecc_pool.exec_qs_release(fa_execqs, _planner_id);
+
+//                        while(!work_queue.exec_qs_free_list[_planner_id]->push(fa_execqs)){
+//                            M_ASSERT_V(false, "Should not happen");
+//                        };
                     }
 
 #else
@@ -908,7 +887,9 @@ RC PlannerThread::run_fixed_mode() {
                 exec_queues->clear();
                 for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
                     Array<exec_queue_entry> * exec_q;
-                    exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+//                    exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+                    et_id = eq_idx_rand(plan_rng);
+                    quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
                     exec_queues->add(exec_q);
                 }
 
@@ -916,7 +897,7 @@ RC PlannerThread::run_fixed_mode() {
                 INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
                 INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
 #if BUILD_TXN_DEPS
-                for (auto it = access_table.begin(); it != access_table.end(); ++it){
+            for (auto it = access_table.begin(); it != access_table.end(); ++it){
                 delete it->second;
             }
             access_table.clear();
@@ -930,13 +911,13 @@ RC PlannerThread::run_fixed_mode() {
                 batch_start_time = 0;
                 batch_starting_txn_id = planner_txn_id;
 
-            DEBUG_Q("PL_%ld: Starting to work on planner_pg with batch_id = %ld, with slot_num =%ld\n",
-                    _planner_id, batch_id, slot_num);
+//            DEBUG_Q("PL_%ld: Starting to work on planner_pg with batch_id = %ld, with slot_num =%ld\n",
+//                    _planner_id, batch_id, slot_num);
                 planner_pg = &work_queue.batch_pg_map[slot_num][_planner_id];
                 // maybe we don't need this if we are going to overwrite all fields
                 txn_ctxs = planner_pg->txn_ctxs;
 
-                planner_pg->planner_id = _planner_id;
+//                planner_pg->planner_id = _planner_id;
 
                 if (batch_start_time == 0){
                     batch_start_time = get_sys_clock();
@@ -961,10 +942,12 @@ RC PlannerThread::run_fixed_mode() {
 
 //                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                     tctx->txn_id = planner_txn_id;
-                    tctx->txn_state = TXN_INITIALIZED;
+//                    tctx->txn_state = TXN_INITIALIZED;
                     tctx->completion_cnt.store(0);
+#if !SERVER_GENERATE_QUERIES
                     tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
-                    tctx->batch_id = batch_id;
+#endif
+//                    tctx->batch_id = batch_id;
 
 
                     // Analyze read-write set
@@ -997,12 +980,12 @@ RC PlannerThread::run_fixed_mode() {
                         // increment of batch mrange to use the next entry slot
                         entry->txn_id = planner_txn_id;
                         entry->txn_ctx = tctx;
-                        entry->batch_id = batch_id;
-                        assert(tctx->batch_id == batch_id);
+//                        entry->batch_id = batch_id;
+//                        assert(tctx->batch_id == batch_id);
 #if !SERVER_GENERATE_QUERIES
                         assert(msg->return_node_id != g_node_id);
+                         entry->return_node_id = msg->return_node_id;
 #endif
-                        entry->return_node_id = msg->return_node_id;
 
                         // Dirty code
                         ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;
@@ -1098,6 +1081,28 @@ RC PlannerThread::run_fixed_mode() {
     } // end of for loop
 
     mem_allocator.free(entry, sizeof(exec_queue_entry));
+    // release all exec_ques
+    for (uint64_t i=0; i < exec_queues->size(); ++i){
+        Array<exec_queue_entry> * exec_q = exec_queues->get(i);
+        et_id = eq_idx_rand(plan_rng);
+        quecc_pool.exec_queue_release(exec_q, _planner_id, et_id);
+    }
+#if SPLIT_MERGE_ENABLED
+    // clean up all thread-local memory
+    // free all split entries
+    while(!split_entry_free_list->empty()){
+        split_entry * s_entry_tmp;
+        split_entry_free_list->pop(s_entry_tmp);
+        mem_allocator.free(s_entry_tmp, sizeof(split_entry));
+    }
+
+    // free all assignment entries
+    while(!assign_entry_free_list->empty()){
+        assign_entry * a_entry_tmp;
+        assign_entry_free_list->pop(a_entry_tmp);
+        mem_allocator.free(a_entry_tmp, sizeof(assign_entry));
+    }
+#endif
 
     INC_STATS(_thd_id, plan_total_time[_planner_id], get_sys_clock()-plan_starttime);
 #if DEBUG_QUECC
@@ -1132,10 +1137,10 @@ RC PlannerThread::run_normal_mode() {
 #endif
     // max capcity, assume YCSB workload
 //    uint64_t exec_queue_capacity = planner_batch_size*10;
-    uint64_t exec_queue_capacity = EQ_INIT_CAP;
-#if BATCHING_MODE == SIZE_BASED
-    exec_queue_capacity = planner_batch_size * REQ_PER_QUERY;
-#endif
+//    uint64_t exec_queue_capacity = EQ_INIT_CAP;
+//#if BATCHING_MODE == SIZE_BASED
+//    exec_queue_capacity = planner_batch_size * REQ_PER_QUERY;
+//#endif
 
 
 #if SPLIT_MERGE_ENABLED
@@ -1187,24 +1192,22 @@ RC PlannerThread::run_normal_mode() {
     for (uint64_t i = 0; i < g_thread_cnt; i++) {
 //        Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
         Array<exec_queue_entry> * exec_q;
-        exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+        quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i);
 //        exec_q->init(exec_queue_capacity);
         exec_queues->add(exec_q);
     }
 
     // Pre-allocate execution queues to be used by planners and executors
     // this should eliminate the overhead of memory allocation
-    uint64_t  exec_queue_pool_size = FREE_LIST_INITIAL_SIZE;
+//    uint64_t  exec_queue_pool_size = FREE_LIST_INITIAL_SIZE;
     boost::random::mt19937 plan_rng;
     boost::random::uniform_int_distribution<> eq_idx_rand(0, g_thread_cnt-1);
 
-        for (uint64_t j = 0; j < exec_queue_pool_size; j++){
-//            Array<exec_queue_entry> * exec_q = new Array<exec_queue_entry>();
-            Array<exec_queue_entry> * exec_q;
-            exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
-            exec_queue_release(exec_q, _planner_id);
-//            while(!work_queue.exec_queue_free_list[_planner_id]->push(exec_q)){}
-        }
+//    for (uint64_t j = 0; j < exec_queue_pool_size; j++){
+//        Array<exec_queue_entry> * exec_q;
+//        exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+//        exec_queue_release(exec_q, _planner_id);
+//    }
 
     // Pre-allocate planner's transaction contexts
     // TODO(tq): refacgtor this to be in pool.h
@@ -1213,15 +1216,14 @@ RC PlannerThread::run_normal_mode() {
     slot_num = (batch_id % g_batch_map_length);
 
 #if BATCHING_MODE == TIME_BASED
-    uint64_t  txn_ctxs_pool_size = FREE_LIST_INITIAL_SIZE;
-    for (uint64_t j = 0; j < txn_ctxs_pool_size; j++){
-        transaction_context * txn_ctxs_tmp;
-        txn_ctxs_get_or_create(txn_ctxs_tmp, planner_batch_size, _planner_id);
-        txn_ctxs_release(txn_ctxs_tmp, _planner_id);
-    }
-
-    txn_ctxs_get_or_create(txn_ctxs, planner_batch_size, _planner_id);
-    pg_get_or_create(planner_pg, _planner_id);
+//    uint64_t  txn_ctxs_pool_size = FREE_LIST_INITIAL_SIZE;
+//    for (uint64_t j = 0; j < txn_ctxs_pool_size; j++){
+//        transaction_context * txn_ctxs_tmp;
+//        txn_ctxs_get_or_create(txn_ctxs_tmp, planner_batch_size, _planner_id);
+//        txn_ctxs_release(txn_ctxs_tmp, _planner_id);
+//    }
+    quecc_pool.txn_ctxs_get_or_create(txn_ctxs, planner_batch_size, _planner_id);
+    quecc_pool.pg_get_or_create(planner_pg, _planner_id);
     planner_pg->txn_ctxs = txn_ctxs;
 #else
     DEBUG_Q("PL_%ld: Starting to work on planner_pg with slot_num =%ld\n", _planner_id, slot_num);
@@ -1231,7 +1233,7 @@ RC PlannerThread::run_normal_mode() {
     txn_ctxs = planner_pg->txn_ctxs;
 #endif
 
-    planner_pg->planner_id = _planner_id;
+//    planner_pg->planner_id = _planner_id;
 
 #if DEBUG_QUECC
 //    Array<uint64_t> mrange_cnts;
@@ -1251,6 +1253,12 @@ RC PlannerThread::run_normal_mode() {
     uint64_t batch_starting_txn_id = planner_txn_id;
 
     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.alloc(sizeof(exec_queue_entry));
+    uint64_t et_id = 0;
+
+#if SPLIT_MERGE_ENABLED
+    Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+            sizeof(Array<exec_queue_entry> *) * 2);
+#endif
 
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
@@ -1395,22 +1403,27 @@ RC PlannerThread::run_normal_mode() {
                         while (true) {
 
                             // Allocate memory for new exec_qs
-                            Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
-                                    sizeof(Array<exec_queue_entry> *) * 2);
+//                            Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+//                                    sizeof(Array<exec_queue_entry> *) * 2);
 
-                            if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[0])) {
-                                nexec_qs[0]->clear();
-                            } else {
-                                nexec_qs[0] = new Array<exec_queue_entry>();
-                                nexec_qs[0]->init(exec_queue_capacity);
-                            }
+                            et_id = eq_idx_rand(plan_rng);
+                            quecc_pool.exec_queue_get_or_create(nexec_qs[0], _planner_id, et_id);
+                            et_id = eq_idx_rand(plan_rng);
+                            quecc_pool.exec_queue_get_or_create(nexec_qs[1], _planner_id, et_id);
 
-                            if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[1])) {
-                                nexec_qs[1]->clear();
-                            } else {
-                                nexec_qs[1] = new Array<exec_queue_entry>();
-                                nexec_qs[1]->init(exec_queue_capacity);
-                            }
+//                            if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[0])) {
+//                                nexec_qs[0]->clear();
+//                            } else {
+//                                nexec_qs[0] = new Array<exec_queue_entry>();
+//                                nexec_qs[0]->init(exec_queue_capacity);
+//                            }
+//
+//                            if (work_queue.exec_queue_free_list[_planner_id]->pop(nexec_qs[1])) {
+//                                nexec_qs[1]->clear();
+//                            } else {
+//                                nexec_qs[1] = new Array<exec_queue_entry>();
+//                                nexec_qs[1]->init(exec_queue_capacity);
+//                            }
 
                             //split current exec_q
                             // split current queue's range in half
@@ -1455,7 +1468,10 @@ RC PlannerThread::run_normal_mode() {
 
 
                             // Recycle execution queue
-                            while (!work_queue.exec_queue_free_list[_planner_id]->push(top_entry->exec_q)) {};
+//                            while (!work_queue.exec_queue_free_list[_planner_id]->push(top_entry->exec_q)) {};
+                            et_id = eq_idx_rand(plan_rng);
+                            quecc_pool.exec_queue_release(top_entry->exec_q, _planner_id, et_id);
+
     //                        top_entry->exec_q = NULL;
     //                        mem_allocator.free(top_entry, 0);
                             if (!split_entry_free_list->push(top_entry)) {
@@ -1625,8 +1641,8 @@ RC PlannerThread::run_normal_mode() {
 
 #endif // end of if SPLIT_MERGE_ENABLED
 
-            planner_pg->batch_txn_cnt = batch_cnt;
-            planner_pg->batch_id = batch_id;
+//            planner_pg->batch_txn_cnt = batch_cnt;
+//            planner_pg->batch_id = batch_id;
 #if BUILD_TXN_DEPS
             planner_pg->txn_dep_graph = txn_dep_graph;
 #endif
@@ -1636,9 +1652,10 @@ RC PlannerThread::run_normal_mode() {
             for (uint64_t i = 0; i < g_thread_cnt; i++){
 
                 // create a new batch_partition
-                batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
-                batch_part->planner_id = _planner_id;
-                batch_part->batch_id = batch_id;
+//                batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+                quecc_pool.batch_part_get_or_create(batch_part, _planner_id, i);
+//                batch_part->planner_id = _planner_id;
+//                batch_part->batch_id = batch_id;
                 batch_part->single_q = true;
                 batch_part->status.store(0);
                 batch_part->exec_q_status.store(0);
@@ -1668,9 +1685,10 @@ RC PlannerThread::run_normal_mode() {
                     batch_part->exec_q = fa_execqs->get(0);
                     // recycle fa_exec_q
                     fa_execqs->clear();
-                    while(!work_queue.exec_qs_free_list[_planner_id]->push(fa_execqs)){
-                        M_ASSERT_V(false, "Should not happen");
-                    };
+                    quecc_pool.exec_qs_release(fa_execqs, _planner_id);
+//                    while(!work_queue.exec_qs_free_list[_planner_id]->push(fa_execqs)){
+//                        M_ASSERT_V(false, "Should not happen");
+//                    };
                 }
 
 //                fa_execqs->clear();
@@ -1720,7 +1738,6 @@ RC PlannerThread::run_normal_mode() {
 #if BATCHING_MODE == TIME_BASED
             expected = 0;
             desired = (uint64_t) planner_pg;
-//            std::atomic_thread_fence(std::memory_order_seq_cst);
 //            DEBUG_Q("Planner_%ld :going to set pg(%ld) for batch_%ld at b_slot = %ld\n", _planner_id, desired, batch_id, slot_num);
 
             // This CAS operation can fail if CT did not reset the value
@@ -1756,7 +1773,9 @@ RC PlannerThread::run_normal_mode() {
 ////                    DEBUG_Q("Planner_%ld: Allocating new exec_q\n", _planner_id);
 //                    INC_STATS(_thd_id, plan_alloc_exec_queue_cnt[_planner_id], 1);
 //                }
-                exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+//                exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
+                et_id = eq_idx_rand(plan_rng);
+                quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
                 exec_queues->add(exec_q);
             }
 
@@ -1790,8 +1809,8 @@ RC PlannerThread::run_normal_mode() {
 //                DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
             }
 
-            txn_ctxs_get_or_create(txn_ctxs, planner_batch_size, _planner_id);
-            pg_get_or_create(planner_pg, _planner_id);
+            quecc_pool.txn_ctxs_get_or_create(txn_ctxs, planner_batch_size, _planner_id);
+            quecc_pool.pg_get_or_create(planner_pg, _planner_id);
             planner_pg->planner_id = _planner_id;
             planner_pg->txn_ctxs = txn_ctxs;
 #else
@@ -1809,7 +1828,7 @@ RC PlannerThread::run_normal_mode() {
 //    memset(&planner_pg->txn_ctxs,0,BATCH_SIZE/PLAN_THREAD_CNT);
             txn_ctxs = planner_pg->txn_ctxs;
 #endif
-            planner_pg->planner_id = _planner_id;
+//            planner_pg->planner_id = _planner_id;
 
         }
 
@@ -1837,10 +1856,12 @@ RC PlannerThread::run_normal_mode() {
 
 //                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;
-                tctx->txn_state = TXN_INITIALIZED;
+//                tctx->txn_state = TXN_INITIALIZED;
                 tctx->completion_cnt.store(0);
+#if !SERVER_GENERATE_QUERIES
                 tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
-                tctx->batch_id = batch_id;
+#endif
+//                tctx->batch_id = batch_id;
 
 
                 // Analyze read-write set
@@ -1876,12 +1897,12 @@ RC PlannerThread::run_normal_mode() {
                     // increment of batch mrange to use the next entry slot
                     entry->txn_id = planner_txn_id;
                     entry->txn_ctx = tctx;
-                    entry->batch_id = batch_id;
-                    assert(tctx->batch_id == batch_id);
+//                    entry->batch_id = batch_id;
+//                    assert(tctx->batch_id == batch_id);
 #if !SERVER_GENERATE_QUERIES
                     assert(msg->return_node_id != g_node_id);
-#endif
                     entry->return_node_id = msg->return_node_id;
+#endif
 
                     // Dirty code
                     ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;
@@ -1976,13 +1997,13 @@ RC PlannerThread::run_normal_mode() {
 //    for (uint64_t i = 0; i < g_thread_cnt; i++) {
 //        DEBUG_Q("Planner_%ld: Access cnt for bucket_%ld = %ld\n",_planner_id, i, mrange_cnts.get(i));
 //    }
-    uint64_t txn_free_list_cnt = 0;
-    transaction_context * txn_ctxs_tmp = NULL;
-    while(work_queue.txn_ctxs_free_list[_planner_id]->pop(txn_ctxs_tmp)){
-        txn_free_list_cnt++;
-    }
-
-    DEBUG_Q("Planner_%ld: created %ld txn_ctxs\n",_planner_id, txn_free_list_cnt);
+//    uint64_t txn_free_list_cnt = 0;
+//    transaction_context * txn_ctxs_tmp = NULL;
+//    while(work_queue.txn_ctxs_free_list[_planner_id]->pop(txn_ctxs_tmp)){
+//        txn_free_list_cnt++;
+//    }
+//
+//    DEBUG_Q("Planner_%ld: created %ld txn_ctxs\n",_planner_id, txn_free_list_cnt);
 
 
 //    uint64_t exec_q_free_list_cnt = 0;
@@ -1996,5 +2017,277 @@ RC PlannerThread::run_normal_mode() {
     printf("FINISH PT %ld:%ld\n",_node_id,_thd_id);
     fflush(stdout);
     return FINISH;
+
+}
+
+// QueCCPool methods implementation
+
+void QueCCPool::init(Workload * wl, uint64_t size){
+
+    exec_queue_capacity = (g_batch_size/g_plan_thread_cnt) * 1;
+    planner_batch_size = g_batch_size/g_plan_thread_cnt;
+
+
+    exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [g_thread_cnt];
+    batch_part_free_list = new boost::lockfree::queue<batch_partition *> * [g_thread_cnt];
+
+    // populate with g_thead_cnt+1 pools. The pool at g_thread_cnt will be used when there is no perference to specific
+    // thread id
+    // FIXME(tq): do we need this for batch partitions
+    for (uint64_t i=0; i < g_thread_cnt; ++i){
+        exec_queue_free_list[i] = new boost::lockfree::queue<Array<exec_queue_entry> *> (FREE_LIST_INITIAL_SIZE);
+
+        batch_part_free_list[i] = new boost::lockfree::queue<batch_partition *> (FREE_LIST_INITIAL_SIZE);
+//        for (uint64_t j=0; j < FREE_LIST_INITIAL_SIZE+10; ++j){
+//            Array<exec_queue_entry> * exec_q_tmp = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
+//            exec_q_tmp->init(exec_queue_capacity);
+//            while(!exec_queue_free_list[i]->push(exec_q_tmp)){};
+//
+//            // Pre-allocate batch paritions and to free_list for future use
+//            batch_partition * batch_part_tmp = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+//            while(!batch_part_free_list[i]->push(batch_part_tmp));
+//        }
+
+        exec_q_alloc_cnts[i].store(0);
+        exec_q_rel_cnts[i].store(0);
+        exec_q_reuse_cnts[i].store(0);
+
+        batch_part_rel_cnts[i].store(0);
+        batch_part_alloc_cnts[i].store(0);
+        batch_part_reuse_cnts[i].store(0);
+    }
+
+    exec_qs_free_list = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> * [g_plan_thread_cnt];
+
+    txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
+    pg_free_list = new boost::lockfree::queue<priority_group *> * [g_plan_thread_cnt];
+    for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+        exec_qs_free_list[i] = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *>(FREE_LIST_INITIAL_SIZE);
+        exec_qs_alloc_cnts[i].store(0);
+        exec_qs_rel_cnts[i].store(0);
+        exec_qs_reuse_cnts[i].store(0);
+
+        txn_ctxs_free_list[i] = new boost::lockfree::queue<transaction_context *> (FREE_LIST_INITIAL_SIZE);
+        txn_ctxs_alloc_cnts[i].store(0);
+        txn_ctxs_rel_cnts[i].store(0);
+        txn_ctxs_reuse_cnts[i].store(0);
+
+        pg_free_list[i] = new boost::lockfree::queue<priority_group *> (FREE_LIST_INITIAL_SIZE);
+        pg_alloc_cnts[i].store(0);
+        pg_rel_cnts[i].store(0);
+        pg_reuse_cnts[i].store(0);
+
+    }
+
+
+}
+
+void QueCCPool::free_all() {
+
+}
+
+void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
+    // we will use single list for now.
+    if (!exec_queue_free_list[et_id]->pop(exec_q)){
+        exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
+        exec_q->init(exec_queue_capacity);
+        exec_q_alloc_cnts[et_id].fetch_add(1);
+//        DEBUG_Q("Allocating exec_q\n");
+    }
+    else {
+        exec_q->clear();
+        exec_q_reuse_cnts[et_id].fetch_add(1);
+//        DEBUG_Q("Reusing exec_q\n");
+    }
+}
+
+void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
+    exec_q->clear();
+    while(!exec_queue_free_list[et_id]->push(exec_q)){};
+    exec_q_rel_cnts[et_id].fetch_add(1);
+}
+
+
+void QueCCPool::batch_part_get_or_create(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id){
+    if (!batch_part_free_list[et_id]->pop(batch_p)){
+        batch_p = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+//        DEBUG_Q("Allocating batch_p\n");
+        batch_part_alloc_cnts[et_id].fetch_add(1);
+    }
+    else {
+//        DEBUG_Q("Reusing batch_p\n");
+        batch_part_reuse_cnts[et_id].fetch_add(1);
+    }
+}
+void QueCCPool::batch_part_release(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id){
+    while(!batch_part_free_list[et_id]->push(batch_p));
+    batch_part_rel_cnts[et_id].fetch_add(1);
+}
+
+
+void QueCCPool::exec_qs_get_or_create(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id){
+
+    if (!exec_qs_free_list[planner_id]->pop(exec_qs)){
+        exec_qs = new Array<Array<exec_queue_entry> *>();
+        exec_qs->init(EXEC_QS_CAP);
+//        DEBUG_Q("Allocating new exec_qs\n");
+        exec_qs_alloc_cnts[planner_id].fetch_add(1);
+    }
+    else{
+//        DEBUG_Q("Reusing exec_qs\n");
+        exec_qs_reuse_cnts[planner_id].fetch_add(1);
+    }
+}
+
+void QueCCPool::exec_qs_release(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id){
+    while(!exec_qs_free_list[planner_id]->push(exec_qs)){}
+    exec_qs_rel_cnts[planner_id].fetch_add(1);
+}
+
+
+// Txn Ctxs
+void QueCCPool::txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t planner_id){
+    if (!txn_ctxs_free_list[planner_id]->pop(txn_ctxs)){
+//        DEBUG_Q("Allocating txn_ctxs\n");
+        txn_ctxs = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context)*planner_batch_size);
+        txn_ctxs_alloc_cnts[planner_id].fetch_add(1);
+    }
+    else {
+//        DEBUG_Q("Reusing txn_ctxs\n");
+        txn_ctxs_reuse_cnts[planner_id].fetch_add(1);
+    }
+    memset(txn_ctxs, 0,sizeof(transaction_context)*planner_batch_size);
+}
+void QueCCPool::txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id){
+    while(!txn_ctxs_free_list[planner_id]->push(txn_ctxs));
+    txn_ctxs_rel_cnts[planner_id].fetch_add(1);
+}
+
+// PGs
+
+void QueCCPool::pg_get_or_create(priority_group * &pg, uint64_t planner_id){
+    if (!pg_free_list[planner_id]->pop(pg)){
+        pg = (priority_group *) mem_allocator.alloc(sizeof(priority_group));
+//        DEBUG_Q("Allocating priority group\n");
+        pg_alloc_cnts[planner_id].fetch_add(1);
+    }
+    else{
+//        DEBUG_Q("Reuseing priority group\n");
+        pg_reuse_cnts[planner_id].fetch_add(1);
+
+    }
+    memset(pg, 0,sizeof(priority_group));
+}
+
+void QueCCPool::pg_release(priority_group * &pg, uint64_t planner_id){
+    while(!pg_free_list[planner_id]->push(pg)){};
+    pg_rel_cnts[planner_id].fetch_add(1);
+}
+
+void QueCCPool::print_stats() {
+    printf("QueCC pool stats ... \n");
+    fflush(stdout);
+    uint64_t total_exec_q_alloc_cnt = 0;
+    uint64_t total_exec_q_reuse_cnt = 0;
+    uint64_t total_exec_q_rel_cnt = 0;
+
+    uint64_t total_bp_alloc_cnt = 0;
+    uint64_t total_bp_reuse_cnt = 0;
+    uint64_t total_bp_rel_cnt = 0;
+
+    uint64_t total_exec_qs_alloc_cnt = 0;
+    uint64_t total_exec_qs_reuse_cnt = 0;
+    uint64_t total_exec_qs_rel_cnt = 0;
+
+    uint64_t total_txn_ctxs_alloc_cnt = 0;
+    uint64_t total_txn_ctxs_reuse_cnt = 0;
+    uint64_t total_txn_ctxs_rel_cnt = 0;
+
+    uint64_t total_pg_alloc_cnt = 0;
+    uint64_t total_pg_reuse_cnt = 0;
+    uint64_t total_pg_rel_cnt = 0;
+
+
+
+    for (uint64_t i=0; i < g_thread_cnt; ++i){
+//        printf("exec_q alloc for ET_%ld = %ld\n", i, exec_q_alloc_cnts[i].load());
+//        printf("exec_q reuse for ET_%ld = %ld\n", i, exec_q_reuse_cnts[i].load());
+//        printf("exec_q release for ET_%ld = %ld\n", i, exec_q_rel_cnts[i].load());
+
+//        printf("batch_part alloc for ET_%ld = %ld\n", i, batch_part_alloc_cnts[i].load());
+//        printf("batch_part reuse for ET_%ld = %ld\n", i, batch_part_reuse_cnts[i].load());
+//        printf("batch_part release for ET_%ld = %ld\n", i, batch_part_rel_cnts[i].load());
+//        fflush(stdout);
+
+        total_exec_q_alloc_cnt += exec_q_alloc_cnts[i].load();
+        total_exec_q_reuse_cnt += exec_q_reuse_cnts[i].load();
+        total_exec_q_rel_cnt += exec_q_rel_cnts[i].load();
+
+        total_bp_alloc_cnt += batch_part_alloc_cnts[i].load();
+        total_bp_reuse_cnt += batch_part_reuse_cnts[i].load();
+        total_bp_rel_cnt += batch_part_rel_cnts[i].load();
+    }
+
+    for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+//        printf("exec_qs alloc for ET_%ld = %ld\n", i, exec_qs_alloc_cnts[i].load());
+//        printf("exec_qs reuse for ET_%ld = %ld\n", i, exec_qs_reuse_cnts[i].load());
+//        printf("exec_qs release for ET_%ld = %ld\n", i, exec_qs_rel_cnts[i].load());
+//        fflush(stdout);
+
+        total_exec_qs_alloc_cnt += exec_qs_alloc_cnts[i].load();
+        total_exec_qs_reuse_cnt += exec_qs_reuse_cnts[i].load();
+        total_exec_qs_rel_cnt += exec_qs_rel_cnts[i].load();
+
+        total_txn_ctxs_alloc_cnt += txn_ctxs_alloc_cnts[i].load();
+        total_txn_ctxs_reuse_cnt += txn_ctxs_reuse_cnts[i].load();
+        total_txn_ctxs_rel_cnt += txn_ctxs_rel_cnts[i].load();
+
+        total_pg_alloc_cnt += pg_alloc_cnts[i].load();
+        total_pg_reuse_cnt += pg_reuse_cnts[i].load();
+        total_pg_rel_cnt += pg_rel_cnts[i].load();
+
+    }
+
+    printf("total exec_q alloc = %ld\n", total_exec_q_alloc_cnt);
+    printf("total exec_q reuse = %ld\n", total_exec_q_reuse_cnt);
+    printf("total exec_q release = %ld\n", total_exec_q_rel_cnt);
+    printf("diff exec_q cnts = %ld\n", (total_exec_q_alloc_cnt+total_exec_q_reuse_cnt)-total_exec_q_rel_cnt);
+
+    printf("total batch_part alloc = %ld\n", total_bp_alloc_cnt);
+    printf("total batch_part reuse = %ld\n", total_bp_reuse_cnt);
+    printf("total batch_part release = %ld\n", total_bp_rel_cnt);
+    printf("diff batch_part cnts = %ld\n", (total_bp_alloc_cnt+total_bp_reuse_cnt)-total_bp_rel_cnt);
+
+    printf("total exec_qs alloc = %ld\n", total_exec_qs_alloc_cnt);
+    printf("total exec_qs reuse = %ld\n", total_exec_qs_reuse_cnt);
+    printf("total exec_qs release = %ld\n", total_exec_qs_rel_cnt);
+    printf("diff exec_qs cnts = %ld\n", (total_exec_qs_alloc_cnt+total_exec_qs_reuse_cnt)-total_exec_qs_rel_cnt);
+
+
+    printf("total txn_ctxs alloc = %ld\n", total_txn_ctxs_alloc_cnt);
+    printf("total txn_ctxs reuse = %ld\n", total_txn_ctxs_reuse_cnt);
+    printf("total txn_ctxs release = %ld\n", total_txn_ctxs_rel_cnt);
+    printf("diff txn_ctxs cnts = %ld\n", (total_txn_ctxs_alloc_cnt+total_txn_ctxs_reuse_cnt)-total_txn_ctxs_rel_cnt);
+
+    printf("total pg alloc = %ld\n", total_pg_alloc_cnt);
+    printf("total pg reuse = %ld\n", total_pg_reuse_cnt);
+    printf("total pg release = %ld\n", total_pg_rel_cnt);
+    printf("diff pg cnts = %ld\n", (total_pg_alloc_cnt+total_pg_reuse_cnt)-total_pg_rel_cnt);
+
+    printf("size of exec_queue_entry = %ld\n", sizeof(exec_queue_entry));
+    printf("size of Array<exec_queue_entry> = %ld\n", sizeof(Array<exec_queue_entry>));
+    printf("exec_queue_capacity = %ld\n", exec_queue_capacity);
+    uint64_t exec_q_sum = total_exec_q_alloc_cnt*((exec_queue_capacity*sizeof(exec_queue_entry))+sizeof(Array<exec_queue_entry>));
+    printf("total allocated size for exec_q = %ld\n",
+           exec_q_sum/1024);
+    uint64_t exec_qs_sum = total_exec_qs_alloc_cnt*((sizeof(Array<exec_queue_entry> *)*32)+sizeof(Array<Array<exec_queue_entry> *>));
+    printf("total allocated size for exec_qs = %ld\n",
+           exec_qs_sum/1024);
+    printf("total allocated size for all = %ld\n",
+           (exec_qs_sum+exec_q_sum)/1024);
+
+    printf("size of access type = %ld\n",
+           sizeof(access_t));
+    fflush(stdout);
 
 }

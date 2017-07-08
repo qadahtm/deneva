@@ -23,12 +23,6 @@
 #include <boost/lockfree/queue.hpp>
 #include "concurrentqueue.h"
 
-//#if CC_ALG == QUECC
-//
-//#include "quecc_thread.h"
-//
-//#endif
-
 class TxnManager;
 class BaseQuery;
 class Workload;
@@ -55,17 +49,6 @@ private:
   Workload * _wl;
 
 };
-
-
-//#if CC_ALG == QUECC
-//class QueCCPool {
-//    void init(Workload * wl, uint64_t size);
-//    void free_all();
-//private:
-//    boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
-//
-//};
-//#endif
 
 class TxnPool {
 public:

@@ -196,13 +196,21 @@ int main(int argc, char* argv[])
   logger.init("logfile.log");
   printf("Done\n");
 #endif
-
+    stats.printProcInfo();
 #if SERVER_GENERATE_QUERIES
   printf("Initializing client query queue... ");
   fflush(stdout);
   client_query_queue.init(m_wl);
   printf("Done\n");
   fflush(stdout);
+#endif
+    stats.printProcInfo();
+#if CC_ALG == QUECC
+    printf("Initializing QueCC pool... ");
+    fflush(stdout);
+    quecc_pool.init(m_wl,0);
+    printf("Done\n");
+    stats.printProcInfo();
 #endif
 
 	// 2. spawn multiple threads
@@ -253,10 +261,12 @@ int main(int argc, char* argv[])
     cpu_cnt++;
 #endif
 
-#if MODE == FIXED_MODE && CC_ALG == QUECC
-
-    planner_thds = new PlannerThread[g_plan_thread_cnt];
+#if MODE == FIXED_MODE
     worker_thds = new WorkerThread[wthd_cnt];
+
+#if CC_ALG == QUECC
+    planner_thds = new PlannerThread[g_plan_thread_cnt];
+
     wthd_cnt = g_plan_thread_cnt;
     starttime = get_server_clock();
 
@@ -292,24 +302,18 @@ int main(int argc, char* argv[])
         pthread_join(p_thds[i], NULL);
     }
 
-//    endtime = get_server_clock();
-//    printf("Warm Up End: PT Initialization Time = %ld, warmup = %d, warmup_done = %d\n",
-//           (endtime - starttime/ BILLION), simulation->warmup, simulation->is_warmup_done());
-//    fflush(stdout);
-
     // destory PT barrier and create ET barrier, this is needed when the numbers of PTs and ETs are not equal
     if (pthread_barrier_destroy(&warmup_bar)){
         M_ASSERT_V(false, "barriar destroy failed\n");
     }
+    free(p_thds);
+#endif
 
     wthd_cnt = g_thread_cnt;
     if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
         M_ASSERT_V(false, "barriar init failed\n");
     }
-    // TODO(tq): we probably don't need to free this
-    free(p_thds);
-    p_thds =
-            (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
+    p_thds = (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
     pthread_attr_init(&attr);
     id = 0;
     cpu_cnt = 1; // restart from cpu 1
@@ -348,11 +352,22 @@ int main(int argc, char* argv[])
            (endtime - starttime)/BILLION, stats.totals->txn_cnt);
     fflush(stdout);
 
+
+    if (STATS_ENABLE){
+        stats.print(true);
+    }
+    printf("\n");
+    fflush(stdout);
+
+    // reset stats
+    for (uint64_t i =0; i < g_total_thread_cnt; ++i){
+        stats._stats[i]->clear();
+    }
+#if CC_ALG == QUECC
     // destory last barrier
     if (pthread_barrier_destroy(&warmup_bar)){
         M_ASSERT_V(false, "barriar destroy failed\n");
     }
-
 
     // Reset PG map and batch map
 
@@ -371,11 +386,7 @@ int main(int argc, char* argv[])
             }
         }
     }
-
-    // reset stats
-    for (uint64_t i =0; i < g_total_thread_cnt; ++i){
-        stats._stats[i]->clear();
-    }
+    quecc_pool.print_stats();
 
     wthd_cnt = g_plan_thread_cnt;
 
@@ -416,6 +427,7 @@ int main(int argc, char* argv[])
     if (pthread_barrier_destroy(&warmup_bar)){
         M_ASSERT_V(false, "barriar destroy failed\n");
     }
+#endif
 
     // Run ETs
     wthd_cnt = g_thread_cnt;
@@ -450,8 +462,7 @@ int main(int argc, char* argv[])
     }
 
     // Exit and print status.
-
-
+#if CC_ALG == QUECC
 	endtime = get_server_clock();
     float et_total_runtime = (float)(endtime - starttime);
     fflush(stdout);
@@ -462,18 +473,26 @@ int main(int argc, char* argv[])
     }
     float pt_total_runtime_sec = (pt_total_runtime / BILLION);
     float et_total_runtime_sec = (et_total_runtime / BILLION);
-    float pt_tput = (float) stats.totals->txn_cnt / (pt_total_runtime_sec);
-    float et_tput = (float) stats.totals->txn_cnt / (et_total_runtime_sec);
-    float tput = (float) stats.totals->txn_cnt / (total_runtime / BILLION);
+    uint64_t txn_cnt = (g_batch_size*g_batch_map_length);
+    float pt_tput = (float) txn_cnt/ (pt_total_runtime_sec);
+    float et_tput = (float) txn_cnt / (et_total_runtime_sec);
+    float tput = (float) txn_cnt / (total_runtime / BILLION);
+
+
     printf("PASS!,SimTime=%f,total_time=%f,pt_time=%f,et_time=%f,total_tput=%f,pt_tput=%f,et_tput=%f, txn_cnt=%ld\n",
            total_runtime / BILLION,
            pt_total_runtime_sec+et_total_runtime_sec,
            pt_total_runtime_sec,
            et_total_runtime_sec,
            tput, pt_tput, et_tput,
-           stats.totals->txn_cnt
+//           stats.totals->txn_cnt
+           txn_cnt
     );
-
+#else
+    endtime = get_server_clock();
+    printf("PASS!,SimTime=%f\n",
+           ((float)endtime-starttime) / BILLION);
+#endif
     if (STATS_ENABLE){
         stats.print(false);
     }
@@ -482,6 +501,9 @@ int main(int argc, char* argv[])
     // Free things
     m_wl->index_delete_all();
 
+#if CC_ALG == QUECC
+    quecc_pool.print_stats();
+#endif
     return 0;
 #else
 

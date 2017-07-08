@@ -223,7 +223,7 @@ inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     m_item = index_read(_wl->the_index, req->key, part_id);
 
 #if CC_ALG == QUECC
-    // just access row, no need to go throught lock manager path
+//    // just access row, no need to go throught lock manager path
     row_local = ((row_t *) m_item->location);
 #else
     row_t *row = ((row_t *) m_item->location);
@@ -250,9 +250,9 @@ inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
 
     } else {
         //TODO(tq): remove on clean up
-        if (acctype != WR){
-            DEBUG_Q("Access type must be %d == %d\n", WR, acctype);
-        }
+//        if (acctype != WR){
+//            DEBUG_Q("Access type must be %d == %d\n", WR, acctype);
+//        }
         assert(acctype == WR);
         int fid = 0;
         char *data = row_local->get_data();

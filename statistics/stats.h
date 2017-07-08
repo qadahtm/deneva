@@ -360,6 +360,8 @@ public:
   void cpu_util(FILE * outf);
   void print_prof(FILE * outf);
 
+    void printProcInfo();
+
   clock_t lastCPU, lastSysCPU, lastUserCPU;
 private:
   uint64_t thd_cnt;

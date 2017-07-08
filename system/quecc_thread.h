@@ -32,40 +32,34 @@ struct transaction_context {
 //    uint64_t completion_cnt;
 // this need to be reset on reuse
     boost::atomic<uint64_t> completion_cnt;
+#if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
-    uint64_t batch_id;
+#endif
+//    uint64_t batch_id;
     uint8_t txn_state;
-//    bool dep_vector[10][10];
-//    uint64_t keys[10];
-//    char vals[10000];
 };
 
 struct exec_queue_entry {
-    transaction_context * txn_ctx;
-    uint64_t txn_id;
-//    uint64_t req_id;
-//    uint64_t planner_id;
-    uint64_t batch_id;
+    transaction_context * txn_ctx; // 8
+    uint64_t txn_id; //8
+//    uint64_t batch_id; // 8
 #if WORKLOAD == YCSB
-    // Static allocation for request
-    // Thiw should work after casting it to ycsb_request
-    char req_buffer[1016];
-
-//    access_t ycsb_req_acctype;
-//    uint64_t ycsb_req_key;
-    // This is different from ycsb_request spects where value is only 1 byte
-    // here value consist of 10 fields and each is 100 bytes
-//    char ycsb_req_val[1000];
-//    uint64_t ycsb_req_index;
-    uint64_t return_node_id;
+     // 8 bytes for access_type
+    // 8 bytes for key
+    // 1 byte for value
+    char req_buffer[17];
+//    ycsb_request req;
+#if !SERVER_GENERATE_QUERIES
+    uint64_t return_node_id; //8
+#endif
 #endif
 };
 
 
 struct priority_group{
     uint64_t planner_id;
-    uint64_t batch_id;
-    uint64_t batch_txn_cnt;
+//    uint64_t batch_id;
+//    uint64_t batch_txn_cnt;
     atomic<uint64_t> status;
     hash_table_t * txn_dep_graph;
     uint64_t batch_starting_txn_id;
@@ -77,8 +71,8 @@ struct priority_group{
 };
 
 struct batch_partition{
-    uint64_t planner_id;
-    uint64_t batch_id;
+//    uint64_t planner_id;
+//    uint64_t batch_id;
     atomic<uint64_t> status;
     priority_group * planner_pg;
 
@@ -154,8 +148,8 @@ typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCom
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCompareStartRange>> split_min_heap_t;
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<AssignEntryCompareSum>> assign_ptr_min_heap_t;
 
-inline void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
-void exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
+//inline void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
+//void exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
 
 
 inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
@@ -205,5 +199,66 @@ public:
     void setup();
 };
 #endif //CT_ENABLED
+
+class QueCCPool {
+public:
+    void init(Workload * wl, uint64_t size);
+
+    // Planner EQS methods
+    void exec_qs_get_or_create(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id);
+    void exec_qs_release(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id);
+
+    //EQ pool methods
+    void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id);
+    void exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id);
+
+    //Batch Partition methods
+    void batch_part_get_or_create(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id);
+    void batch_part_release(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id);
+
+    // Txn Ctxs
+    void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t planner_id);
+    void txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id);
+
+    // PGs
+    void pg_get_or_create(priority_group * &pg, uint64_t planner_id);
+    void pg_release(priority_group * &pg, uint64_t planner_id);
+
+    void free_all();
+    void print_stats();
+private:
+    uint64_t exec_queue_capacity;
+    uint64_t planner_batch_size;
+
+    boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
+    boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
+    boost::lockfree::queue<batch_partition *> ** batch_part_free_list;
+
+    boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
+    boost::lockfree::queue<priority_group *> ** pg_free_list;
+
+    // Stats for debugging
+    // TODO(tq): remove or use a macro to turn them off
+    atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT];
+    atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT];
+    atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT];
+
+    atomic<uint64_t> exec_q_alloc_cnts[THREAD_CNT];
+    atomic<uint64_t> exec_q_reuse_cnts[THREAD_CNT];
+    atomic<uint64_t> exec_q_rel_cnts[THREAD_CNT];
+
+    atomic<uint64_t> exec_qs_alloc_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> exec_qs_reuse_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> exec_qs_rel_cnts[PLAN_THREAD_CNT];
+
+    atomic<uint64_t> txn_ctxs_alloc_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> txn_ctxs_reuse_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> txn_ctxs_rel_cnts[PLAN_THREAD_CNT];
+
+    atomic<uint64_t> pg_alloc_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> pg_reuse_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT];
+
+};
 
 #endif //_QUECC_THREAD_H

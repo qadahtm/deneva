@@ -17,21 +17,29 @@ import time
 from datetime import timedelta
 import multiprocessing
 
-def set_config(ncc_alg, wthd_cnt, theta):
-    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}'.format(ncc_alg, wthd_cnt, theta))
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
+    
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
     oofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'oconfig.h'
     nconf = open(nfname, 'w')
     oconf = open(ofname, 'r')
+
+    pt_cnt = int(pt_p*wthd_cnt)
+    nwthd_cnt = wthd_cnt - pt_cnt
+    if nwthd_cnt == 0:
+        nwthd_cnt = wthd_cnt
+    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}'
+        .format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, ets))
+
     for line in oconf:
     #     print(line, end='')
         nline = line
-        #change worker threads
+        #change worker threads        
         m = re.search('#define THREAD_CNT\s+(\d+)', line.strip())
         if m:
             # print(m.group(1))
-            nline = '#define THREAD_CNT {}\n'.format(wthd_cnt)
+            nline = '#define THREAD_CNT {}\n'.format(nwthd_cnt)
         #changing cc_alg
         ccalg_m = re.search('#define CC_ALG\s+(\S+)', line.strip())
         if (ccalg_m):
@@ -41,6 +49,12 @@ def set_config(ncc_alg, wthd_cnt, theta):
         if (theta_m):
             # print(theta_m.group(1))
             nline = '#define ZIPF_THETA {}\n'.format(theta)
+        pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
+        if (pt_m):
+            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(int(pt_p*wthd_cnt)))
+        etsync_m =    re.search('#define COMMIT_BEHAVIOR\s+(IMMEDIATE|AFTER_BATCH_COMP|AFTER_PG_COMP)',line.strip())
+        if etsync_m:
+             nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
         nconf.write(nline)
     nconf.close()
     oconf.close()
@@ -247,16 +261,21 @@ cc_algs = ['QUECC']
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
 # wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
-wthreads = [8,16,24,32,40,48,56,62] # for m4.16xlarge for QueCC
-pt_perc = [0.25,0.5,0.75]
+# wthreads = [8,16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
+# wthreads = [40,48,56,60] # for m4.16xlarge for QueCC
+wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+# pt_perc = [0.25,0.5,0.75, 1]
+pt_perc = [0.25,0.5, 1]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
 # wthreads = [1,2]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
-et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
-zipftheta = [0.0,0.6]
+# et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
+et_sync = ['AFTER_BATCH_COMP']
+zipftheta = [0.0]
+# zipftheta = [0.0]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 procs = []
@@ -284,20 +303,38 @@ for ncc_alg in cc_algs:
                 #Don't run other CCs with 1 thread 
                 runexp = False
 
-            if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
+            # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
             # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
                 #Don't run QueCC with more than 30 threads 
-                runexp = False
-            if runexp:       
-                set_config(ncc_alg, wthd, theta)
-                # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                build_project()
-                for trial in list(range(num_trials)):
-                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, prefix)
-                    # print('Dry run: {}, {}, {}, t{}'.format(ncc_alg, str(wthd), str(theta), str(trial)))
-                    seq_no = seq_no + 1           
+                # runexp = False
+            exp_cnt = 0
+            for pt in pt_perc:
+                for ets in et_sync:
+                    if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                        runexp = False
+
+                    if runexp:
+                        exp_cnt = exp_cnt + 1
+                        set_config(ncc_alg, wthd, theta, pt, ets)
+                        # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                        build_project()
+                        for trial in list(range(num_trials)):
+                            pt_cnt = str(int(pt*wthd))
+                            pt_perc_str = str(int(pt*100))
+                            et_cnt = str(wthd-int(pt*wthd));
+                            if (wthd-int(pt*wthd)) == 0:
+                                et_cnt = str(wthd);
+                            if prefix != "":
+                                nprefix = prefix + '_' + ets + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_';
+                            else:
+                                nprefix = ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_';
+                            run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                            # print('Dry run: {}, {}, {}, t{}, {}'
+                                # .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                            seq_no = seq_no + 1           
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
+# print(subject)
 send_email(subject, '')
 exec_cmd('sudo shutdown -h now', env)

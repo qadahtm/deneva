@@ -115,18 +115,8 @@ public:
     // QueCC optimization to reuse and recycle execution queues
     // Use this instead of freeing memory and reallocating it
     // TODO(tq): refactor all free_lists to pool.h
-    boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
-    boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
-    boost::lockfree::queue<priority_group *> ** pg_free_list;
-    boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
-
-
-    boost::lockfree::queue<transaction_context *> * completion_queue;
-
-
-    // Similarly we will have a free list for execution context per planner
-    // This approach is not needed
-//    boost::lockfree::queue<transaction_context *> ** txn_ctx_free_list;
+//    boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
+//    boost::lockfree::queue<priority_group *> ** pg_free_list;
 
 #if QUECC_DEBUG
     atomic<int64_t> inflight_msg;

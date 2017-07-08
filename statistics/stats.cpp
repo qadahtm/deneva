@@ -1850,6 +1850,18 @@ void Stats::print_client(bool prog) {
   fflush(stdout);
 }
 
+void Stats::printProcInfo(){
+  fflush(stdout);
+  FILE * outf;
+  outf = stdout;
+  fprintf(outf, "[prog-proc-info] ");
+  mem_util(outf);
+  cpu_util(outf);
+
+  fprintf(outf,"\n");
+  fflush(outf);
+}
+
 void Stats::print(bool prog) {
 
   fflush(stdout);

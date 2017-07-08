@@ -80,6 +80,10 @@ class Client_txn;
 class Sequencer;
 class Logger;
 class TimeTable;
+// for QueCC
+//#if CC_ALG == QUECC
+class QueCCPool;
+//#endif
 
 typedef uint32_t UInt32;
 typedef int32_t SInt32;
@@ -115,7 +119,10 @@ extern Client_txn client_man;
 extern Sequencer seq_man;
 extern Logger logger;
 extern TimeTable time_table;
-
+// for QueCC
+//#if CC_ALG == QUECC
+extern QueCCPool quecc_pool;
+//#endif
 extern bool volatile warmup_done;
 extern bool volatile enable_thread_mem_pool;
 extern pthread_barrier_t warmup_bar;
