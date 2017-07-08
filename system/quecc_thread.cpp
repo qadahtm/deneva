@@ -2344,7 +2344,7 @@ void QueCCPool::print_stats() {
 //        printf("batch_part reuse for ET_%ld = %ld\n", i, batch_part_reuse_cnts[i].load());
 //        printf("batch_part release for ET_%ld = %ld\n", i, batch_part_rel_cnts[i].load());
 //        fflush(stdout);
-
+#if DEBUG_QUECC
         total_exec_q_alloc_cnt += exec_q_alloc_cnts[i].load();
         total_exec_q_reuse_cnt += exec_q_reuse_cnts[i].load();
         total_exec_q_rel_cnt += exec_q_rel_cnts[i].load();
@@ -2352,6 +2352,7 @@ void QueCCPool::print_stats() {
         total_bp_alloc_cnt += batch_part_alloc_cnts[i].load();
         total_bp_reuse_cnt += batch_part_reuse_cnts[i].load();
         total_bp_rel_cnt += batch_part_rel_cnts[i].load();
+#endif
     }
 
     for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
@@ -2360,6 +2361,7 @@ void QueCCPool::print_stats() {
 //        printf("exec_qs release for ET_%ld = %ld\n", i, exec_qs_rel_cnts[i].load());
 //        fflush(stdout);
 
+#if DEBUG_QUECC
         total_exec_qs_alloc_cnt += exec_qs_alloc_cnts[i].load();
         total_exec_qs_reuse_cnt += exec_qs_reuse_cnts[i].load();
         total_exec_qs_rel_cnt += exec_qs_rel_cnts[i].load();
@@ -2371,7 +2373,7 @@ void QueCCPool::print_stats() {
         total_pg_alloc_cnt += pg_alloc_cnts[i].load();
         total_pg_reuse_cnt += pg_reuse_cnts[i].load();
         total_pg_rel_cnt += pg_rel_cnts[i].load();
-
+#endif
     }
 
     printf("total exec_q alloc = %ld\n", total_exec_q_alloc_cnt);
