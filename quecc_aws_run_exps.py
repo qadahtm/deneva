@@ -261,11 +261,13 @@ cc_algs = ['QUECC']
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
 # wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
-# wthreads = [8,16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
+wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [40,48,56,60] # for m4.16xlarge for QueCC
-wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+# wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+# wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
-pt_perc = [0.25,0.5, 1]
+pt_perc = [0.25,0.5,1]
+# pt_perc = [0.5]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
 # wthreads = [1,2]
@@ -299,9 +301,9 @@ for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:
             runexp = True
-            if wthd == 20  and ncc_alg != 'QUECC':
+            # if wthd == 20  and ncc_alg != 'QUECC':
                 #Don't run other CCs with 1 thread 
-                runexp = False
+                # runexp = False
 
             # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
             # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge

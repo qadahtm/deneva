@@ -224,11 +224,14 @@ public:
     void pg_get_or_create(priority_group * &pg, uint64_t planner_id);
     void pg_release(priority_group * &pg, uint64_t planner_id);
 
+    //TODO(tq): implement free_all()
     void free_all();
     void print_stats();
-private:
+
     uint64_t exec_queue_capacity;
     uint64_t planner_batch_size;
+
+private:
 
     boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
     boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
@@ -239,6 +242,7 @@ private:
 
     // Stats for debugging
     // TODO(tq): remove or use a macro to turn them off
+#if DEBUG_QUECC
     atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT];
     atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT];
     atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT];
@@ -258,7 +262,7 @@ private:
     atomic<uint64_t> pg_alloc_cnts[PLAN_THREAD_CNT];
     atomic<uint64_t> pg_reuse_cnts[PLAN_THREAD_CNT];
     atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT];
-
+#endif
 };
 
 #endif //_QUECC_THREAD_H

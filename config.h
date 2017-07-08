@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 36
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -165,14 +165,21 @@
 #define TIME_BASED 1
 // IMPORTATN: For Size-based batching, BATCH_SIZE must be divisable by PLAN_THREAD_CNT
 #define SIZE_BASED 2
-#define SPLIT_MERGE_ENABLED false
+// Split and merge config. parameters
+#define SPLIT_MERGE_ENABLED true
+#define SPLIT_MERGE_STRATEGY  EAGER_SPLIT
+// Eager split means that as soon as we go over the threashold we split the EQ
+#define EAGER_SPLIT 1
+// In lazy splot, we perform the splitting when we are have buffered enough operations for a batch
+#define LAZY_SPLIT  2
+
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS false
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 1.1
-#define EXEC_QS_CAP 16
+#define EXECQ_CAP_FACTOR 2
+#define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
@@ -226,9 +233,9 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -335,7 +342,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

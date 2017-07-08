@@ -168,6 +168,7 @@ UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 // QUECC
 const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
 UInt32 g_batch_size = BATCH_SIZE;
+UInt32 g_exec_qs_max_size = EXEC_QS_MAX_SIZE;
 const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;
 
 double g_mpr = MPR;
