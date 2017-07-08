@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 4
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -233,9 +233,9 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -357,8 +357,8 @@ enum PPSTxnType {PPS_ALL = 0,
 // FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
 // on the total. Currently, only QUECC is supported.
 // TODO(tq): support other CC_ALGs
-//#define MODE NORMAL_MODE
-#define MODE FIXED_MODE
+#define MODE NORMAL_MODE
+//#define MODE FIXED_MODE
 
 
 /***********************************************/

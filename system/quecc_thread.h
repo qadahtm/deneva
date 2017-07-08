@@ -31,7 +31,7 @@ struct transaction_context {
     uint64_t txn_id;
 //    uint64_t completion_cnt;
 // this need to be reset on reuse
-    boost::atomic<uint64_t> completion_cnt;
+    boost::atomic<uint32_t> completion_cnt;
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
 #endif
@@ -60,7 +60,7 @@ struct priority_group{
     uint64_t planner_id;
 //    uint64_t batch_id;
 //    uint64_t batch_txn_cnt;
-    atomic<uint64_t> status;
+    atomic<uint8_t> status;
     hash_table_t * txn_dep_graph;
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
@@ -87,7 +87,7 @@ struct batch_partition{
     atomic<uint64_t> exec_qs_comp_cnt;
 //    Array<exec_queue_entry> ** exec_qs;
     Array<Array<exec_queue_entry> *> * exec_qs;
-    atomic<uint64_t> * exec_qs_status;
+    atomic<uint8_t> * exec_qs_status;
 };
 
 
@@ -185,6 +185,8 @@ private:
     uint64_t idle_cnt = 0;
     uint64_t expected = 0;
     uint64_t desired = 0;
+    uint8_t expected8 = 0;
+    uint8_t desired8 = 0;
     uint64_t slot_num = 0;
 #if BUILD_TXN_DEPS
     hash_table_t access_table;
@@ -207,6 +209,9 @@ public:
     // Planner EQS methods
     void exec_qs_get_or_create(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id);
     void exec_qs_release(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id);
+
+    void exec_qs_status_get_or_create(atomic<uint8_t> *&execqs_status, uint64_t planner_id);
+    void exec_qs_status_release(atomic<uint8_t> *&execqs_status, uint64_t planner_id);
 
     //EQ pool methods
     void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id);
@@ -236,6 +241,8 @@ private:
     boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
     boost::lockfree::queue<Array<exec_queue_entry> *> ** exec_queue_free_list;
     boost::lockfree::queue<batch_partition *> ** batch_part_free_list;
+
+    boost::lockfree::queue<atomic<uint8_t> *> ** exec_qs_status_free_list;
 
     boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
     boost::lockfree::queue<priority_group *> ** pg_free_list;

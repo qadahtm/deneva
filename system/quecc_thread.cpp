@@ -811,9 +811,10 @@ RC PlannerThread::run_fixed_mode() {
                         batch_part->sub_exec_qs_cnt = fa_execqs->size();
                         batch_part->exec_qs = fa_execqs;
 
-                        batch_part->exec_qs_status = (atomic<uint64_t> *) mem_allocator.alloc(
-                                sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
-                        memset(batch_part->exec_qs_status, 0, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+//                        batch_part->exec_qs_status = (atomic<uint64_t> *) mem_allocator.alloc(
+//                                sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+//                        memset(batch_part->exec_qs_status, 0, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+                        quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id);
 
                     }
                     else{
@@ -857,10 +858,10 @@ RC PlannerThread::run_fixed_mode() {
 
                 }
 
-                expected = PG_AVAILABLE;
-                desired = PG_READY;
-                if (!planner_pg->status.compare_exchange_strong(expected, desired)){
-                    M_ASSERT_V(false, "For batch %ld : failed to SET status for planner_pg [%ld][%ld], value = %ld\n",
+                expected8 = PG_AVAILABLE;
+                desired8 = PG_READY;
+                if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+                    M_ASSERT_V(false, "For batch %ld : failed to SET status for planner_pg [%ld][%ld], value = %d\n",
                                batch_id, slot_num, _planner_id, planner_pg->status.load());
                 }
 
@@ -1720,10 +1721,10 @@ RC PlannerThread::run_normal_mode() {
 //                    memset(batch_part->exec_qs, 0, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
                     batch_part->exec_qs = fa_execqs;
 
-                    batch_part->exec_qs_status = (atomic<uint64_t> *) mem_allocator.alloc(
-                            sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
-                    memset(batch_part->exec_qs_status, 0, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
-
+//                    batch_part->exec_qs_status = (atomic<uint64_t> *) mem_allocator.alloc(
+//                            sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+//                    memset(batch_part->exec_qs_status, 0, sizeof(uint64_t)*batch_part->sub_exec_qs_cnt);
+                    quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id);
                 }
                 else{
                     batch_part->exec_q = fa_execqs->get(0);
@@ -1792,10 +1793,10 @@ RC PlannerThread::run_normal_mode() {
             }
 
 #else
-            expected = PG_AVAILABLE;
-            desired = PG_READY;
-            if (!planner_pg->status.compare_exchange_strong(expected, desired)){
-                M_ASSERT_V(false, "For batch %ld : failed to SET status for planner_pg [%ld][%ld], value = %ld\n",
+            expected8 = PG_AVAILABLE;
+            desired8 = PG_READY;
+            if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+                M_ASSERT_V(false, "For batch %ld : failed to SET status for planner_pg [%ld][%ld], value = %d\n",
                            batch_id, slot_num, _planner_id, planner_pg->status.load());
             }
 #endif // BATCHING_MODE == TIME_BASED
@@ -2159,11 +2160,12 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     }
 
     exec_qs_free_list = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> * [g_plan_thread_cnt];
-
+    exec_qs_status_free_list = new boost::lockfree::queue<atomic<uint8_t> *> * [g_plan_thread_cnt];
     txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
     pg_free_list = new boost::lockfree::queue<priority_group *> * [g_plan_thread_cnt];
     for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
         exec_qs_free_list[i] = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *>(FREE_LIST_INITIAL_SIZE);
+        exec_qs_status_free_list[i] = new boost::lockfree::queue<atomic<uint8_t> *>(FREE_LIST_INITIAL_SIZE);
         txn_ctxs_free_list[i] = new boost::lockfree::queue<transaction_context *> (FREE_LIST_INITIAL_SIZE);
         pg_free_list[i] = new boost::lockfree::queue<priority_group *> (FREE_LIST_INITIAL_SIZE);
 
@@ -2263,6 +2265,20 @@ void QueCCPool::exec_qs_release(Array<Array<exec_queue_entry> *> *&exec_qs, uint
 #endif
 }
 
+
+void QueCCPool::exec_qs_status_get_or_create(atomic<uint8_t> *&execqs_status, uint64_t planner_id){
+    if (!exec_qs_status_free_list[planner_id]->pop(execqs_status)){
+        execqs_status = (atomic<uint8_t> *) mem_allocator.alloc(
+                sizeof(uint64_t)*g_exec_qs_max_size);
+    }
+//    else{
+//        DEBUG_Q("Reusing exec_qs\n");
+//    }
+    memset(execqs_status, 0, sizeof(uint64_t)*g_exec_qs_max_size);
+}
+void QueCCPool::exec_qs_status_release(atomic<uint8_t> *&execqs_status, uint64_t planner_id){
+    while(!exec_qs_status_free_list[planner_id]->push(execqs_status)){}
+}
 
 // Txn Ctxs
 void QueCCPool::txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t planner_id){

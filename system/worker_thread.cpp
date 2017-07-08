@@ -416,7 +416,8 @@ RC WorkerThread::run_fixed_mode() {
 //                    M_ASSERT_V(false, "Should not happen");
 //                };
                 // TODO(tq): recycle insted
-                mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
+//                mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
+                quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id);
             }
             else{
                 quecc_pool.exec_queue_release(batch_part->exec_q, wplanner_id,_thd_id);
@@ -634,9 +635,9 @@ RC WorkerThread::run_normal_mode() {
                 exec_q = batch_part->exec_q;
             }
             else {
-                desired = WORKING;
-                expected = AVAILABLE;
-                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected, desired)){
+                desired8 = WORKING;
+                expected8 = AVAILABLE;
+                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected8, desired8)){
                     // we need to fail here because we should be the first one
 //                    M_ASSERT_V(false, "ET_%ld : Could not reserve exec_q at %ld, status = %ld, wbatch_id = %ld, batch_id = %ld\n",
 //                               _thd_id, w_exec_q_index, batch_part->exec_qs_status[w_exec_q_index].load(), wbatch_id, batch_part->batch_id);
@@ -683,7 +684,7 @@ RC WorkerThread::run_normal_mode() {
                 //TODO(tq): check if this transaction is already aborted
 
                 // Use txnManager to execute transaction frament
-//                rc = my_txn_man->run_quecc_txn(&exec_qe);
+                rc = my_txn_man->run_quecc_txn(&exec_qe);
 
 //                uint64_t comp_cnt;
 //                if (rc == RCOK){
@@ -768,10 +769,10 @@ RC WorkerThread::run_normal_mode() {
             if (!batch_part->single_q){
                 // set the status of this processed EQ to complete
                 // TODO(tq): use pre-constants instead of literals
-                desired = COMPLETED;
-                expected = WORKING;
+                desired8 = COMPLETED;
+                expected8 = WORKING;
 
-                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected, desired)){
+                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected8, desired8)){
                     // we need to fail here because we should be the only one who can do this
                     M_ASSERT_V(false, "ET_%ld : Could not set exec_q at %ld to COMPLETED\n", _thd_id, w_exec_q_index);
                 }
@@ -814,7 +815,8 @@ RC WorkerThread::run_normal_mode() {
 //                M_ASSERT_V(false, "Should not happen");
 //            };
             // TODO(tq): recycle insted
-            mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
+//            mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
+            quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id);
         }
 
 //        DEBUG_Q("For batch %ld , batch partition processing complete at map slot [%ld][%ld][%ld] \n",
@@ -866,10 +868,10 @@ RC WorkerThread::run_normal_mode() {
 //                                "\n",
 //                        _thd_id,  wbatch_id, batch_slot);
                 // TODO(tq): use RR for this, now we just statically asisng this task to the ET_0
-                desired = PG_AVAILABLE;
-                expected = PG_READY;
+                desired8 = PG_AVAILABLE;
+                expected8 = PG_READY;
                 for (uint64_t i =0; i < g_plan_thread_cnt; ++i){
-                    while(!work_queue.batch_pg_map[batch_slot][i].status.compare_exchange_strong(expected, desired)){};
+                    while(!work_queue.batch_pg_map[batch_slot][i].status.compare_exchange_strong(expected8, desired8)){};
                 }
 
 //                DEBUG_Q("ET_%ld: allowing PTs to procced, wbatch_id = %ld at slot = %ld"

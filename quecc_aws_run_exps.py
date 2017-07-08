@@ -261,12 +261,12 @@ cc_algs = ['QUECC']
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
 # wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
-wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
+# wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [40,48,56,60] # for m4.16xlarge for QueCC
-# wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
-pt_perc = [0.25,0.5,1]
+pt_perc = [0.25, 0.5]
 # pt_perc = [0.5]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
