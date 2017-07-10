@@ -293,10 +293,15 @@ for line in ifconffile:
 odirname = str(time.strftime('%Y-%m-%d-%I-%M-%S-%p'))
 outdir = '/home/ubuntu/results/' + odirname
 exec_cmd('mkdir {}'.format(outdir), env)
+print("Output Directory: {}".format(outdir))
 stime = time.time()
 prefix = ""
 if (len(sys.argv) == 2):
     prefix = sys.argv[1]
+exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.out'), env)
+exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.out'), env)
+exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.out'), env)
+
 for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:

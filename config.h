@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 4
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -357,8 +357,8 @@ enum PPSTxnType {PPS_ALL = 0,
 // FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
 // on the total. Currently, only QUECC is supported.
 // TODO(tq): support other CC_ALGs
-#define MODE NORMAL_MODE
-//#define MODE FIXED_MODE
+//#define MODE NORMAL_MODE
+#define MODE FIXED_MODE
 
 
 /***********************************************/
