@@ -289,8 +289,10 @@ RC WorkerThread::run_fixed_mode() {
 //                               batch_slot,_thd_id, wplanner_id, wbatch_id, exec_qe.batch_id, i);
 
                     // Use txnManager to execute transaction frament
+#if QUECC_DB_ACCESS
                     rc = my_txn_man->run_quecc_txn(&exec_qe);
                     assert(rc == RCOK);
+#endif
 //#if COMMIT_BEHAVIOR == IMMEDIATE
 //                    uint64_t comp_cnt;
 //#endif
@@ -684,7 +686,10 @@ RC WorkerThread::run_normal_mode() {
                 //TODO(tq): check if this transaction is already aborted
 
                 // Use txnManager to execute transaction frament
+#if QUECC_DB_ACCESS
                 rc = my_txn_man->run_quecc_txn(&exec_qe);
+                assert(rc == RCOK);
+#endif
 
 //                uint64_t comp_cnt;
 //                if (rc == RCOK){

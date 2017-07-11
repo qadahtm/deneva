@@ -167,11 +167,17 @@
 #define SIZE_BASED 2
 // Split and merge config. parameters
 #define SPLIT_MERGE_ENABLED true
-#define SPLIT_MERGE_STRATEGY  EAGER_SPLIT
+#define SPLIT_STRATEGY  EAGER_SPLIT
 // Eager split means that as soon as we go over the threashold we split the EQ
 #define EAGER_SPLIT 1
 // In lazy splot, we perform the splitting when we are have buffered enough operations for a batch
 #define LAZY_SPLIT  2
+
+#define MERGE_STRATEGY BALANCE_EQ_SIZE
+#define BALANCE_EQ_SIZE 1
+#define GREEDY_RANGE_LOCALITY 2
+
+#define QUECC_DB_ACCESS false
 
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS false
@@ -357,8 +363,8 @@ enum PPSTxnType {PPS_ALL = 0,
 // FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
 // on the total. Currently, only QUECC is supported.
 // TODO(tq): support other CC_ALGs
-//#define MODE NORMAL_MODE
-#define MODE FIXED_MODE
+#define MODE NORMAL_MODE
+//#define MODE FIXED_MODE
 
 
 /***********************************************/

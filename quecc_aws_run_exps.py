@@ -254,19 +254,20 @@ env = dict(os.environ)
 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-# cc_algs = ['QUECC', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
+cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
-cc_algs = ['QUECC']
+# cc_algs = ['QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
 # wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
-# wthreads = [40,48,56,60] # for m4.16xlarge for QueCC
-wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
+# wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
+# wthreads = [16,24,32, 36] # for m4.10xlarge for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
-pt_perc = [0.25, 0.5]
+pt_perc = [0.5]
 # pt_perc = [0.5]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
@@ -298,9 +299,9 @@ stime = time.time()
 prefix = ""
 if (len(sys.argv) == 2):
     prefix = sys.argv[1]
-exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.out'), env)
-exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.out'), env)
-exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.out'), env)
+exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.txt'), env)
+exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
+exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
 
 for ncc_alg in cc_algs:
     for wthd in wthreads:
@@ -321,7 +322,9 @@ for ncc_alg in cc_algs:
                         runexp = False
 
                     if runexp:
-                        exp_cnt = exp_cnt + 1
+                        exp_cnt = exp_cnt + 1        
+                        if ncc_alg != 'QUECC' and pt != 1:
+                            pt = 1
                         set_config(ncc_alg, wthd, theta, pt, ets)
                         # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
                         build_project()
@@ -329,6 +332,7 @@ for ncc_alg in cc_algs:
                             pt_cnt = str(int(pt*wthd))
                             pt_perc_str = str(int(pt*100))
                             et_cnt = str(wthd-int(pt*wthd));
+                            
                             if (wthd-int(pt*wthd)) == 0:
                                 et_cnt = str(wthd);
                             if prefix != "":

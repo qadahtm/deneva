@@ -402,14 +402,14 @@ RC PlannerThread::run_fixed_mode() {
 
     DEBUG_Q("Planner_%ld thread started, txn_ids start at %ld \n", _planner_id, txn_prefix_planner_base);
     uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
-#if SPLIT_MERGE_ENABLED && SPLIT_MERGE_STRATEGY == LAZY_SPLIT
+#if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == LAZY_SPLIT
 //    uint64_t exec_queue_limit = planner_batch_size/g_thread_cnt;
     uint64_t exec_queue_limit = quecc_pool.exec_queue_capacity;
 #endif
 
 #if SPLIT_MERGE_ENABLED
 
-#if SPLIT_MERGE_STRATEGY == LAZY_SPLIT
+#if SPLIT_STRATEGY == LAZY_SPLIT
     split_max_heap_t pq_test;
     split_min_heap_t range_sorted;
     exec_queue_limit = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
@@ -420,7 +420,7 @@ RC PlannerThread::run_fixed_mode() {
      Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
             sizeof(Array<exec_queue_entry> *) * 2);
 
-#elif SPLIT_MERGE_STRATEGY == EAGER_SPLIT
+#elif SPLIT_STRATEGY == EAGER_SPLIT
     Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
     exec_qs_ranges_tmp->init(g_exec_qs_max_size);
 
@@ -431,7 +431,10 @@ RC PlannerThread::run_fixed_mode() {
     exec_queues_tmp->init(g_exec_qs_max_size);
 
 #endif
+
+#if MERGE_STRATEGY == BALANCE_EQ_SIZE
     assign_ptr_min_heap_t assignment;
+#endif
     uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
     boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
             new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
@@ -519,24 +522,68 @@ RC PlannerThread::run_fixed_mode() {
                 prof_starttime = get_sys_clock();
 #if SPLIT_MERGE_ENABLED
 
-#if SPLIT_MERGE_STRATEGY == EAGER_SPLIT
+#if SPLIT_STRATEGY == EAGER_SPLIT
                 // we just need compute assignment since all EQs satisfy the limit
-                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-                    assign_entry *a_tmp;
-                    if (i < g_thread_cnt){
 
-                        assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+                //Logically merge EQs.
+                // We group EQs and assign each group to an ET
+                // Size-balance merging
+//                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//                    assign_entry *a_tmp;
+//                    if (i < g_thread_cnt){
+//                        // create an assignment entry for each ET and assign it a single EQ
+//                        assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+//                        assign_entry_init(a_tmp, _planner_id);
+//                        a_tmp->exec_thd_id = i;
+//
+//                        assign_entry_add(a_tmp, exec_queues->get(i));
+//                        assignment.push((uint64_t) a_tmp);
+//                    }
+//                    else {
+//                        // After the initial assignment is done (i.e. each group has a single EQ assigned to it)
+//                        // We group based on their sizes
+//                        a_tmp = (assign_entry *) assignment.top();
+//                        assign_entry_add(a_tmp, exec_queues->get(i));
+//                        assignment.pop();
+//                        assignment.push((uint64_t) a_tmp);
+//                    }
+//                }
 
-                        assign_entry_init(a_tmp, _planner_id);
-                        a_tmp->exec_thd_id = i;
-                        assign_entry_add(a_tmp, exec_queues->get(i));
-                        assignment.push((uint64_t) a_tmp);
-                    }
-                    else {
-                        a_tmp = (assign_entry *) assignment.top();
-                        assign_entry_add(a_tmp, exec_queues->get(i));
-                        assignment.pop();
-                        assignment.push((uint64_t) a_tmp);
+                // Given that each the current EQs are ordered based on their ranges.
+
+                // Spatial locality perseving merge
+                uint64_t ae_limit = (planner_batch_size * REQ_PER_QUERY)/g_thread_cnt;
+
+                for (uint64_t i = 0; i < g_thread_cnt; ++i){
+                    assign_entry *a_tmp = NULL;
+                    uint64_t ae_count = 0;
+                    uint64_t eq_idx = 0;
+                    while (true){
+                        // create an AE for this
+                        if (a_tmp == NULL){
+                            assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+                            assign_entry_init(a_tmp, _planner_id);
+                            a_tmp->exec_thd_id = i;
+                        }
+
+                        if (i == g_thread_cnt-1){
+                            // assign remaining entries regardless of size
+                            while (eq_idx < exec_queues->size()){
+                                assign_entry_add(a_tmp, exec_queues->get(eq_idx));
+                                eq_idx++;
+                            }
+                            assignment.push((uint64_t) a_tmp);
+                        }
+                        else{
+                            assign_entry_add(a_tmp, exec_queues->get(eq_idx));
+                            ae_count = exec_queues->get(eq_idx)->size();
+                            if (ae_count >= ae_limit){
+                                assignment.push((uint64_t) a_tmp);
+                                eq_idx++; // increament before breaking out of while (true)
+                                break;
+                            }
+                        }
+                        eq_idx++;
                     }
                 }
 #else
@@ -871,7 +918,7 @@ RC PlannerThread::run_fixed_mode() {
                 for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
                     Array<exec_queue_entry> * exec_q;
 //                    exec_queue_get_or_create(exec_q, _planner_id, exec_queue_capacity);
-                    et_id = eq_idx_rand(plan_rng);
+                        et_id = eq_idx_rand(plan_rng);
                     quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
                     exec_queues->add(exec_q);
                 }
@@ -960,7 +1007,7 @@ RC PlannerThread::run_fixed_mode() {
                         INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                         Array<exec_queue_entry> *mrange;
                         mrange = exec_queues->get(idx);
-#if SPLIT_MERGE_ENABLED && SPLIT_MERGE_STRATEGY == EAGER_SPLIT
+#if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
                         if (mrange->is_full()){
                             // we need to split
 //                            uint64_t mrange_size;
@@ -1147,7 +1194,7 @@ RC PlannerThread::run_fixed_mode() {
 #if SPLIT_MERGE_ENABLED
     // clean up all thread-local memory
     // free all split entries
-#if SPLIT_MERGE_STRATEGY == LAZY_SPLIT
+#if SPLIT_STRATEGY == LAZY_SPLIT
     while(!split_entry_free_list->empty()){
         split_entry * s_entry_tmp;
         split_entry_free_list->pop(s_entry_tmp);
@@ -1191,13 +1238,13 @@ RC PlannerThread::run_normal_mode() {
 
     DEBUG_Q("Planner_%ld thread started, txn_ids start at %ld \n", _planner_id, txn_prefix_planner_base);
     uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
-#if SPLIT_MERGE_ENABLED && SPLIT_MERGE_STRATEGY == LAZY_SPLIT
+#if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == LAZY_SPLIT
     uint64_t exec_queue_limit = quecc_pool.exec_queue_capacity;
 #endif
 
 #if SPLIT_MERGE_ENABLED
 
-    #if SPLIT_MERGE_STRATEGY == LAZY_SPLIT
+    #if SPLIT_STRATEGY == LAZY_SPLIT
     split_max_heap_t pq_test;
     split_min_heap_t range_sorted;
     exec_queue_limit = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
@@ -1208,7 +1255,7 @@ RC PlannerThread::run_normal_mode() {
      Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
             sizeof(Array<exec_queue_entry> *) * 2);
 
-#elif SPLIT_MERGE_STRATEGY == EAGER_SPLIT
+#elif SPLIT_STRATEGY == EAGER_SPLIT
     Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
     exec_qs_ranges_tmp->init(g_exec_qs_max_size);
 
@@ -1391,7 +1438,7 @@ RC PlannerThread::run_normal_mode() {
             prof_starttime = get_sys_clock();
 #if SPLIT_MERGE_ENABLED
 
-#if SPLIT_MERGE_STRATEGY == EAGER_SPLIT
+#if SPLIT_STRATEGY == EAGER_SPLIT
                 // we just need compute assignment since all EQs satisfy the limit
                 for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
                     assign_entry *a_tmp;
@@ -1917,7 +1964,7 @@ RC PlannerThread::run_normal_mode() {
 //                    mrange_cnts.set(idx, nval);
                     total_access_cnt++;
 #endif
-#if SPLIT_MERGE_ENABLED && SPLIT_MERGE_STRATEGY == EAGER_SPLIT
+#if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
                     if (mrange->is_full()){
                             // we need to split
 //                            uint64_t mrange_size;
@@ -2127,7 +2174,7 @@ RC PlannerThread::run_normal_mode() {
 void QueCCPool::init(Workload * wl, uint64_t size){
 
     planner_batch_size = g_batch_size/g_plan_thread_cnt;
-    exec_queue_capacity = (planner_batch_size/g_thread_cnt) * (EXECQ_CAP_FACTOR);
+    exec_queue_capacity = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * (EXECQ_CAP_FACTOR);
 
     exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [g_thread_cnt];
     batch_part_free_list = new boost::lockfree::queue<batch_partition *> * [g_thread_cnt];

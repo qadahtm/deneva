@@ -170,6 +170,10 @@ const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
 UInt32 g_batch_size = BATCH_SIZE;
 UInt32 g_exec_qs_max_size = EXEC_QS_MAX_SIZE;
 const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;
+// For mapping between PTs and Cores
+uint16_t g_pt_map[PLAN_THREAD_CNT];
+// For mapping between ETs and Cores
+uint16_t g_et_map[THREAD_CNT];
 
 double g_mpr = MPR;
 double g_mpitem = MPIR;
