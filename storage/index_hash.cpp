@@ -18,20 +18,24 @@
 #include "index_hash.h"
 #include "mem_alloc.h"
 #include "row.h"
-	
+
+// TQ:
+// TODO(tq): allow partitions
 RC IndexHash::init(uint64_t bucket_cnt) {
 	_bucket_cnt = bucket_cnt;
 	_bucket_cnt_per_part = bucket_cnt;
 	//_bucket_cnt_per_part = bucket_cnt / g_part_cnt;
 	//_buckets = new BucketHeader * [g_part_cnt];
 	_buckets = new BucketHeader * [1];
-  _buckets[0] = (BucketHeader *) mem_allocator.alloc(sizeof(BucketHeader) * _bucket_cnt_per_part);
-  uint64_t buckets_init_cnt = 0;
-  for (UInt32 n = 0; n < _bucket_cnt_per_part; n ++) {
-			_buckets[0][n].init();
-      ++buckets_init_cnt;
-  }
-  printf("Index init with %ld buckets\n",buckets_init_cnt);
+	printf("_bucket_cnt_per_part=  %ld buckets\n",_bucket_cnt_per_part);
+	// this allocate a contiguous memery block of bucket headers
+	_buckets[0] = (BucketHeader *) mem_allocator.alloc(sizeof(BucketHeader) * _bucket_cnt_per_part);
+	uint64_t buckets_init_cnt = 0;
+	for (UInt32 n = 0; n < _bucket_cnt_per_part; n ++) {
+		_buckets[0][n].init();
+		++buckets_init_cnt;
+	}
+	printf("Index init with %ld buckets\n",buckets_init_cnt);
 	return RCOK;
 }
 
@@ -216,6 +220,7 @@ void BucketHeader::insert_item_nonunique(idx_key_t key,
 
 void BucketHeader::read_item(idx_key_t key, itemid_t * &item) 
 {
+	// Search through the node list
 	BucketNode * cur_node = first_node;
 	while (cur_node != NULL) {
 		if (cur_node->key == key)

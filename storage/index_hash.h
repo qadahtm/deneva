@@ -35,6 +35,8 @@ public:
 	BucketNode * 	next;	
 	// NOTE. The items can be a list of items connected by the next pointer. 
 	itemid_t * 		items;
+	// TODO(tq): store only one item for now.
+	itemid_t item;
 };
 
 // BucketHeader does concurrency control of Hash
@@ -47,6 +49,8 @@ public:
 	void read_item(idx_key_t key, itemid_t * &item);
 	void read_item(idx_key_t key, uint32_t count, itemid_t * &item);
 	BucketNode * 	first_node;
+	// We will use a single node bucket
+	BucketNode 		single_node;
 	uint64_t 		node_cnt;
 	bool 			locked;
 //	latch_t latch_type;
