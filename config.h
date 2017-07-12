@@ -363,8 +363,8 @@ enum PPSTxnType {PPS_ALL = 0,
 // FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
 // on the total. Currently, only QUECC is supported.
 // TODO(tq): support other CC_ALGs
-#define MODE NORMAL_MODE
-//#define MODE FIXED_MODE
+//#define MODE NORMAL_MODE
+#define MODE FIXED_MODE
 
 
 /***********************************************/
@@ -373,6 +373,8 @@ enum PPSTxnType {PPS_ALL = 0,
 // INDEX_STRUCT
 #define IDX_HASH          1
 #define IDX_BTREE         2
+#define IDX_HASH_SIMPLE   3
+
 // WORKLOAD
 #define YCSB            1
 #define TPCC            2

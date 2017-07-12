@@ -256,3 +256,231 @@ void BucketHeader::read_item(idx_key_t key, uint32_t count, itemid_t * &item)
     assert(cur_node->key == key);
 	item = cur_node->items;
 }
+
+/************** IndexHashSimple Implementation ***********/
+// for now there is no support for partitioninng
+RC IndexHashSimple::init(uint64_t bucket_cnt) {
+	_bucket_cnt = bucket_cnt;
+	_bucket_cnt_per_part = bucket_cnt;
+	//_bucket_cnt_per_part = bucket_cnt / g_part_cnt;
+	//_buckets = new BucketHeader * [g_part_cnt];
+	_buckets = new BucketHeaderSimple *[1];
+	printf("Thamir _bucket_cnt_per_part=  %ld buckets\n", _bucket_cnt_per_part);
+	// this allocate a contiguous memery block of bucket headers
+	_buckets[0] = (BucketHeaderSimple *) mem_allocator.alloc(sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
+	uint64_t buckets_init_cnt = 0;
+	for (UInt32 n = 0; n < _bucket_cnt_per_part; n++) {
+		_buckets[0][n].init();
+		++buckets_init_cnt;
+	}
+	printf("Index init with %ld buckets\n", buckets_init_cnt);
+	return RCOK;
+}
+
+RC IndexHashSimple::init(int part_cnt, table_t *table, uint64_t bucket_cnt) {
+	init(bucket_cnt);
+	this->table = table;
+	return RCOK;
+}
+
+void IndexHashSimple::index_delete() {
+	for (UInt32 n = 0; n < _bucket_cnt_per_part; n++) {
+		_buckets[0][n].delete_bucket();
+	}
+	mem_allocator.free(_buckets[0], sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
+	delete _buckets;
+}
+
+bool IndexHashSimple::index_exist(idx_key_t key) {
+	assert(false);
+}
+
+void
+IndexHashSimple::get_latch(BucketHeaderSimple *bucket) {
+	while (!ATOM_CAS(bucket->locked, false, true)) {}
+}
+
+void
+IndexHashSimple::release_latch(BucketHeaderSimple *bucket) {
+	bool ok = ATOM_CAS(bucket->locked, true, false);
+	assert(ok);
+}
+
+
+RC IndexHashSimple::index_insert(idx_key_t key, itemid_t *item, int part_id) {
+	RC rc = RCOK;
+	uint64_t bkt_idx = hash(key);
+	assert(bkt_idx < _bucket_cnt_per_part);
+	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	// 1. get the ex latch
+	get_latch(cur_bkt);
+
+	// 2. update the latch list
+	cur_bkt->insert_item(key, item, part_id);
+
+	// 3. release the latch
+	release_latch(cur_bkt);
+	return rc;
+}
+
+RC IndexHashSimple::index_insert_nonunique(idx_key_t key, itemid_t *item, int part_id) {
+	RC rc = RCOK;
+	uint64_t bkt_idx = hash(key);
+	assert(bkt_idx < _bucket_cnt_per_part);
+	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	// 1. get the ex latch
+	get_latch(cur_bkt);
+
+	// 2. update the latch list
+	cur_bkt->insert_item_nonunique(key, item, part_id);
+
+	// 3. release the latch
+	release_latch(cur_bkt);
+	return rc;
+}
+
+RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item, int part_id) {
+	uint64_t bkt_idx = hash(key);
+	assert(bkt_idx < _bucket_cnt_per_part);
+	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	RC rc = RCOK;
+	// 1. get the sh latch
+//	get_latch(cur_bkt);
+
+	cur_bkt->read_item(key, item);
+
+	// 3. release the latch
+//	release_latch(cur_bkt);
+	return rc;
+
+}
+
+RC IndexHashSimple::index_read(idx_key_t key, int count, itemid_t *&item, int part_id) {
+	uint64_t bkt_idx = hash(key);
+	assert(bkt_idx < _bucket_cnt_per_part);
+	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	RC rc = RCOK;
+	// 1. get the sh latch
+//	get_latch(cur_bkt);
+
+	cur_bkt->read_item(key, count, item);
+
+	// 3. release the latch
+//	release_latch(cur_bkt);
+	return rc;
+
+}
+
+
+RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item,
+							   int part_id, int thd_id) {
+	uint64_t bkt_idx = hash(key);
+	assert(bkt_idx < _bucket_cnt_per_part);
+	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	RC rc = RCOK;
+	// 1. get the sh latch
+//	get_latch(cur_bkt);
+
+
+	cur_bkt->read_item(key, item);
+
+	// 3. release the latch
+//	release_latch(cur_bkt);
+	return rc;
+}
+
+/************** BucketHeaderSimple Operations ******************/
+
+void BucketHeaderSimple::init() {
+
+}
+
+void BucketHeaderSimple::delete_bucket() {
+//	M_ASSERT_V(single_node.item == NULL, "Deleting a NULL bucket\n");
+//	((row_t *) single_node.item.location)->free_row();
+}
+
+
+void BucketHeaderSimple::insert_item(idx_key_t key,
+									 itemid_t *item,
+									 int part_id) {
+
+	// We assume a single item per bucket
+	BucketNode *cur_node = first_node;
+	BucketNode *prev_node = NULL;
+	while (cur_node != NULL) {
+		if (cur_node->key == key)
+			break;
+		prev_node = cur_node;
+		cur_node = cur_node->next;
+	}
+	if (cur_node == NULL) {
+		BucketNode *new_node = (BucketNode *)
+				mem_allocator.alloc(sizeof(BucketNode));
+		new_node->init(key);
+		new_node->items = item;
+		if (prev_node != NULL) {
+			new_node->next = prev_node->next;
+			prev_node->next = new_node;
+		} else {
+			new_node->next = first_node;
+			first_node = new_node;
+		}
+	} else {
+		item->next = cur_node->items;
+		cur_node->items = item;
+	}
+}
+
+// TODO(tq): Delete this method This is not used anywhere
+void BucketHeaderSimple::insert_item_nonunique(idx_key_t key,
+											   itemid_t *item,
+											   int part_id) {
+
+	BucketNode *new_node = (BucketNode *)
+			mem_allocator.alloc(sizeof(BucketNode));
+	new_node->init(key);
+	new_node->items = item;
+	new_node->next = first_node;
+	first_node = new_node;
+}
+
+void BucketHeaderSimple::read_item(idx_key_t key, itemid_t *&item) {
+	// Search through the node list
+	BucketNode *cur_node = first_node;
+	while (cur_node != NULL) {
+		if (cur_node->key == key)
+			break;
+		cur_node = cur_node->next;
+	}
+	M_ASSERT_V(cur_node != NULL, "Key does not exist! %ld\n", key);
+	assert(cur_node->key == key);
+	item = cur_node->items;
+}
+
+void BucketHeaderSimple::read_item(idx_key_t key, uint32_t count, itemid_t *&item) {
+	BucketNode *cur_node = first_node;
+	uint32_t ctr = 0;
+	while (cur_node != NULL) {
+		if (cur_node->key == key) {
+			if (ctr == count) {
+				break;
+			}
+			++ctr;
+		}
+		cur_node = cur_node->next;
+	}
+	if (cur_node == NULL) {
+		item = NULL;
+		return;
+	}
+	M_ASSERT_V(cur_node != NULL, "Key does not exist! %ld\n", key);
+	assert(cur_node->key == key);
+	item = cur_node->items;
+}
+

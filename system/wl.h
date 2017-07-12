@@ -22,6 +22,7 @@
 class row_t;
 class table_t;
 class IndexHash;
+class IndexHashSimple;
 class index_btree;
 class Catalog;
 class lock_man;

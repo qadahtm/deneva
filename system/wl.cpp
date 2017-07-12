@@ -135,7 +135,7 @@ RC Workload::init_schema(const char * schema_file) {
       table_size = g_synth_table_size / g_part_cnt;
 #endif
 
-#if INDEX_STRUCT == IDX_HASH
+#if INDEX_STRUCT == IDX_HASH || INDEX_STRUCT == IDX_HASH_SIMPLE
 			index->init(1024, tables[tname], table_size);
 			//index->init(part_cnt*1024, tables[tname], table_size);
 #else
