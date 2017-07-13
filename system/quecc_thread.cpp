@@ -528,64 +528,95 @@ RC PlannerThread::run_fixed_mode() {
                 //Logically merge EQs.
                 // We group EQs and assign each group to an ET
                 // Size-balance merging
-//                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-//                    assign_entry *a_tmp;
-//                    if (i < g_thread_cnt){
-//                        // create an assignment entry for each ET and assign it a single EQ
-//                        assign_entry_get_or_create(a_tmp, assign_entry_free_list);
-//                        assign_entry_init(a_tmp, _planner_id);
-//                        a_tmp->exec_thd_id = i;
-//
-//                        assign_entry_add(a_tmp, exec_queues->get(i));
-//                        assignment.push((uint64_t) a_tmp);
-//                    }
-//                    else {
-//                        // After the initial assignment is done (i.e. each group has a single EQ assigned to it)
-//                        // We group based on their sizes
-//                        a_tmp = (assign_entry *) assignment.top();
-//                        assign_entry_add(a_tmp, exec_queues->get(i));
-//                        assignment.pop();
-//                        assignment.push((uint64_t) a_tmp);
-//                    }
-//                }
+                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+                    assign_entry *a_tmp;
+                    if (i < g_thread_cnt){
+                        // create an assignment entry for each ET and assign it a single EQ
+                        assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+                        assign_entry_init(a_tmp, _planner_id);
+                        a_tmp->exec_thd_id = i;
 
-                // Given that each the current EQs are ordered based on their ranges.
-
-                // Spatial locality perseving merge
-                uint64_t ae_limit = (planner_batch_size * REQ_PER_QUERY)/g_thread_cnt;
-
-                for (uint64_t i = 0; i < g_thread_cnt; ++i){
-                    assign_entry *a_tmp = NULL;
-                    uint64_t ae_count = 0;
-                    uint64_t eq_idx = 0;
-                    while (true){
-                        // create an AE for this
-                        if (a_tmp == NULL){
-                            assign_entry_get_or_create(a_tmp, assign_entry_free_list);
-                            assign_entry_init(a_tmp, _planner_id);
-                            a_tmp->exec_thd_id = i;
-                        }
-
-                        if (i == g_thread_cnt-1){
-                            // assign remaining entries regardless of size
-                            while (eq_idx < exec_queues->size()){
-                                assign_entry_add(a_tmp, exec_queues->get(eq_idx));
-                                eq_idx++;
-                            }
-                            assignment.push((uint64_t) a_tmp);
-                        }
-                        else{
-                            assign_entry_add(a_tmp, exec_queues->get(eq_idx));
-                            ae_count = exec_queues->get(eq_idx)->size();
-                            if (ae_count >= ae_limit){
-                                assignment.push((uint64_t) a_tmp);
-                                eq_idx++; // increament before breaking out of while (true)
-                                break;
-                            }
-                        }
-                        eq_idx++;
+                        assign_entry_add(a_tmp, exec_queues->get(i));
+                        assignment.push((uint64_t) a_tmp);
+                    }
+                    else {
+                        // After the initial assignment is done (i.e. each group has a single EQ assigned to it)
+                        // We group based on their sizes
+                        a_tmp = (assign_entry *) assignment.top();
+                        assign_entry_add(a_tmp, exec_queues->get(i));
+                        assignment.pop();
+                        assignment.push((uint64_t) a_tmp);
                     }
                 }
+
+//                 Given that each the current EQs are ordered based on their ranges.
+//                DEBUG_Q("PT_%ld: the plan for batch_id=%ld\n",
+//                        _planner_id, batch_id);
+//                for (uint64_t i = 0; i < exec_qs_ranges->size(); ++i){
+//                    uint64_t r_start = 0;
+//                    if (i > 0){
+//                        r_start = exec_qs_ranges->get(i-1);
+//                    }
+//                    uint64_t r_end = exec_qs_ranges->get(i);
+//                    DEBUG_Q("PT_%ld: EQ[%ld] has %ld entries range_start = %ld, range_end = %ld\n",
+//                            _planner_id,i, exec_queues->get(i)->size(),r_start, r_end);
+//
+//                }
+
+                // Check if we need to merge
+
+                // Spatial locality perseving merge
+//                uint64_t ae_limit = ((planner_batch_size * REQ_PER_QUERY)/g_thread_cnt);
+//                DEBUG_Q("PT_%ld: ae_limit=%ld\n", _planner_id, ae_limit);
+//                uint64_t eq_idx = 0;
+//                for (uint64_t i = 0; i < g_thread_cnt; ++i){
+//                    assign_entry *a_tmp = NULL;
+//                    uint64_t ae_count = 0;
+//                    uint64_t eq_count = 0;
+//                    while (true){
+//                        // create an AE for this
+//                        if (a_tmp == NULL){
+//                            assign_entry_get_or_create(a_tmp, assign_entry_free_list);
+//                            assign_entry_init(a_tmp, _planner_id);
+//                            a_tmp->exec_thd_id = i;
+//                        }
+//
+//                        if (i == g_thread_cnt-1){
+//                            // assign remaining entries regardless of size
+//                            while (eq_idx < exec_queues->size()){
+//                                assign_entry_add(a_tmp, exec_queues->get(eq_idx));
+//                                eq_count++;
+//                                ae_count += exec_queues->get(eq_idx)->size();
+//                                eq_idx++;
+//                            }
+//                            assignment.push((uint64_t) a_tmp);
+//                            break;
+//                        }
+//                        else if (eq_idx < exec_queues->size()){
+//                            assign_entry_add(a_tmp, exec_queues->get(eq_idx));
+//                            ae_count += exec_queues->get(eq_idx)->size();
+//                            eq_count++;
+//                            if (ae_count >= ae_limit){
+//                                assignment.push((uint64_t) a_tmp);
+//                                eq_idx++; // increament before breaking out of while (true)
+////                                DEBUG_Q("PT_%ld: Assigned %ld EQs to ET_%ld, remaining EQ cnt = %ld, total EQE= %ld, limit = %ld\n",
+////                                        _planner_id, eq_count, i,
+////                                        exec_queues->size()-eq_idx, ae_count, ae_limit);
+//                                break;
+//                            }
+//                        }
+//                        else {
+//                            // push assignment with empty EQs
+//                            assignment.push((uint64_t) a_tmp);
+//                            break;
+//                        }
+//                        eq_idx++;
+//                    }
+//
+//                    DEBUG_Q("PT_%ld: Assigned %ld EQs to ET_%ld, remaining EQ cnt = %ld, total EQE= %ld, limit = %ld\n",
+//                            _planner_id, eq_count, i,
+//                            exec_queues->size()-eq_idx, ae_count, ae_limit);
+//                }
 #else
                 // Splitting phase (and merge if there is no need to split)
                 if (ranges_stored) {

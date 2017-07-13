@@ -273,7 +273,7 @@ RC IndexHashSimple::init(uint64_t bucket_cnt) {
 		_buckets[0][n].init();
 		++buckets_init_cnt;
 	}
-	printf("Index init with %ld buckets\n", buckets_init_cnt);
+	printf("HashIndexSimple init with %ld buckets\n", buckets_init_cnt);
 	return RCOK;
 }
 
@@ -325,20 +325,23 @@ RC IndexHashSimple::index_insert(idx_key_t key, itemid_t *item, int part_id) {
 }
 
 RC IndexHashSimple::index_insert_nonunique(idx_key_t key, itemid_t *item, int part_id) {
-	RC rc = RCOK;
-	uint64_t bkt_idx = hash(key);
-	assert(bkt_idx < _bucket_cnt_per_part);
-	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
-	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
-	// 1. get the ex latch
-	get_latch(cur_bkt);
 
-	// 2. update the latch list
-	cur_bkt->insert_item_nonunique(key, item, part_id);
+	M_ASSERT_V(false, "Inserting non-unique is not supported by HashIndexSimple");
 
-	// 3. release the latch
-	release_latch(cur_bkt);
-	return rc;
+//	RC rc = RCOK;
+//	uint64_t bkt_idx = hash(key);
+//	assert(bkt_idx < _bucket_cnt_per_part);
+//	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+//	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+//	// 1. get the ex latch
+//	get_latch(cur_bkt);
+//
+//	// 2. update the latch list
+//	cur_bkt->insert_item_nonunique(key, item, part_id);
+//
+//	// 3. release the latch
+//	release_latch(cur_bkt);
+//	return rc;
 }
 
 RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item, int part_id) {
@@ -397,12 +400,14 @@ RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item,
 /************** BucketHeaderSimple Operations ******************/
 
 void BucketHeaderSimple::init() {
-
+	locked = false;
+	single_node.empty = true;
 }
 
 void BucketHeaderSimple::delete_bucket() {
-//	M_ASSERT_V(single_node.item == NULL, "Deleting a NULL bucket\n");
-//	((row_t *) single_node.item.location)->free_row();
+	M_ASSERT_V(!single_node.empty, "Deleting an empty bucket\n");
+	((row_t *) single_node.item.location)->free_row();
+	single_node.empty = true;
 }
 
 
@@ -410,77 +415,31 @@ void BucketHeaderSimple::insert_item(idx_key_t key,
 									 itemid_t *item,
 									 int part_id) {
 
-	// We assume a single item per bucket
-	BucketNode *cur_node = first_node;
-	BucketNode *prev_node = NULL;
-	while (cur_node != NULL) {
-		if (cur_node->key == key)
-			break;
-		prev_node = cur_node;
-		cur_node = cur_node->next;
+	if (single_node.empty) {
+		single_node.empty = false;
+		single_node.key = key;
+		single_node.item = *item;
 	}
-	if (cur_node == NULL) {
-		BucketNode *new_node = (BucketNode *)
-				mem_allocator.alloc(sizeof(BucketNode));
-		new_node->init(key);
-		new_node->items = item;
-		if (prev_node != NULL) {
-			new_node->next = prev_node->next;
-			prev_node->next = new_node;
-		} else {
-			new_node->next = first_node;
-			first_node = new_node;
-		}
-	} else {
-		item->next = cur_node->items;
-		cur_node->items = item;
+	else{
+		M_ASSERT_V(false, "overwriting an item in a single node\n");
 	}
 }
 
-// TODO(tq): Delete this method This is not used anywhere
+// TODO(tq): This method is not used anywhere
 void BucketHeaderSimple::insert_item_nonunique(idx_key_t key,
 											   itemid_t *item,
 											   int part_id) {
-
-	BucketNode *new_node = (BucketNode *)
-			mem_allocator.alloc(sizeof(BucketNode));
-	new_node->init(key);
-	new_node->items = item;
-	new_node->next = first_node;
-	first_node = new_node;
+	M_ASSERT_V(false, "Method not supported %ld\n", key);
 }
 
 void BucketHeaderSimple::read_item(idx_key_t key, itemid_t *&item) {
-	// Search through the node list
-	BucketNode *cur_node = first_node;
-	while (cur_node != NULL) {
-		if (cur_node->key == key)
-			break;
-		cur_node = cur_node->next;
-	}
-	M_ASSERT_V(cur_node != NULL, "Key does not exist! %ld\n", key);
-	assert(cur_node->key == key);
-	item = cur_node->items;
+
+	M_ASSERT_V(key == single_node.key, "Mismatch in key\n");
+	M_ASSERT_V(single_node.empty == false, "Key does not exist %ld\n", key);
+	item = & single_node.item;
 }
 
 void BucketHeaderSimple::read_item(idx_key_t key, uint32_t count, itemid_t *&item) {
-	BucketNode *cur_node = first_node;
-	uint32_t ctr = 0;
-	while (cur_node != NULL) {
-		if (cur_node->key == key) {
-			if (ctr == count) {
-				break;
-			}
-			++ctr;
-		}
-		cur_node = cur_node->next;
-	}
-	if (cur_node == NULL) {
-		item = NULL;
-		return;
-	}
-	M_ASSERT_V(cur_node != NULL, "Key does not exist! %ld\n", key);
-	assert(cur_node->key == key);
-	item = cur_node->items;
+	M_ASSERT_V(false, "Method not supported %ld\n", key);
 }
 

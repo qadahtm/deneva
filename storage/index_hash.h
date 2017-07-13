@@ -58,6 +58,7 @@ public:
 struct BucketNodeSimple {
 	idx_key_t 		key;
 	itemid_t item;
+	bool empty;
 };
 
 //class BucketNodeSimple {
@@ -83,11 +84,10 @@ public:
 	void insert_item_nonunique(idx_key_t key, itemid_t * item, int part_id);
 	void read_item(idx_key_t key, itemid_t * &item);
 	void read_item(idx_key_t key, uint32_t count, itemid_t * &item);
-	BucketNode * 	first_node;
+//	BucketNode * 	first_node;
 	// We will use a single node bucket
-	BucketNode 		single_node;
-	bool has_bucket_node;
-	uint64_t 		node_cnt;
+	BucketNodeSimple 		single_node;
+//	uint64_t 		node_cnt;
 	bool 			locked;
 };
 

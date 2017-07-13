@@ -25,8 +25,13 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
     nconf = open(nfname, 'w')
     oconf = open(ofname, 'r')
 
-    pt_cnt = int(pt_p*wthd_cnt)
+    if pt_p <= 1:
+        pt_cnt = int(pt_p*wthd_cnt)
+    else:
+        pt_cnt = pt_p
+
     nwthd_cnt = wthd_cnt - pt_cnt
+
     if nwthd_cnt == 0:
         nwthd_cnt = wthd_cnt
     print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}'
@@ -50,8 +55,8 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
             # print(theta_m.group(1))
             nline = '#define ZIPF_THETA {}\n'.format(theta)
         pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
-        if (pt_m):
-            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(int(pt_p*wthd_cnt)))
+        if (pt_m and pt_p <= 1):
+            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(int(pt_p*wthd_cnt)))            
         etsync_m =    re.search('#define COMMIT_BEHAVIOR\s+(IMMEDIATE|AFTER_BATCH_COMP|AFTER_PG_COMP)',line.strip())
         if etsync_m:
              nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
@@ -256,7 +261,7 @@ num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
-cc_algs = ['QUECC']
+cc_algs = ['QUECC', 'NO_WAIT']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -264,11 +269,12 @@ cc_algs = ['QUECC']
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
-# wthreads = [8,12,16,20,24,32,36] # for m4.10xlarge for QueCC
-wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
+wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+# wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
-pt_perc = [0.5]
+# pt_perc = [0.5,1]
+pt_perc = [8]
 # pt_perc = [0.5]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
@@ -330,9 +336,14 @@ for ncc_alg in cc_algs:
                         # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
                         build_project()
                         for trial in list(range(num_trials)):
-                            pt_cnt = str(int(pt*wthd))
-                            pt_perc_str = str(int(pt*100))
-                            et_cnt = str(wthd-int(pt*wthd));
+                            if pt <= 1:
+                                pt_cnt = str(int(pt*wthd))
+                                et_cnt = str(wthd-int(pt*wthd));
+                                pt_perc_str = str(int(pt*100))
+                            else:
+                                pt_cnt = str(pt)
+                                et_cnt = str(wthd-pt);
+                                pt_perc_str = str(0)
                             
                             if (wthd-int(pt*wthd)) == 0:
                                 et_cnt = str(wthd);
@@ -347,6 +358,6 @@ for ncc_alg in cc_algs:
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
-# print(subject)
+print(subject)
 send_email(subject, '')
-exec_cmd('sudo shutdown -h now', env)
+# exec_cmd('sudo shutdown -h now', env)

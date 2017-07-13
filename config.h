@@ -130,7 +130,8 @@
 #define ENABLE_LATCH        false
 #define CENTRAL_INDEX       false
 #define CENTRAL_MANAGER       false
-#define INDEX_STRUCT        IDX_HASH
+//#define INDEX_STRUCT        IDX_HASH
+#define INDEX_STRUCT        IDX_HASH_SIMPLE
 #define BTREE_ORDER         16
 
 // [TIMESTAMP]
@@ -153,7 +154,7 @@
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
 // [QUECC]
-#define PLAN_THREAD_CNT THREAD_CNT
+#define PLAN_THREAD_CNT 8
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 #define BATCH_SIZE 5*56*6*3*6//MAX_TXN_IN_FLIGHT * 0.9
@@ -177,7 +178,7 @@
 #define BALANCE_EQ_SIZE 1
 #define GREEDY_RANGE_LOCALITY 2
 
-#define QUECC_DB_ACCESS false
+#define QUECC_DB_ACCESS true
 
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS false
@@ -363,8 +364,8 @@ enum PPSTxnType {PPS_ALL = 0,
 // FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
 // on the total. Currently, only QUECC is supported.
 // TODO(tq): support other CC_ALGs
-//#define MODE NORMAL_MODE
-#define MODE FIXED_MODE
+#define MODE NORMAL_MODE
+//#define MODE FIXED_MODE
 
 
 /***********************************************/
