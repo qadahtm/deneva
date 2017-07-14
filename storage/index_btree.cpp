@@ -90,12 +90,16 @@ RC index_btree::index_read(idx_key_t key, itemid_t *& item) {
 	return RCOK;
 }
 
-RC 
-index_btree::index_read(idx_key_t key, 
-	itemid_t *& item, 
-	int part_id) {
-	
+RC index_btree::index_read(idx_key_t key, itemid_t *& item, int part_id) {
 	return index_read(key, item, 0, part_id);
+}
+
+RC	index_btree::index_read(idx_key_t key, int count, itemid_t * &item, int part_id){
+	return index_read(key, item, 0, part_id);
+}
+
+RC	index_btree::index_read(idx_key_t key, itemid_t * &item, int part_id, int thd_id){
+	return index_read(key, item, thd_id, part_id);
 }
 
 RC index_btree::index_read(idx_key_t key, itemid_t *& item, 
@@ -412,7 +416,7 @@ RC index_btree::insert_into_leaf(glob_param params, bt_node * leaf, idx_key_t ke
     leaf->keys[insertion_point] = key;
     leaf->pointers[insertion_point] = (void *)item;
     leaf->num_keys++;
-	M_ASSERT( (leaf->num_keys < order), "too many keys in leaf" );
+	M_ASSERT_V( (leaf->num_keys < order), "too many keys in leaf, order = %d, num_keys= %d\n", order, leaf->num_keys );
     return RCOK;
 }
 
@@ -429,7 +433,7 @@ RC index_btree::split_lf_insert(glob_param params, bt_node * leaf, idx_key_t key
 	rc = make_lf(part_id, new_leaf);
 	if (rc != RCOK) return rc;
 
-	M_ASSERT(leaf->num_keys == order - 1, "trying to split non-full leaf!");
+	M_ASSERT_V(leaf->num_keys == order - 1, "trying to split non-full leaf!, num_keys = %d, order=%d\n", leaf->num_keys, order);
 
 	idx_key_t temp_keys[BTREE_ORDER];
 	itemid_t * temp_pointers[BTREE_ORDER];

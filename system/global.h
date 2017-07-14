@@ -340,11 +340,11 @@ enum TsType {R_REQ = 0, W_REQ, P_REQ, XP_REQ};
 // principal index structure. The workload may decide to use a different 
 // index structure for specific purposes. (e.g. non-primary key access should use hash)
 #if (INDEX_STRUCT == IDX_BTREE)
-#define INDEX		index_btree
+#define INDEX   index_btree
 #elif (INDEX_STRUCT == IDX_HASH_SIMPLE)
-#define INDEX        IndexHashSimple
+#define INDEX   IndexHashSimple
 #else  // IDX_HASH
-#define INDEX		IndexHash
+#define INDEX   IndexHash
 #endif
 
 /************************************************/

@@ -107,8 +107,7 @@ public:
 	// the following call returns a single item
 	RC	 		index_read(idx_key_t key, itemid_t * &item, int part_id=-1);	
 	RC	 		index_read(idx_key_t key, int count, itemid_t * &item, int part_id=-1);	
-	RC	 		index_read(idx_key_t key, itemid_t * &item,
-							int part_id=-1, int thd_id=0);
+	RC	 		index_read(idx_key_t key, itemid_t * &item,	int part_id=-1, int thd_id=0);
 
 	// the following call returns a list of items
 //	RC 			index_read(idx_key_t key, Link_Item * &li, uint64_t &item_cnt);

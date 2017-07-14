@@ -262,6 +262,7 @@ num_trials = 2;
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
 cc_algs = ['QUECC', 'NO_WAIT']
+# cc_algs = ['QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -273,8 +274,8 @@ wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
-# pt_perc = [0.5,1]
-pt_perc = [8]
+pt_perc = [0.25,0.5,8]
+# pt_perc = [8]
 # pt_perc = [0.5]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
@@ -360,4 +361,4 @@ eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
 send_email(subject, '')
-# exec_cmd('sudo shutdown -h now', env)
+exec_cmd('sudo shutdown -h now', env)

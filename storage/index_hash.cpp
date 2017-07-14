@@ -384,13 +384,14 @@ RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item,
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
 	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
-	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+//	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
 	RC rc = RCOK;
 	// 1. get the sh latch
 //	get_latch(cur_bkt);
 
+    item = & _buckets[0][bkt_idx].single_node.item;
 
-	cur_bkt->read_item(key, item);
+//	cur_bkt->read_item(key, item);
 
 	// 3. release the latch
 //	release_latch(cur_bkt);

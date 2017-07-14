@@ -566,7 +566,7 @@ RC PlannerThread::run_fixed_mode() {
                 // Check if we need to merge
 
                 // Spatial locality perseving merge
-//                uint64_t ae_limit = ((planner_batch_size * REQ_PER_QUERY)/g_thread_cnt);
+//                uint64_t ae_limit = quecc_pool.exec_queue_capacity;
 //                DEBUG_Q("PT_%ld: ae_limit=%ld\n", _planner_id, ae_limit);
 //                uint64_t eq_idx = 0;
 //                for (uint64_t i = 0; i < g_thread_cnt; ++i){
