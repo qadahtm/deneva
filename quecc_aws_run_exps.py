@@ -55,8 +55,8 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
             # print(theta_m.group(1))
             nline = '#define ZIPF_THETA {}\n'.format(theta)
         pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
-        if (pt_m and pt_p <= 1):
-            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(int(pt_p*wthd_cnt)))            
+        if (pt_m):
+            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))            
         etsync_m =    re.search('#define COMMIT_BEHAVIOR\s+(IMMEDIATE|AFTER_BATCH_COMP|AFTER_PG_COMP)',line.strip())
         if etsync_m:
              nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
@@ -261,8 +261,9 @@ num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
-cc_algs = ['QUECC', 'NO_WAIT']
-# cc_algs = ['QUECC']
+# cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
+cc_algs = ['QUECC']
+# cc_algs = ['QUECC', 'NO_WAIT']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -270,13 +271,15 @@ cc_algs = ['QUECC', 'NO_WAIT']
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
-wthreads = [16,24,32,36] # for m4.10xlarge for QueCC
+# wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
+wthreads = [16,20,24,28,32,36] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
-pt_perc = [0.25,0.5,8]
+# pt_perc = [1]
 # pt_perc = [8]
-# pt_perc = [0.5]
+pt_perc = [0.5]
+# pt_perc = [0.5,4,8,10]
 # wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
 # wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
 # wthreads = [1,2]
@@ -285,7 +288,7 @@ pt_perc = [0.25,0.5,8]
 # zipftheta = [0.0,0.9]
 # et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
 et_sync = ['AFTER_BATCH_COMP']
-zipftheta = [0.0]
+zipftheta = [0.0, 0.6]
 # zipftheta = [0.0]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
@@ -355,7 +358,11 @@ for ncc_alg in cc_algs:
                             run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
                             # print('Dry run: {}, {}, {}, t{}, {}'
                                 # .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
-                            seq_no = seq_no + 1           
+                            seq_no = seq_no + 1
+                        cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                        cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                        # print("cp {} {}".format(cfgfname, cfg_copy))
+                        exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)

@@ -157,9 +157,14 @@
 #define PLAN_THREAD_CNT 8
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
-#define BATCH_SIZE 5*56*6*3*6//MAX_TXN_IN_FLIGHT * 0.9
+#define BATCH_SIZE 5*56*6*3*6
 #define BATCH_MAP_LENGTH 300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_ORDER BATCH_PT_ET
+#define BATCH_ET_PT     1
+#define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
+
+#define INIT_QUERY_MSGS true
 
 // Controls the batching decitions in the planning phase
 #define BATCHING_MODE SIZE_BASED
@@ -181,11 +186,11 @@
 #define QUECC_DB_ACCESS true
 
 #define CT_ENABLED false
-#define BUILD_TXN_DEPS false
+#define BUILD_TXN_DEPS true
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 2
+#define EXECQ_CAP_FACTOR 4
 #define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 // used for building histogram for planning

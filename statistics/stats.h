@@ -201,6 +201,9 @@ public:
     uint64_t * plan_time_batch_cnts;
     double * plan_batch_process_time;
     double * plan_idle_time;
+    double * plan_split_time;
+    double * plan_merge_time;
+    double * plan_tdep_time;
     double * plan_mem_alloc_time;
     double * plan_queue_dequeue_time;
     double * plan_queue_deq_pop_time;

@@ -89,7 +89,11 @@ public:
 
     // QueCC batch slot map
 // Layout of the batch map is imporatant to avoid potential tharshing
+#if BATCH_MAP_ORDER == BATCH_ET_PT
     volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
+#else //BATCH_MAP_ORDER == BATCH_PT_ET
+    volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT][THREAD_CNT];
+#endif
 //    batch_partition batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
 
     // Use to synchronize between ETs so that a priority group will need to be completed before any transaction

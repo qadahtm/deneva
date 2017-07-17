@@ -235,7 +235,11 @@ RC WorkerThread::run_fixed_mode() {
         // allows using the batch_map in circular manner
 
         while (true){
+#if BATCH_MAP_ORDER == BATCH_ET_PT
             batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
+#else
+            batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
+#endif
             M_ASSERT_V(((uint64_t) batch_part) != 0, "In fixed mode this should not happen\n");
 //            M_ASSERT_V(batch_part->batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
 //                    " wbatch_id=%ld, batch_part_batch_id = %ld\n",
@@ -419,7 +423,7 @@ RC WorkerThread::run_fixed_mode() {
 //                };
                 // TODO(tq): recycle insted
 //                mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
-                quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id);
+                quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id,_thd_id);
             }
             else{
                 quecc_pool.exec_queue_release(batch_part->exec_q, wplanner_id,_thd_id);
@@ -611,7 +615,11 @@ RC WorkerThread::run_normal_mode() {
         // However, this is a conservative step, we may not actually need it
         // TODO(tq): remove if not needed
         std::atomic_thread_fence(std::memory_order_seq_cst);
+#if BATCH_MAP_ORDER == BATCH_ET_PT
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
+#else
+        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
+#endif
         std::atomic_thread_fence(std::memory_order_seq_cst);
 
         if (((uint64_t) batch_part) == 0){
@@ -804,8 +812,11 @@ RC WorkerThread::run_normal_mode() {
         // reset map slot to 0 to allow planners to use the slot
         desired = 0;
         expected = (uint64_t) batch_part;
-        while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(
-                expected, desired)){
+#if BATCH_MAP_ORDER == BATCH_ET_PT
+        while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
+#else
+        while(!work_queue.batch_map[batch_slot][wplanner_id][_thd_id].compare_exchange_strong(expected, desired)){
+#endif
             DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
         }
 
@@ -821,7 +832,7 @@ RC WorkerThread::run_normal_mode() {
 //            };
             // TODO(tq): recycle insted
 //            mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
-            quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id);
+            quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id, _thd_id);
         }
 
 //        DEBUG_Q("For batch %ld , batch partition processing complete at map slot [%ld][%ld][%ld] \n",
@@ -1022,7 +1033,9 @@ RC WorkerThread::run_normal_mode() {
         // delete message
         ready_starttime = get_sys_clock();
 #if CC_ALG != CALVIN
+#if !INIT_QUERY_MSGS
         msg->release();
+#endif
 #endif
         INC_STATS(get_thd_id(),worker_release_msg_time,get_sys_clock() - ready_starttime);
 #endif // if QueCCC
@@ -1033,7 +1046,11 @@ RC WorkerThread::run_normal_mode() {
     // so zero-out all slots that belong to this ET
     for (uint64_t i = 0; i < g_batch_map_length; i++){
         for (uint64_t j= 0; j < g_plan_thread_cnt; j++){
+#if BATCH_MAP_ORDER == BATCH_ET_PT
             work_queue.batch_map[i][_thd_id][j].store(0);
+#else
+            work_queue.batch_map[i][j][_thd_id].store(0);
+#endif
         }
     }
 

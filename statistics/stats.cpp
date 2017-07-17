@@ -42,6 +42,9 @@ void Stats_thd::init(uint64_t thd_id) {
   plan_time_batch_cnts = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
   plan_batch_process_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_idle_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_split_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_merge_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
+  plan_tdep_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_mem_alloc_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_queue_dequeue_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
   plan_batch_delivery_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_plan_thread_cnt);
@@ -235,6 +238,9 @@ void Stats_thd::clear() {
     plan_time_batch_cnts[i] =0;
     plan_batch_process_time[i]=0;
     plan_idle_time[i]=0;
+    plan_split_time[i]=0;
+    plan_merge_time[i]=0;
+    plan_tdep_time[i]=0;
     plan_mem_alloc_time[i]=0;
     plan_queue_dequeue_time[i]=0;
     plan_batch_delivery_time[i]=0;
@@ -990,7 +996,22 @@ void Stats_thd::print(FILE * outf, bool prog) {
     fprintf(outf,
             ",quecc_plan%ld_idle_time=%f"
             ,i // idle time as measured includes dequeue time so
-            ,(plan_idle_time[i] - plan_queue_dequeue_time[i]) /BILLION
+            ,(plan_idle_time[i]) /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_split_time=%f"
+            ,i // idle time as measured includes dequeue time so
+            ,(plan_split_time[i]) /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_merge_time=%f"
+            ,i // idle time as measured includes dequeue time so
+            ,(plan_merge_time[i]) /BILLION
+    );
+    fprintf(outf,
+            ",quecc_plan%ld_tdep_time=%f"
+            ,i // idle time as measured includes dequeue time so
+            ,(plan_tdep_time[i]) /BILLION
     );
     fprintf(outf,
             ",quecc_plan%ld_batch_proc_time=%f"
@@ -1611,6 +1632,9 @@ void Stats_thd::combine(Stats_thd * stats) {
       plan_time_batch_cnts[i] += stats->plan_time_batch_cnts[i];
       plan_batch_process_time[i] += stats->plan_batch_process_time[i];
       plan_idle_time[i] += stats->plan_idle_time[i];
+      plan_split_time[i] += stats->plan_split_time[i];
+      plan_merge_time[i] += stats->plan_merge_time[i];
+      plan_tdep_time[i] += stats->plan_tdep_time[i];
       plan_mem_alloc_time[i] += stats->plan_mem_alloc_time[i];
       plan_queue_dequeue_time[i] += stats->plan_queue_dequeue_time[i];
       plan_batch_delivery_time[i] += stats->plan_batch_delivery_time[i];

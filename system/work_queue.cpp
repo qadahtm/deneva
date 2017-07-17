@@ -42,6 +42,7 @@ void QWorkQueue::init() {
     plan_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
   //TODO(tq): is this cache-aware?
+#if BATCH_MAP_ORDER == BATCH_ET_PT
   for (uint64_t i=0; i < g_batch_map_length ; i++){
     for (uint64_t j=0; j < g_thread_cnt; j++){
       for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
@@ -49,7 +50,15 @@ void QWorkQueue::init() {
       }
     }
   }
-
+#else
+  for (uint64_t i=0; i < g_batch_map_length ; i++){
+    for (uint64_t j=0; j < g_plan_thread_cnt; j++){
+      for (uint64_t k=0; k< g_thread_cnt ; k++){
+        (batch_map[i][j][k]).store(0);
+      }
+    }
+  }
+#endif
   //TODO(tq): is this cache-aware? Need to study and figure out hte optimal layout
   for (uint64_t i=0; i < g_batch_map_length ; i++){
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
@@ -228,16 +237,16 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
   prof_starttime = get_sys_clock();
 #if SERVER_GENERATE_QUERIES
   if(ISSERVER) {
-    BaseQuery * m_query = NULL;
-#if CC_ALG == QUECC
-    m_query = client_query_queue.get_next_query(planner_id,thd_id);
+#if INIT_QUERY_MSGS
+    msg = client_query_queue.get_next_query(planner_id, thd_id);
 #else
-    m_query = client_query_queue.get_next_query(thd_id,thd_id);
-#endif
+    BaseQuery * m_query = NULL;
+    m_query = client_query_queue.get_next_query(planner_id,thd_id);
+    assert(m_query);
     if(m_query) {
-      assert(m_query);
       msg = Message::create_message((BaseQuery*)m_query,CL_QRY);
     }
+#endif
   }
 #else
     work_queue_entry * entry = NULL;
@@ -304,11 +313,16 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
   if(!valid) {
 #if SERVER_GENERATE_QUERIES
     if(ISSERVER) {
+#if INIT_QUERY_MSGS
+      msg = client_query_queue.get_next_query(thd_id, thd_id);
+#else
       BaseQuery * m_query = client_query_queue.get_next_query(thd_id,thd_id);
       if(m_query) {
         assert(m_query);
         msg = Message::create_message((BaseQuery*)m_query,CL_QRY);
       }
+#endif
+
     }
 #else
     valid = new_txn_queue->pop(entry);
@@ -317,11 +331,6 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
   INC_STATS(thd_id,mtx[14],get_sys_clock() - mtx_wait_starttime);
   
   if(valid) {
-    if (CC_ALG == QUECC){
-      DEBUG_Q("With QueCC, deq. from workQ should not happen\n");
-      assert(false);
-    }
-
     msg = entry->msg;
     assert(msg);
     DEBUG("%ld WQdequeue %ld\n",thd_id,entry->txn_id);

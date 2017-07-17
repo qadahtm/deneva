@@ -378,7 +378,7 @@ int main(int argc, char* argv[])
             work_queue.batch_pg_map[i][j].status.store(0);
         }
     }
-
+#if BATCH_MAP_ORDER == BATCH_ET_PT
     for (uint64_t i=0; i < g_batch_map_length ; i++){
         for (uint64_t j=0; j < g_thread_cnt; j++){
             for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
@@ -386,6 +386,16 @@ int main(int argc, char* argv[])
             }
         }
     }
+#else
+    for (uint64_t i=0; i < g_batch_map_length ; i++){
+        for (uint64_t j=0; j < g_plan_thread_cnt; j++){
+            for (uint64_t k=0; k< g_thread_cnt; k++){
+                (work_queue.batch_map[i][j][k]).store(0);
+            }
+        }
+    }
+#endif
+
     quecc_pool.print_stats();
 
     wthd_cnt = g_plan_thread_cnt;
