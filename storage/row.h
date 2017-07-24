@@ -53,6 +53,7 @@ class Row_ts;
 class Row_occ;
 class Row_maat;
 class Row_specex;
+class Row_silo;
 
 class row_t
 {
@@ -111,6 +112,12 @@ public:
     Row_lock * manager;
   #elif CC_ALG == TIMESTAMP
    	Row_ts * manager;
+  #elif CC_ALG == TICTOC
+	Row_tictoc * manager;
+  #elif CC_ALG == SILO
+	Row_silo * manager;
+  #elif CC_ALG == MOCC_SILO
+	Row_mocc_silo * manager;
   #elif CC_ALG == MVCC
   	Row_mvcc * manager;
   #elif CC_ALG == OCC

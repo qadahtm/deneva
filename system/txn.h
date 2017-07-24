@@ -44,6 +44,19 @@ public:
 	row_t * 	data;
 	row_t * 	orig_data;
 	void cleanup();
+
+#if CC_ALG == TICTOC
+    ts_t 		wts;
+	ts_t 		rts;
+#elif CC_ALG == SILO
+    ts_t 		tid;
+    ts_t 		epoch;
+#elif CC_ALG == MOCC_SILO
+    ts_t 		tid;
+	ts_t 		epoch;
+//#elif CC_ALG == HEKATON
+//	void * 		history_entry;
+#endif
 };
 
 class Transaction {
@@ -59,9 +72,9 @@ public:
       // For OCC
     uint64_t start_timestamp;
     uint64_t end_timestamp;
-
     uint64_t write_cnt;
     uint64_t row_cnt;
+
     // Internal state
     TxnState twopc_state;
     Array<row_t*> insert_rows;
@@ -141,7 +154,8 @@ public:
     virtual RC      run_calvin_txn() = 0;
     // For QueCC
     virtual RC      run_quecc_txn(exec_queue_entry * exec_qe) = 0;
-
+    // For HStore
+    virtual RC      run_hstore_txn() = 0;
     virtual RC      acquire_locks() = 0;
     void            register_thread(Thread * h_thd);
     uint64_t        get_thd_id();
@@ -181,6 +195,8 @@ public:
     // [HSTORE, HSTORE_SPEC]
     int volatile    ready_part;
     int volatile    ready_ulk;
+    uint64_t active_part;
+
     bool aborted;
     uint64_t return_id;
     RC        validate();
@@ -213,6 +229,19 @@ public:
 
     uint64_t twopl_wait_start;
 
+#if CC_ALG == TICTOC
+    ts_t 			get_max_wts() 	{ return _max_wts; }
+	void 			update_max_wts(ts_t max_wts);
+	ts_t 			last_wts;
+	ts_t 			last_rts;
+#elif CC_ALG == SILO
+    ts_t 			last_tid;
+#elif CC_ALG == MOCC_SILO
+    ts_t 			last_tid;
+	// Access **		hot_accesses;
+	// int				hot_cnt;
+	// int				hot_w_cnt;
+#endif
 	////////////////////////////////
 	// LOGGING
 	////////////////////////////////
@@ -265,6 +294,25 @@ protected:
     access_t last_type;
 
     sem_t rsp_mutex;
+
+#if CC_ALG == TICTOC || CC_ALG == SILO || CC_ALG == MOCC_SILO
+    bool 			_pre_abort;
+    bool 			_validation_no_wait;
+#endif
+#if CC_ALG == TICTOC
+    bool			_atomic_timestamp;
+	ts_t 			_max_wts;
+	// the following methods are defined in concurrency_control/tictoc.cpp
+	RC				validate_tictoc();
+#elif CC_ALG == SILO
+    ts_t 			_cur_tid;
+    RC				validate_silo();
+#elif CC_ALG == MOCC_SILO
+    ts_t 			_cur_tid;
+	RC				validate_mocc_silo();
+#elif CC_ALG == HEKATON
+	RC 				validate_hekaton(RC rc);
+#endif
 };
 
 #endif

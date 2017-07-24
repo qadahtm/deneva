@@ -261,19 +261,24 @@ void BucketHeader::read_item(idx_key_t key, uint32_t count, itemid_t * &item)
 // for now there is no support for partitioninng
 RC IndexHashSimple::init(uint64_t bucket_cnt) {
 	_bucket_cnt = bucket_cnt;
-	_bucket_cnt_per_part = bucket_cnt;
-	//_bucket_cnt_per_part = bucket_cnt / g_part_cnt;
-	//_buckets = new BucketHeader * [g_part_cnt];
-	_buckets = new BucketHeaderSimple *[1];
-	printf("Thamir _bucket_cnt_per_part=  %ld buckets\n", _bucket_cnt_per_part);
+//	_bucket_cnt_per_part = bucket_cnt;
+	M_ASSERT_V((bucket_cnt % g_part_cnt) == 0, "bucket_cnt = %ld, must be divisible by g_part_cnt=%d\n",
+			   bucket_cnt, g_part_cnt);
+	_bucket_cnt_per_part = bucket_cnt / g_part_cnt;
+	_buckets = new BucketHeaderSimple * [g_part_cnt];
+//	_buckets = new BucketHeaderSimple *[1];
+//	printf("_bucket_cnt_per_part=  %ld buckets, part_cnt = %ld\n", _bucket_cnt_per_part, g_part_cnt);
 	// this allocate a contiguous memery block of bucket headers
-	_buckets[0] = (BucketHeaderSimple *) mem_allocator.alloc(sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
+//	_buckets[0] = (BucketHeaderSimple *) mem_allocator.alloc(sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
 	uint64_t buckets_init_cnt = 0;
-	for (UInt32 n = 0; n < _bucket_cnt_per_part; n++) {
-		_buckets[0][n].init();
-		++buckets_init_cnt;
+	for (UInt32 i = 0; i < g_part_cnt; ++i){
+		_buckets[i] = (BucketHeaderSimple *) mem_allocator.alloc(sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
+		for (UInt32 n = 0; n < _bucket_cnt_per_part; n++) {
+			_buckets[i][n].init();
+			++buckets_init_cnt;
+		}
 	}
-	printf("HashIndexSimple init with %ld buckets\n", buckets_init_cnt);
+	printf("HashIndexSimple init with %ld buckets and %d partitions, bucket_cnt = %ld\n", buckets_init_cnt, g_part_cnt, bucket_cnt);
 	return RCOK;
 }
 
@@ -284,11 +289,14 @@ RC IndexHashSimple::init(int part_cnt, table_t *table, uint64_t bucket_cnt) {
 }
 
 void IndexHashSimple::index_delete() {
-	for (UInt32 n = 0; n < _bucket_cnt_per_part; n++) {
-		_buckets[0][n].delete_bucket();
+	for (UInt32 i = 0; i < g_part_cnt; ++i){
+		for (UInt32 n = 0; n < _bucket_cnt_per_part; n++) {
+			_buckets[i][n].delete_bucket();
+//			_buckets[0][n].delete_bucket();
+		}
+		mem_allocator.free(_buckets[0], sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
+		delete _buckets;
 	}
-	mem_allocator.free(_buckets[0], sizeof(BucketHeaderSimple) * _bucket_cnt_per_part);
-	delete _buckets;
 }
 
 bool IndexHashSimple::index_exist(idx_key_t key) {
@@ -310,9 +318,10 @@ IndexHashSimple::release_latch(BucketHeaderSimple *bucket) {
 RC IndexHashSimple::index_insert(idx_key_t key, itemid_t *item, int part_id) {
 	RC rc = RCOK;
 	uint64_t bkt_idx = hash(key);
+//	DEBUG_WL("Buckeindex %ld for key %ld, part_id=%d\n", bkt_idx, key, part_id);
 	assert(bkt_idx < _bucket_cnt_per_part);
-	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
-	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	BucketHeaderSimple * cur_bkt = &_buckets[part_id][bkt_idx];
+//	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
 	// 1. get the ex latch
 	get_latch(cur_bkt);
 
@@ -347,8 +356,8 @@ RC IndexHashSimple::index_insert_nonunique(idx_key_t key, itemid_t *item, int pa
 RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item, int part_id) {
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
-	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
-	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	BucketHeaderSimple * cur_bkt = &_buckets[part_id][bkt_idx];
+//	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
 	RC rc = RCOK;
 	// 1. get the sh latch
 //	get_latch(cur_bkt);
@@ -364,8 +373,8 @@ RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item, int part_id) {
 RC IndexHashSimple::index_read(idx_key_t key, int count, itemid_t *&item, int part_id) {
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
-	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
-	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
+	BucketHeaderSimple * cur_bkt = &_buckets[part_id][bkt_idx];
+//	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
 	RC rc = RCOK;
 	// 1. get the sh latch
 //	get_latch(cur_bkt);
@@ -383,13 +392,14 @@ RC IndexHashSimple::index_read(idx_key_t key, itemid_t *&item,
 							   int part_id, int thd_id) {
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
-	//BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
+//	BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
 //	BucketHeaderSimple *cur_bkt = &_buckets[0][bkt_idx];
 	RC rc = RCOK;
 	// 1. get the sh latch
 //	get_latch(cur_bkt);
 
-    item = & _buckets[0][bkt_idx].single_node.item;
+//    item = & _buckets[0][bkt_idx].single_node.item;
+    item = & _buckets[part_id][bkt_idx].single_node.item;
 
 //	cur_bkt->read_item(key, item);
 
@@ -417,12 +427,15 @@ void BucketHeaderSimple::insert_item(idx_key_t key,
 									 int part_id) {
 
 	if (single_node.empty) {
+//		DEBUG_WL("Inserting key = %ld, part_id=%d\n", key, part_id);
 		single_node.empty = false;
 		single_node.key = key;
 		single_node.item = *item;
+
 	}
 	else{
-		M_ASSERT_V(false, "overwriting an item in a single node\n");
+		M_ASSERT_V(false, "overwriting an item in a single node, key = %ld, part_id=%d, bucket_idx=%ld\n",
+		 key, part_id, key % (g_synth_table_size / g_part_cnt));
 	}
 }
 

@@ -36,6 +36,7 @@
 #include "index_base.h"
 #include "index_hash.h"
 #include "index_btree.h"
+#include "plock.h"
 
 void WorkerThread::setup() {
 
@@ -110,10 +111,10 @@ void WorkerThread::process(Message *msg) {
             break;
     }
     uint64_t timespan = get_sys_clock() - starttime;
-    INC_STATS(get_thd_id(), worker_process_cnt, 1);
-    INC_STATS(get_thd_id(), worker_process_time, timespan);
-    INC_STATS(get_thd_id(), worker_process_cnt_by_type[msg->rtype], 1);
-    INC_STATS(get_thd_id(), worker_process_time_by_type[msg->rtype], timespan);
+    INC_STATS(_thd_id, worker_process_cnt, 1);
+    INC_STATS(_thd_id, worker_process_time, timespan);
+    INC_STATS(_thd_id, worker_process_cnt_by_type[msg->rtype], 1);
+    INC_STATS(_thd_id, worker_process_time_by_type[msg->rtype], timespan);
     DEBUG("%ld EndProcessing %d %ld\n", get_thd_id(), msg->get_rtype(), msg->get_txn_id());
 }
 
@@ -149,7 +150,7 @@ void WorkerThread::commit() {
     //txn_man->release_locks(RCOK);
     //        txn_man->commit_stats();
     assert(txn_man);
-    assert(IS_LOCAL(txn_man->get_txn_id()));
+//    assert(IS_LOCAL(txn_man->get_txn_id()));
 
     uint64_t timespan = get_sys_clock() - txn_man->txn_stats.starttime;
     DEBUG("COMMIT %ld %f -- %f\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
@@ -157,7 +158,7 @@ void WorkerThread::commit() {
 //    DEBUG_Q("COMMIT %ld %f -- %f\n",txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
     // Send result back to client
 #if !SERVER_GENERATE_QUERIES
-    msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, CL_RSP), txn_man->client_id);
+    msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
 #endif
     // remove txn from pool
     release_txn_man();
@@ -611,16 +612,11 @@ RC WorkerThread::run_normal_mode() {
         // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
 
-        // fences are used to ensure we have the latest update.
-        // However, this is a conservative step, we may not actually need it
-        // TODO(tq): remove if not needed
-        std::atomic_thread_fence(std::memory_order_seq_cst);
 #if BATCH_MAP_ORDER == BATCH_ET_PT
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
 #else
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
 #endif
-        std::atomic_thread_fence(std::memory_order_seq_cst);
 
         if (((uint64_t) batch_part) == 0){
             if (idle_starttime == 0){
@@ -679,6 +675,7 @@ RC WorkerThread::run_normal_mode() {
 
             for (uint64_t i = 0; i < exec_q->size(); ++i) {
                 exec_queue_entry exec_qe __attribute__ ((unused)) = exec_q->get(i);
+                // Asserts are commented out
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
 //                M_ASSERT_V(exec_qe.txn_id == exec_qe.txn_ctx->txn_id,
 //                           "ET_%ld : Executed QueCC txn fragment, txn_id mismatch, wbatch_id = %ld, ctx_batch_id = %ld, entry_txn_id = %ld, ctx_txn_id = %ld, \n",
@@ -774,14 +771,11 @@ RC WorkerThread::run_normal_mode() {
             }
             // recycle exec_q
             quecc_mem_free_startts = get_sys_clock();
-//            exec_q->clear();
-//            while(!work_queue.exec_queue_free_list[wplanner_id]->push(exec_q)) {};
             quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 
             if (!batch_part->single_q){
                 // set the status of this processed EQ to complete
-                // TODO(tq): use pre-constants instead of literals
                 desired8 = COMPLETED;
                 expected8 = WORKING;
 
@@ -822,25 +816,15 @@ RC WorkerThread::run_normal_mode() {
 
         if (!batch_part->single_q){
             // free batch_partition
-            //TODO(tq): recycle batch_partition memory blocks
-//            mem_allocator.free(batch_part->exec_qs, sizeof(Array<exec_queue_entry> *)*batch_part->sub_exec_qs_cnt);
             batch_part->exec_qs->clear();
-
             quecc_pool.exec_qs_release(batch_part->exec_qs, wplanner_id);
-//            while(!work_queue.exec_qs_free_list[wplanner_id]->push(batch_part->exec_qs)){
-//                M_ASSERT_V(false, "Should not happen");
-//            };
-            // TODO(tq): recycle insted
-//            mem_allocator.free(batch_part->exec_qs_status, sizeof(atomic<uint64_t> *)*batch_part->sub_exec_qs_cnt);
             quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id, _thd_id);
         }
 
 //        DEBUG_Q("For batch %ld , batch partition processing complete at map slot [%ld][%ld][%ld] \n",
 //                wbatch_id, batch_slot, _thd_id, wplanner_id);
 
-        // free batch_part
-        //TODO(tq): use pool and recycle
-//        mem_allocator.free(batch_part, sizeof(batch_partition));
+        // free/release batch_part
         quecc_pool.batch_part_release(batch_part, wplanner_id, _thd_id);
 
 #if CT_ENABLED && COMMIT_BEHAVIOR == AFTER_PG_COMP
@@ -961,20 +945,20 @@ RC WorkerThread::run_normal_mode() {
             Message::release_message(msg);
         }
 #else
-        Message * msg = work_queue.dequeue(get_thd_id());
+        Message * msg = work_queue.dequeue(_thd_id);
         if(!msg) {
-          if(idle_starttime ==0){
-          idle_starttime = get_sys_clock();
-          }
-          continue;
+            if(idle_starttime ==0){
+                idle_starttime = get_sys_clock();
+            }
+            continue;
         }
         if(idle_starttime > 0) {
-          INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-          idle_starttime = 0;
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            idle_starttime = 0;
         }
 
         //uint64_t starttime = get_sys_clock();
-
+#if !SINGLE_NODE
         if(msg->rtype != CL_QRY || CC_ALG == CALVIN) {
           txn_man = get_transaction_manager(msg);
 
@@ -1020,7 +1004,7 @@ RC WorkerThread::run_normal_mode() {
           }
           txn_man->register_thread(this);
         }
-
+#endif
         process(msg);
 
         ready_starttime = get_sys_clock();
@@ -1036,6 +1020,7 @@ RC WorkerThread::run_normal_mode() {
 #if !INIT_QUERY_MSGS
         msg->release();
 #endif
+
 #endif
         INC_STATS(get_thd_id(),worker_release_msg_time,get_sys_clock() - ready_starttime);
 #endif // if QueCCC
@@ -1265,6 +1250,7 @@ uint64_t WorkerThread::get_next_txn_id() {
 RC WorkerThread::process_rtxn(Message *msg) {
     RC rc = RCOK;
     uint64_t txn_id = UINT64_MAX;
+    uint64_t ctid = _thd_id;
 
     if (msg->get_rtype() == CL_QRY) {
         // This is a new transaction
@@ -1274,14 +1260,13 @@ RC WorkerThread::process_rtxn(Message *msg) {
         msg->txn_id = txn_id;
 
         // Put txn in txn_table
-        txn_man = txn_table.get_transaction_manager(get_thd_id(), txn_id, 0);
+        txn_man = txn_table.get_transaction_manager(ctid, txn_id, 0);
         txn_man->register_thread(this);
-#if MODE != FIXED_MODE
+
         uint64_t ready_starttime = get_sys_clock();
         bool ready = txn_man->unset_ready();
-        INC_STATS(get_thd_id(), worker_activate_txn_time, get_sys_clock() - ready_starttime);
+        INC_STATS(ctid, worker_activate_txn_time, get_sys_clock() - ready_starttime);
         assert(ready);
-#endif
         if (CC_ALG == WAIT_DIE) {
             txn_man->set_timestamp(get_next_ts());
         }
@@ -1291,7 +1276,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
         msg->copy_to_txn(txn_man);
         DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
               txn_man->txn_stats.starttime);
-        INC_STATS(get_thd_id(), local_txn_start_cnt, 1);
+        INC_STATS(ctid, local_txn_start_cnt, 1);
 
     } else {
         txn_man->txn_stats.restart_starttime = get_sys_clock();
@@ -1321,9 +1306,29 @@ RC WorkerThread::process_rtxn(Message *msg) {
     if (rc != RCOK)
         return rc;
 
+#if CC_ALG == HSTORE
+    if (txn_man->query->partitions.size() > 1){
+        rc = part_lock_man.lock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
+        if (rc == RCOK){
+            // Execute transaction
+            rc = txn_man->run_hstore_txn();
+            part_lock_man.unlock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
+        }
+    }
+    else{
+        // There is at least one partitions and partition id must equal thread id
+        M_ASSERT_V(txn_man->query->partitions[0] == _thd_id,
+                   "THD_%ld: mismatch partition id = %ld, thd_id = %ld", _thd_id,
+                   txn_man->query->partitions[0], _thd_id);
+        rc = txn_man->run_hstore_txn();
+    }
+#else
     // Execute transaction
     rc = txn_man->run_txn();
+#endif
+
     check_if_done(rc);
+
     return rc;
 }
 

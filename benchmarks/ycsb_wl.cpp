@@ -68,9 +68,10 @@ RC YCSBWorkload::init_schema(const char * schema_file) {
 	
 int 
 YCSBWorkload::key_to_part(uint64_t key) {
-	//uint64_t rows_per_part = g_synth_table_size / g_part_cnt;
-	//return key / rows_per_part;
-  return key % g_part_cnt;
+	uint64_t rows_per_part = g_synth_table_size / g_part_cnt;
+	return (key / rows_per_part) % g_part_cnt;
+//	return key / rows_per_part;
+//  return key % g_part_cnt;
 }
 
 RC YCSBWorkload::init_table() {
@@ -142,64 +143,70 @@ void YCSBWorkload::init_table_parallel() {
 	enable_thread_mem_pool = false;
 }
 
-void * YCSBWorkload::init_table_slice() {
+void *YCSBWorkload::init_table_slice() {
 	UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
 	RC rc;
 	assert(g_synth_table_size % g_init_parallelism == 0);
 	assert(tid < g_init_parallelism);
-  uint64_t key_cnt = 0;
-	while ((UInt32)ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
-	assert((UInt32)ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
+	uint64_t key_cnt = 0;
+	while ((UInt32) ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
+	assert((UInt32) ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
 	uint64_t slice_size = g_synth_table_size / g_init_parallelism;
-	for (uint64_t key = slice_size * tid; 
-			key < slice_size * (tid + 1); 
-			//key ++
-	) {
-    if(GET_NODE_ID(key_to_part(key)) != g_node_id) {
+
+	printf("Thd %d: slice size = %ld, inserting from %ld, to %ld\n", tid, slice_size, slice_size * tid, (slice_size * (tid+1))-1);
+	for (uint64_t key = slice_size * tid;
+		 key < slice_size * (tid + 1);
+		 key++
+			) {
+#if !SERVER_GENERATE_QUERIES
+        if(GET_NODE_ID(key_to_part(key)) != g_node_id) {
       ++key;
       continue;
     }
+#endif
 
-    ++key_cnt;
-    if(key_cnt % 500000 == 0) {
-      printf("Thd %d inserted %ld keys %f\n",tid,key_cnt,simulation->seconds_from_start(get_sys_clock()));
-    }
+		++key_cnt;
+		if (key_cnt % 500000 == 0) {
+			printf("Thd %d inserted %ld keys %f\n", tid, key_cnt, simulation->seconds_from_start(get_sys_clock()));
+		}
 //		printf("tid=%d. key=%ld\n", tid, key);
-		row_t * new_row = NULL;
+		row_t *new_row = NULL;
 		uint64_t row_id;
 		int part_id = key_to_part(key); // % g_part_cnt;
-		rc = the_table->get_new_row(new_row, part_id, row_id); 
+		rc = the_table->get_new_row(new_row, part_id, row_id);
 		assert(rc == RCOK);
 //		uint64_t value = rand();
 		uint64_t primary_key = key;
 		new_row->set_primary_key(primary_key);
 #if SIM_FULL_ROW
-		new_row->set_value(0, &primary_key,sizeof(uint64_t));
-		
-		Catalog * schema = the_table->get_schema();
-		for (UInt32 fid = 0; fid < schema->get_field_cnt(); fid ++) {
+        new_row->set_value(0, &primary_key,sizeof(uint64_t));
+
+        Catalog * schema = the_table->get_schema();
+        for (UInt32 fid = 0; fid < schema->get_field_cnt(); fid ++) {
 //			int field_size = schema->get_field_size(fid);
 //			char value[field_size];
-//			for (int i = 0; i < field_size; i++) 
+//			for (int i = 0; i < field_size; i++)
 //				value[i] = (char)rand() % (1<<8) ;
-			char value[6] = "hello";
-			new_row->set_value(fid, value,sizeof(value));
-		}
+            char value[6] = "hello";
+            new_row->set_value(fid, value,sizeof(value));
+        }
 #endif
 
-		itemid_t * m_item =
-			(itemid_t *) mem_allocator.alloc( sizeof(itemid_t));
+		itemid_t *m_item =
+				(itemid_t *) mem_allocator.alloc(sizeof(itemid_t));
 		assert(m_item != NULL);
 		m_item->type = DT_row;
 		m_item->location = new_row;
 		m_item->valid = true;
 		uint64_t idx_key = primary_key;
-		
+
+//		DEBUG_WL("Thread_%d: inserting key = %ld, part_id=%d\n", tid, idx_key, part_id);
 		rc = the_index->index_insert(idx_key, m_item, part_id);
 		assert(rc == RCOK);
-    key += g_part_cnt;
+//    key += g_part_cnt;
+
 	}
-  printf("Thd %d inserted %ld keys\n",tid,key_cnt);
+	printf("Thd %d inserted %ld keys\n", tid, key_cnt);
 	return NULL;
 }
 

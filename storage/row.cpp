@@ -24,10 +24,9 @@
 #include "row_mvcc.h"
 #include "row_occ.h"
 #include "row_maat.h"
+#include "row_silo.h"
 #include "mem_alloc.h"
 #include "manager.h"
-
-#define SIM_FULL_ROW true
 
 RC 
 row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id) {
@@ -58,6 +57,8 @@ void row_t::init_manager(row_t * row) {
   DEBUG_M("row_t::init_manager alloc \n");
 #if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC
 	manager = (Row_lock *) mem_allocator.align_alloc(sizeof(Row_lock));
+#elif CC_ALG == SILO
+	manager = (Row_silo *) mem_allocator.align_alloc(sizeof(Row_silo));
 #elif CC_ALG == TIMESTAMP
     manager = (Row_ts *) mem_allocator.align_alloc(sizeof(Row_ts));
 #elif CC_ALG == MVCC
@@ -178,7 +179,7 @@ void row_t::copy(row_t * src) {
 
 void row_t::free_row() {
   DEBUG_M("row_t::free_row free\n");
-#if SIM_FULL
+#if SIM_FULL_ROW
 	mem_allocator.free(data, sizeof(char) * get_tuple_size());
 #else
 	mem_allocator.free(data, sizeof(uint64_t) * 1);
@@ -220,6 +221,14 @@ RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
   }
 #endif
 */
+#if CC_ALG == TICTOC || CC_ALG == SILO || CC_ALG == MOCC_SILO
+	// Record access for this row
+	row_pool.get(txn->get_thd_id(), row);
+	TsType ts_type = (type == RD)? R_REQ : P_REQ;
+	rc = this->manager->access(txn, ts_type, row);
+	goto end;
+#endif
+
 #if CC_ALG == MAAT
 
     DEBUG_M("row_t::get_row MAAT alloc \n");
@@ -402,7 +411,7 @@ void row_t::return_row(RC rc, access_t type, TxnManager * txn, row_t * row) {
 		manager->write( row, txn->get_end_timestamp() );
 	row->free_row();
   DEBUG_M("row_t::return_row OCC free \n");
-	mem_allocator.free(row, sizeof(row_t));
+  mem_allocator.free(row, sizeof(row_t));
   manager->release();
 	return;
 #elif CC_ALG == MAAT 
@@ -412,7 +421,6 @@ void row_t::return_row(RC rc, access_t type, TxnManager * txn, row_t * row) {
   } else {
     manager->commit(type,txn,row);
   }
-
 	row->free_row();
   DEBUG_M("row_t::return_row Maat free \n");
 	mem_allocator.free(row, sizeof(row_t));
@@ -421,6 +429,17 @@ void row_t::return_row(RC rc, access_t type, TxnManager * txn, row_t * row) {
 	if (ROLL_BACK && type == XP) {// recover from previous writes.
 		this->copy(row);
 	}
+	return;
+#elif CC_ALG == TICTOC || CC_ALG == SILO || CC_ALG == MOCC_SILO
+	assert (row != NULL);
+	mem_allocator.free(row->data, 0);
+	row_pool.put(txn->get_thd_id(),row);
+//	if (type == WR)
+//		manager->write( row, txn->get_end_timestamp() );
+//	row->free_row();
+//	DEBUG_M("row_t::return_row SILO free \n");
+//	mem_allocator.free(row, sizeof(row_t));
+//	manager->release();
 	return;
 #else 
 	assert(false);

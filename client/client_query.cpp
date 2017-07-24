@@ -18,6 +18,7 @@
 #include "mem_alloc.h"
 #include "wl.h"
 #include "table.h"
+#include "ycsb.h"
 #include "ycsb_query.h"
 #include "tpcc_query.h"
 #include "pps_query.h"
@@ -115,10 +116,14 @@ Client_query_queue::initQueriesParallel() {
     for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
             BaseQuery * query = gen->create_query(_wl,g_node_id);
+            // Assum YCSB workload for now
+            uint64_t qslot = ((YCSBWorkload *) _wl)->key_to_part(((YCSBQuery*)query)->requests[0]->key);
 #if INIT_QUERY_MSGS
-            queries_msgs[thread_id][query_id] = Message::create_message(query,CL_QRY);
+            queries_msgs[qslot][query_id] = Message::create_message(query,CL_QRY);
+
 #else
-            queries[thread_id][query_id] = query;
+            queries[qslot][query_id] = query;
+
 #endif
         }
     }

@@ -47,6 +47,12 @@
     fflush(stdout); \
   }
 
+#define DEBUG_L(...) \
+  if(DEBUG_LOCK) { \
+    fprintf(stdout,__VA_ARGS__); \
+    fflush(stdout); \
+  }
+
 #define DEBUG_Q(...) \
   if(DEBUG_QUECC) { \
     fprintf(stdout,__VA_ARGS__); \
@@ -94,6 +100,10 @@
 	__sync_fetch_and_add(&(dest), value)
 #define ATOM_SUB_FETCH(dest, value) \
 	__sync_sub_and_fetch(&(dest), value)
+
+#define COMPILER_BARRIER asm volatile("" ::: "memory");
+//#define PAUSE { __asm__ ( "pause;" ); }
+#define PAUSE usleep(1);
 
 /************************************************/
 // ASSERT Helper

@@ -1,0 +1,42 @@
+//
+// Created by Thamir Qadah on 7/22/17.
+//
+
+#ifndef DENEVA_ROW_SILO_H_H
+#define DENEVA_ROW_SILO_H_H
+
+class table_t;
+class Catalog;
+class TxnManager;
+struct TsReqEntry;
+
+#if CC_ALG==SILO
+#define LOCK_BIT (1UL << 63)
+
+class Row_silo {
+public:
+    void 				init(row_t * row);
+    RC 					access(TxnManager * txn, TsType type, row_t * local_row);
+
+    bool				validate(ts_t tid, bool in_write_set);
+    void				write(row_t * data, uint64_t tid);
+
+    void 				lock();
+    void 				release();
+    bool				try_lock();
+    uint64_t 			get_tid();
+#if ATOMIC_WORD
+    void 				assert_lock() {assert(_tid_word & LOCK_BIT); }
+#endif
+private:
+#if ATOMIC_WORD
+    volatile uint64_t	_tid_word;
+#else
+    pthread_mutex_t * 	_latch;
+    ts_t 				_tid;
+#endif
+    row_t * 			_row;
+};
+
+#endif
+#endif //DENEVA_ROW_SILO_H_H

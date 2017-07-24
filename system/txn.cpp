@@ -291,7 +291,7 @@ void Transaction::release_accesses(uint64_t thd_id) {
 void Transaction::release_inserts(uint64_t thd_id) {
     for (uint64_t i = 0; i < insert_rows.size(); i++) {
         row_t *row = insert_rows[i];
-#if CC_ALG != MAAT && CC_ALG != OCC
+#if CC_ALG != MAAT && CC_ALG != OCC && CC_ALG != HSTORE
         DEBUG_M("TxnManager::cleanup row->manager free\n");
         mem_allocator.free(row->manager, 0);
 #endif
@@ -341,6 +341,30 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
     phase = CALVIN_RW_ANALYSIS;
     locking_done = false;
     calvin_locked_rows.init(MAX_ROW_PER_TXN);
+#endif
+
+#if CC_ALG == TICTOC || CC_ALG == SILO || CC_ALG == MOCC_SILO
+    _pre_abort = PRE_ABORT;
+
+#if VALIDATION_LOCK == VALIDATION_LOCK_NO_WAIT
+        _validation_no_wait = true;
+#elif (VALIDATION_LOCK == VALIDATION_LOCK_WAIT)
+        _validation_no_wait = false;
+#else
+        assert(false);
+#endif
+
+#endif
+
+
+#if CC_ALG == TICTOC
+    _max_wts = 0;
+	_write_copy_ptr = (g_params["write_copy_form"] == "ptr");
+	_atomic_timestamp = (g_params["atomic_timestamp"] == "true");
+#elif CC_ALG == SILO
+    _cur_tid = 0;
+#elif CC_ALG == MOCC_SILO
+    _cur_tid = 0;
 #endif
 
     txn_ready = true;
@@ -422,6 +446,7 @@ void TxnManager::reset_query() {
 RC TxnManager::commit() {
     DEBUG("Commit %ld\n", get_txn_id());
     release_locks(RCOK);
+
 #if CC_ALG == MAAT
     time_table.release(get_thd_id(), get_txn_id());
 #endif
@@ -481,12 +506,14 @@ RC TxnManager::abort() {
 
 RC TxnManager::start_abort() {
     txn->rc = Abort;
+#if !SINGLE_NODE
     DEBUG("%ld start_abort\n", get_txn_id());
     if (query->partitions_touched.size() > 1) {
         send_finish_messages();
         abort();
         return Abort;
     }
+#endif
     return abort();
 }
 
@@ -504,12 +531,18 @@ RC TxnManager::start_commit() {
             rc = commit();
         }
     } else { // is not multi-part
+#if CC_ALG == SILO
+        rc = validate_silo();
+#else
         rc = validate();
         if (rc == RCOK)
             rc = commit();
         else
             start_abort();
+#endif
+
     }
+
     return rc;
 }
 
@@ -562,42 +595,48 @@ void TxnManager::commit_stats() {
     uint64_t commit_time = get_sys_clock();
     uint64_t timespan_short = commit_time - txn_stats.restart_starttime;
     uint64_t timespan_long = commit_time - txn_stats.starttime;
-    INC_STATS(get_thd_id(), total_txn_commit_cnt, 1);
 
-    if (!IS_LOCAL(get_txn_id()) && CC_ALG != CALVIN) {
-        INC_STATS(get_thd_id(), remote_txn_commit_cnt, 1);
-        txn_stats.commit_stats(get_thd_id(), get_txn_id(), get_batch_id(), timespan_long, timespan_short);
-        return;
-    }
+    uint64_t ctid = get_thd_id();
+    uint64_t txn_id =  get_txn_id();
+    uint64_t batch_id = get_batch_id();
+
+    INC_STATS(ctid, total_txn_commit_cnt, 1);
+
+//    if (!IS_LOCAL(ctid) && CC_ALG != CALVIN) {
+//        INC_STATS(ctid, remote_txn_commit_cnt, 1);
+//        txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
+//        return;
+//    }
 
 
-    INC_STATS(get_thd_id(), txn_cnt, 1);
-    INC_STATS(get_thd_id(), local_txn_commit_cnt, 1);
-    INC_STATS(get_thd_id(), txn_run_time, timespan_long);
+    INC_STATS(ctid, txn_cnt, 1);
+//    INC_STATS(ctid, local_txn_commit_cnt, 1);
+    INC_STATS(ctid, txn_run_time, timespan_long);
     if (query->partitions_touched.size() > 1) {
-        INC_STATS(get_thd_id(), multi_part_txn_cnt, 1);
-        INC_STATS(get_thd_id(), multi_part_txn_run_time, timespan_long);
+        INC_STATS(ctid, multi_part_txn_cnt, 1);
+        INC_STATS(ctid, multi_part_txn_run_time, timespan_long);
     } else {
-        INC_STATS(get_thd_id(), single_part_txn_cnt, 1);
-        INC_STATS(get_thd_id(), single_part_txn_run_time, timespan_long);
+        INC_STATS(ctid, single_part_txn_cnt, 1);
+        INC_STATS(ctid, single_part_txn_run_time, timespan_long);
     }
     /*if(cflt) {
       INC_STATS(get_thd_id(),cflt_cnt_txn,1);
     }*/
-    txn_stats.commit_stats(get_thd_id(), get_txn_id(), get_batch_id(), timespan_long, timespan_short);
-#if CC_ALG == CALVIN
-    return;
-#endif
+    txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
+//#if CC_ALG == CALVIN
+//    return;
+//#endif
+//
+//    INC_STATS_ARR(ctid, start_abort_commit_latency, timespan_short);
+//    INC_STATS_ARR(ctid, last_start_commit_latency, timespan_short);
+//    INC_STATS_ARR(ctid, first_start_commit_latency, timespan_long);
 
-    INC_STATS_ARR(get_thd_id(), start_abort_commit_latency, timespan_short);
-    INC_STATS_ARR(get_thd_id(), last_start_commit_latency, timespan_short);
-    INC_STATS_ARR(get_thd_id(), first_start_commit_latency, timespan_long);
 
     assert(query->partitions_touched.size() > 0);
-    INC_STATS(get_thd_id(), parts_touched, query->partitions_touched.size());
-    INC_STATS(get_thd_id(), part_cnt[query->partitions_touched.size() - 1], 1);
+    INC_STATS(ctid, parts_touched, query->partitions_touched.size());
+    INC_STATS(ctid, part_cnt[query->partitions_touched.size() - 1], 1);
     for (uint64_t i = 0; i < query->partitions_touched.size(); i++) {
-        INC_STATS(get_thd_id(), part_acc[query->partitions_touched[i]], 1);
+        INC_STATS(ctid, part_acc[query->partitions_touched[i]], 1);
     }
 }
 
@@ -707,6 +746,7 @@ void TxnManager::cleanup_row(RC rc, uint64_t rid) {
 #if CC_ALG != CALVIN
 #if ISOLATION_LEVEL != READ_UNCOMMITTED
     row_t * orig_r = txn->accesses[rid]->orig_row;
+
     if (ROLL_BACK && type == XP &&
                 (CC_ALG == DL_DETECT ||
                 CC_ALG == NO_WAIT ||
@@ -729,12 +769,13 @@ void TxnManager::cleanup_row(RC rc, uint64_t rid) {
 
 #if ROLL_BACK && (CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == HSTORE || CC_ALG == HSTORE_SPEC)
     if (type == WR) {
+        uint64_t ctid = get_thd_id();
         //printf("free 10 %ld\n",get_txn_id());
-              txn->accesses[rid]->orig_data->free_row();
+        txn->accesses[rid]->orig_data->free_row();
         DEBUG_M("TxnManager::cleanup row_t free\n");
-        row_pool.put(get_thd_id(),txn->accesses[rid]->orig_data);
+        row_pool.put(ctid,txn->accesses[rid]->orig_data);
         if(rc == RCOK) {
-            INC_STATS(get_thd_id(),record_write_cnt,1);
+            INC_STATS(ctid,record_write_cnt,1);
             ++txn_stats.write_cnt;
         }
     }
@@ -792,9 +833,10 @@ RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     uint64_t starttime = get_sys_clock();
     uint64_t timespan;
     RC rc = RCOK;
+    uint64_t ctid = get_thd_id();
     DEBUG_M("TxnManager::get_row access alloc\n");
     Access *access;
-    access_pool.get(get_thd_id(), access);
+    access_pool.get(ctid, access);
     //uint64_t row_cnt = txn->row_cnt;
     //assert(txn->accesses.get_count() - 1 == row_cnt);
 
@@ -808,22 +850,31 @@ RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
         DEBUG_M("TxnManager::get_row(abort) access free\n");
         access_pool.put(get_thd_id(), access);
         timespan = get_sys_clock() - starttime;
-        INC_STATS(get_thd_id(), txn_manager_time, timespan);
-        INC_STATS(get_thd_id(), txn_conflict_cnt, 1);
+        INC_STATS(ctid, txn_manager_time, timespan);
+        INC_STATS(ctid, txn_conflict_cnt, 1);
         //cflt = true;
 #if DEBUG_TIMELINE
-        printf("CONFLICT %ld %ld\n",get_txn_id(),get_sys_clock());
+        printf("CONFLICT %ld %ld\n",ctid,get_sys_clock());
 #endif
         return rc;
     }
     access->type = type;
     access->orig_row = row;
+#if CC_ALG == TICTOC
+    access->wts = last_wts;
+	access->rts = last_rts;
+#elif CC_ALG == SILO
+    access->tid = last_tid;
+#elif CC_ALG == MOCC_SILO
+    access->tid = last_tid;
+#endif
+
 #if ROLL_BACK && (CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == HSTORE || CC_ALG == HSTORE_SPEC)
     if (type == WR) {
     //printf("alloc 10 %ld\n",get_txn_id());
     uint64_t part_id = row->get_part_id();
     DEBUG_M("TxnManager::get_row row_t alloc\n")
-    row_pool.get(get_thd_id(),access->orig_data);
+    row_pool.get(ctid,access->orig_data);
     access->orig_data->init(row->get_table(), part_id, 0);
     access->orig_data->copy(row);
     assert(access->orig_data->get_schema() == row->get_schema());
@@ -952,6 +1003,8 @@ RC TxnManager::validate() {
             rc = maat_man.find_bound(this);
         }
     }
+
+
     INC_STATS(get_thd_id(), txn_validate_time, get_sys_clock() - starttime);
     return rc;
 }

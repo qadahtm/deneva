@@ -82,7 +82,7 @@ public:
 
     // For QueCC
     RC run_quecc_txn(exec_queue_entry * exec_qe);
-
+    RC run_hstore_txn();
     void copy_remote_requests(YCSBQueryMessage *msg);
 
 private:

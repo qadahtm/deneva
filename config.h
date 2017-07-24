@@ -6,12 +6,12 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT 1//NODE_CNT
+#define PART_CNT THREAD_CNT//NODE_CNT
 
 // TQ: since we have 20 cores per node on halstead
 // With a single node used for client requests, 
@@ -111,8 +111,8 @@
 /***********************************************/
 // Concurrency Control
 /***********************************************/
-// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
-#define CC_ALG QUECC
+// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, MOCC_SILO
+#define CC_ALG SILO
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -153,6 +153,16 @@
 #define TXN_QUEUE_SIZE_LIMIT    THREAD_CNT
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
+
+// [TICTOC, SILO, MOCC_SILO]
+#define VALIDATION_LOCK				VALIDATION_LOCK_WAIT // no-wait or waiting
+#define PRE_ABORT					true
+#define ATOMIC_WORD					false
+
+#define VALIDATION_LOCK_NO_WAIT   1
+#define VALIDATION_LOCK_WAIT      2
+
+
 // [QUECC]
 #define PLAN_THREAD_CNT 8
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
@@ -210,6 +220,7 @@
 #define PG_AVAILABLE 0
 #define PG_READY     1
 
+#define SINGLE_NODE false
 
 /***********************************************/
 // Logging
@@ -223,6 +234,8 @@
 /***********************************************/
 // Benchmark
 /***********************************************/
+#define SIM_FULL_ROW true
+
 // max number of rows touched per transaction
 #define MAX_ROW_PER_TXN       64
 #define QUERY_INTVL         1UL
@@ -245,16 +258,18 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
 #define SCAN_PERC           0
 #define SCAN_LEN          20
-#define PART_PER_TXN PART_CNT
+// We should be able to control multi-partition transactions using this.
+// Setting this to PART_CNT means that all transactions will access all partitions
+#define PART_PER_TXN 1//PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
@@ -342,7 +357,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define IDX_VERB          false
 #define VERB_ALLOC          true
 
-#define DEBUG_LOCK          false
+#define DEBUG_LOCK          true
 #define DEBUG_TIMESTAMP       false
 #define DEBUG_SYNTH         false
 #define DEBUG_ASSERT        false
@@ -354,9 +369,9 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
-#define DEBUG_WLOAD false
+#define DEBUG_WLOAD true
 
 /***********************************************/
 // MODES
@@ -401,6 +416,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define MAAT      11
 #define WDL           12
 #define QUECC 13
+#define SILO 14
+#define MOCC_SILO 15
+#define LADS 16
+#define TICTOC 17
 // TIMESTAMP allocation method.
 #define TS_MUTEX          1
 #define TS_CAS            2

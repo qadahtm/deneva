@@ -80,6 +80,8 @@ class Client_txn;
 class Sequencer;
 class Logger;
 class TimeTable;
+// for Hstore
+class Plock;
 // for QueCC
 //#if CC_ALG == QUECC
 class QueCCPool;
@@ -119,6 +121,8 @@ extern Client_txn client_man;
 extern Sequencer seq_man;
 extern Logger logger;
 extern TimeTable time_table;
+// For Hstore
+extern Plock part_lock_man;
 // for QueCC
 //#if CC_ALG == QUECC
 extern QueCCPool quecc_pool;

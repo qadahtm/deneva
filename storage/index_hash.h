@@ -167,7 +167,8 @@ private:
 	// TODO implement more complex hash function
 	uint64_t hash(idx_key_t key) {
 #if WORKLOAD == YCSB
-		return (key / g_part_cnt) % _bucket_cnt_per_part;
+        return (key) % _bucket_cnt_per_part;
+//        return (key / g_part_cnt) % _bucket_cnt_per_part;
 #else
 		return key % _bucket_cnt_per_part;
 #endif

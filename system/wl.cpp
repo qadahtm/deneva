@@ -132,7 +132,8 @@ RC Workload::init_schema(const char *schema_file) {
                 table_size = MAX_PPS_SUPPLIER_KEY;
             }
 #else
-            table_size = g_synth_table_size / g_part_cnt;
+//            table_size = g_synth_table_size / g_part_cnt;
+            table_size = g_synth_table_size;
 #endif
 
 #if INDEX_STRUCT == IDX_HASH || INDEX_STRUCT == IDX_HASH_SIMPLE

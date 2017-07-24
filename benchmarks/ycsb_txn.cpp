@@ -88,6 +88,26 @@ RC YCSBTxnManager::acquire_locks() {
     return rc;
 }
 
+RC YCSBTxnManager::run_hstore_txn(){
+    RC rc = RCOK;
+    assert(CC_ALG == HSTORE);
+    YCSBQuery *ycsb_query = (YCSBQuery *) query;
+
+    for (uint64_t i = 0; i < ycsb_query->requests.size(); i++) {
+        ycsb_request *req = ycsb_query->requests[i];
+        uint64_t part_id = _wl->key_to_part(req->key);
+        query->partitions_touched.add_unique(part_id);
+
+        rc = run_ycsb_0(req, row);
+        assert(rc == RCOK);
+
+        rc = run_ycsb_1(req->acctype, row);
+        assert(rc == RCOK);
+    }
+
+    commit_stats();
+    return rc;
+}
 
 RC YCSBTxnManager::run_txn() {
     RC rc = RCOK;
@@ -215,14 +235,14 @@ RC YCSBTxnManager::run_txn_state() {
 inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     RC rc = RCOK;
     int part_id = _wl->key_to_part(req->key);
-#if CC_ALG != QUECC
+#if !(CC_ALG == QUECC || CC_ALG == HSTORE)
     access_t type = req->acctype;
 #endif
     itemid_t *m_item;
 
     m_item = index_read(_wl->the_index, req->key, part_id);
 
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC || CC_ALG == HSTORE
 //    // just access row, no need to go throught lock manager path
     row_local = ((row_t *) m_item->location);
 #else

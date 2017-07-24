@@ -263,7 +263,18 @@ void AccessPool::init(Workload * wl, uint64_t size) {
   for(uint64_t thd_id = 0; thd_id < g_total_thread_cnt; thd_id++) {
     pool[thd_id] = new boost::lockfree::queue<Access* > (size);
     for(uint64_t i = 0; i < size; i++) {
-    Access * item = (Access*)mem_allocator.alloc(sizeof(Access));
+    Access * item = (Access*)mem_allocator.align_alloc(sizeof(Access));
+//#if (CC_ALG == SILO || CC_ALG == TICTOC || CC_ALG == MOCC_SILO)
+//      access->data = (row_t *) mem_allocator.align_alloc(sizeof(row_t));
+//      access->orig_data = (row_t *) mem_allocator.align_alloc(sizeof(row_t));
+//#if SIM_FULL_ROW
+//      access->data->init(MAX_TUPLE_SIZE);
+//      access->orig_data->init(MAX_TUPLE_SIZE);
+//#endif
+//#else
+//      access->orig_data = (row_t *) mem_allocator.align_alloc(sizeof(row_t));
+//	  access->orig_data->init(MAX_TUPLE_SIZE);
+//#endif
     put(thd_id,item);
     }
   }
@@ -275,6 +286,7 @@ void AccessPool::get(uint64_t thd_id, Access *& item) {
   if(!r) {
     DEBUG_M("access_pool alloc\n");
     item = (Access*)mem_allocator.alloc(sizeof(Access));
+
   }
 }
 

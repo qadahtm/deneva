@@ -935,6 +935,14 @@ inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, 
 RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
     // not implemented yet
+    assert(false);
+    return rc;
+}
+
+RC TPCCTxnManager::run_hstore_txn() {
+    RC rc = RCOK;
+    // not implemented yet
+    assert(false);
     return rc;
 }
 

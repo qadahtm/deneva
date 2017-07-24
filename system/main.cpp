@@ -39,6 +39,7 @@
 #include "maat.h"
 #include "client_query.h"
 #include "quecc_thread.h"
+#include "plock.h"
 #include <jemalloc/jemalloc.h>
 
 void network_test();
@@ -174,6 +175,12 @@ int main(int argc, char* argv[])
   fflush(stdout);
   txn_table.init();
   printf("Done\n");
+#if CC_ALG == HSTORE
+    printf("Initializing partition lock manager... ");
+    fflush(stdout);
+    part_lock_man.init();
+    printf("Done\n");
+#endif
 #if CC_ALG == CALVIN
   printf("Initializing sequencer... ");
   fflush(stdout);

@@ -138,7 +138,7 @@ private:
 
 	// For QueCC
 	RC run_quecc_txn(exec_queue_entry * exec_qe);
-
+	RC      run_hstore_txn();
   uint64_t next_item_id;
 
 void next_tpcc_state();

@@ -32,6 +32,7 @@
 #include "sequencer.h"
 #include "logger.h"
 #include "maat.h"
+#include "plock.h"
 #include "pthread_mac.h"
 
 mem_alloc mem_allocator;
@@ -58,6 +59,8 @@ Client_txn client_man;
 Sequencer seq_man;
 Logger logger;
 TimeTable time_table;
+// for Hstore
+Plock part_lock_man;
 //#if CC_ALG == QUECC
 QueCCPool quecc_pool;
 //#endif

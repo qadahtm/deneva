@@ -1008,6 +1008,14 @@ inline RC PPSTxnManager::run_updatepart_1(row_t *& r_local) {
 RC PPSTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
     // not implemented yet
+    assert(false);
+    return rc;
+}
+
+RC PPSTxnManager::run_hstore_txn() {
+    RC rc = RCOK;
+    // not implemented yet
+    assert(false);
     return rc;
 }
 
