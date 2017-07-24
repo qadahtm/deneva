@@ -180,6 +180,10 @@ final:
 //		cleanup(rc);
 		commit();
 	}
+
+	// return all accesses to access pool
+	txn->release(this->get_thd_id());
+
 	return rc;
 }
 #endif
