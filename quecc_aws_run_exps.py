@@ -258,12 +258,12 @@ print("Number of ips = {:d}".format(ip_cnt))
 env = dict(os.environ)
 
 num_trials = 2;
-# WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC
+# WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
 # cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
 # cc_algs = ['QUECC']
-cc_algs = ['QUECC', 'NO_WAIT']
+cc_algs = ['HSTORE', 'SILO', 'QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -272,7 +272,7 @@ cc_algs = ['QUECC', 'NO_WAIT']
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
-wthreads = [16,20,24,28,32,36] # for m4.10xlarge for QueCC -  Normal mode
+wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
@@ -288,7 +288,7 @@ pt_perc = [0.5]
 # zipftheta = [0.0,0.9]
 # et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
 et_sync = ['AFTER_BATCH_COMP']
-zipftheta = [0.9]
+zipftheta = [0.0]
 # zipftheta = [0.0, 0.6]
 # zipftheta = [0.0]
 write_perc = [0.0,0.25,0.5,0.75,1.0]

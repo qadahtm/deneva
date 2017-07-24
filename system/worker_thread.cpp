@@ -119,8 +119,10 @@ void WorkerThread::process(Message *msg) {
 }
 
 void WorkerThread::check_if_done(RC rc) {
+#if !SINGLE_NODE
     if (txn_man->waiting_for_response())
         return;
+#endif
     if (rc == Commit)
         commit();
     if (rc == Abort)
@@ -128,6 +130,7 @@ void WorkerThread::check_if_done(RC rc) {
 }
 
 void WorkerThread::release_txn_man() {
+//    DEBUG_Q("WT_%ld: Releaseing txn man txn_id = %ld\n",_thd_id, txn_man->get_txn_id());
     txn_table.release_transaction_manager(get_thd_id(), txn_man->get_txn_id(), txn_man->get_batch_id());
     txn_man = NULL;
 }
@@ -153,9 +156,9 @@ void WorkerThread::commit() {
 //    assert(IS_LOCAL(txn_man->get_txn_id()));
 
     uint64_t timespan = get_sys_clock() - txn_man->txn_stats.starttime;
-    DEBUG("COMMIT %ld %f -- %f\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
-          (double) timespan / BILLION);
-//    DEBUG_Q("COMMIT %ld %f -- %f\n",txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
+//    DEBUG_Q("COMMIT %ld %f -- %f\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
+//          (double) timespan / BILLION);
+    DEBUG("COMMIT %ld %f -- %f\n",txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
     // Send result back to client
 #if !SERVER_GENERATE_QUERIES
     msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
@@ -1167,6 +1170,11 @@ RC WorkerThread::process_rqry_rsp(Message *msg) {
 
     RC rc = txn_man->run_txn();
     check_if_done(rc);
+
+    if (rc != RCOK || rc != Abort){
+        DEBUG_Q("TH_%ld: RC=%d", _thd_id,rc);
+    }
+
     return rc;
 
 }
@@ -1260,6 +1268,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
         msg->txn_id = txn_id;
 
         // Put txn in txn_table
+//        DEBUG_Q("WT_%ld: Getting txn man txn_id = %ld\n",_thd_id, txn_id);
         txn_man = txn_table.get_transaction_manager(ctid, txn_id, 0);
         txn_man->register_thread(this);
 
@@ -1314,6 +1323,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
             rc = txn_man->run_hstore_txn();
             part_lock_man.unlock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
         }
+//        DEBUG_Q("WT_%ld: executed multipart txn_id = %ld with RCOK = %d\n",_thd_id, txn_id, (rc == RCOK));
     }
     else{
         // There is at least one partitions and partition id must equal thread id
@@ -1321,6 +1331,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
                    "THD_%ld: mismatch partition id = %ld, thd_id = %ld", _thd_id,
                    txn_man->query->partitions[0], _thd_id);
         rc = txn_man->run_hstore_txn();
+//        DEBUG_Q("WT_%ld: executed single part txn_id = %ld with RCOK = %d\n",_thd_id, txn_id, (rc == RCOK));
     }
 #else
     // Execute transaction

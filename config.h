@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -51,8 +51,8 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 
 #define FIN_BY_TIME true
-// Max allowed number of transactions
-#define MAX_TXN_IN_FLIGHT 1000000 * 1
+// Max allowed number of transactions and also controls the pool size of the transaction table
+#define MAX_TXN_IN_FLIGHT 10*1024//1000000 * 1
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -112,7 +112,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, MOCC_SILO
-#define CC_ALG SILO
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -220,7 +220,7 @@
 #define PG_AVAILABLE 0
 #define PG_READY     1
 
-#define SINGLE_NODE false
+#define SINGLE_NODE true
 
 /***********************************************/
 // Logging
@@ -258,9 +258,9 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
-//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -357,7 +357,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define IDX_VERB          false
 #define VERB_ALLOC          true
 
-#define DEBUG_LOCK          true
+#define DEBUG_LOCK          false
 #define DEBUG_TIMESTAMP       false
 #define DEBUG_SYNTH         false
 #define DEBUG_ASSERT        false
@@ -369,9 +369,9 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
-#define DEBUG_WLOAD true
+#define DEBUG_WLOAD false
 
 /***********************************************/
 // MODES

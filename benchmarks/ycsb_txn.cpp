@@ -89,7 +89,7 @@ RC YCSBTxnManager::acquire_locks() {
 }
 
 RC YCSBTxnManager::run_hstore_txn(){
-    RC rc = RCOK;
+    RC rc = Commit;
     assert(CC_ALG == HSTORE);
     YCSBQuery *ycsb_query = (YCSBQuery *) query;
 
@@ -106,7 +106,8 @@ RC YCSBTxnManager::run_hstore_txn(){
     }
 
     commit_stats();
-    return rc;
+    // we always commit in YCSB
+    return Commit;
 }
 
 RC YCSBTxnManager::run_txn() {
