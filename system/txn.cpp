@@ -531,16 +531,11 @@ RC TxnManager::start_commit() {
             rc = commit();
         }
     } else { // is not multi-part
-#if CC_ALG == SILO
-        rc = validate_silo();
-#else
         rc = validate();
         if (rc == RCOK)
             rc = commit();
         else
             start_abort();
-#endif
-
     }
 
     return rc;

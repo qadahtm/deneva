@@ -131,6 +131,11 @@ RC YCSBTxnManager::run_txn() {
     txn_stats.process_time_short += curr_time - starttime;
     txn_stats.wait_starttime = get_sys_clock();
 
+#if CC_ALG == SILO
+    if (is_done() && rc == RCOK){
+        rc = validate_silo();
+    }
+#else
     if (IS_LOCAL(get_txn_id())) {
         if (is_done() && rc == RCOK)
             rc = start_commit();
@@ -139,7 +144,7 @@ RC YCSBTxnManager::run_txn() {
     } else if (rc == Abort) {
         rc = abort();
     }
-
+#endif
     return rc;
 
 }

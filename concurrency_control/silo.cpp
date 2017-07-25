@@ -8,10 +8,10 @@
 
 #if CC_ALG == SILO
 
-RC
-TxnManager::validate_silo()
+RC TxnManager::validate_silo()
 {
-	RC rc = RCOK;
+//	RC rc = RCOK;
+	RC rc = Commit;
 	// lock write tuples in the primary key order.
 	uint64_t row_cnt = txn->row_cnt;
 	uint64_t wr_cnt = txn->write_cnt;
@@ -167,22 +167,17 @@ final:
 //		DEBUG_Q("SILO aborting .. \n");
 		for (uint64_t i = 0; i < num_locks; i++)
 			txn->accesses[ write_set[i] ]->orig_row->manager->release();
-//		cleanup(rc);
 		start_abort();
 	} else {
-//		DEBUG_Q("SILO committing .. \n");
+//		DEBUG_Q("SILO committing .. RC == Commit = %d ..\n", rc == Commit);
 		for (uint64_t i = 0; i < wr_cnt; i++) {
 			Access * access = txn->accesses[ write_set[i] ];
 			access->orig_row->manager->write(
 				access->data, _cur_tid );
 			txn->accesses[ write_set[i] ]->orig_row->manager->release();
 		}
-//		cleanup(rc);
-		commit();
+		rc = commit();
 	}
-
-	// return all accesses to access pool
-	txn->release(this->get_thd_id());
 
 	return rc;
 }
