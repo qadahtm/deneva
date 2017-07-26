@@ -272,13 +272,15 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN PART_CNT
+#define PART_PER_TXN PART_CNT*0.5
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
-#define STRICT_PPT 1//0
+#define STRICT_PPT true
+// Pick partitions according to Zipfian distribution
+#define PART_ZIPF true
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
 // small tpcc schemas shrink the table size.

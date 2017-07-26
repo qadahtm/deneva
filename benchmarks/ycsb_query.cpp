@@ -356,13 +356,19 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
 //            partition_id = home_partition_id;;
 //        } else {
         // Avoid uniform access for partition
-//            partition_id = mrand->next() % g_part_cnt;
+#if PART_ZIPF
             partition_id = zipf_part(g_part_cnt, g_zipf_theta) % g_part_cnt;
+#else
+            partition_id = mrand->next() % g_part_cnt;
+#endif
             if (g_strict_ppt && g_part_per_txn <= g_part_cnt) {
                 while ((partitions_accessed.size() < g_part_per_txn && partitions_accessed.count(partition_id) > 0) ||
                        (partitions_accessed.size() == g_part_per_txn && partitions_accessed.count(partition_id) == 0)) {
-//                    partition_id = mrand->next() % g_part_cnt;
+#if PART_ZIPF
                     partition_id = zipf_part(g_part_cnt, g_zipf_theta) % g_part_cnt;
+#else
+                    partition_id = mrand->next() % g_part_cnt;
+#endif
                 }
             }
 //        }

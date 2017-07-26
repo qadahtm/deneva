@@ -263,7 +263,7 @@ num_trials = 2;
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
 # cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
 # cc_algs = ['QUECC']
-cc_algs = ['HSTORE', 'SILO', 'QUECC']
+cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', ]
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -289,7 +289,7 @@ pt_perc = [0.5]
 # et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
 et_sync = ['AFTER_BATCH_COMP']
 # zipftheta = [0.0]
-zipftheta = [0.9, 0.6]
+zipftheta = [0.9, 0.6, 0.0]
 # zipftheta = [0.0]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
