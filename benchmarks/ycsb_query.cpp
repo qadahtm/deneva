@@ -352,9 +352,9 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
     for (UInt32 i = 0; i < g_req_per_query; i++) {
         double r = (double) (mrand->next() % 10000) / 10000;
         uint64_t partition_id;
-//        if (FIRST_PART_LOCAL && rid == 0) {
-//            partition_id = home_partition_id;;
-//        } else {
+        if (FIRST_PART_LOCAL && rid == 0) {
+            partition_id = home_partition_id;;
+        } else {
         // Avoid uniform access for partition
 #if PART_ZIPF
             partition_id = zipf_part(g_part_cnt, g_zipf_theta) % g_part_cnt;
@@ -371,7 +371,7 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
 #endif
                 }
             }
-//        }
+        }
         ycsb_request *req = (ycsb_request *) mem_allocator.alloc(sizeof(ycsb_request));
         if (r_twr < g_txn_read_perc || r < g_tup_read_perc)
             req->acctype = RD;

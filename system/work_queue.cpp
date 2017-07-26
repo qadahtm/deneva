@@ -315,6 +315,7 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
     if(ISSERVER) {
 #if INIT_QUERY_MSGS
       msg = client_query_queue.get_next_query(thd_id, thd_id);
+      assert(msg->rtype == CL_QRY);
 #else
       BaseQuery * m_query = client_query_queue.get_next_query(thd_id,thd_id);
       if(m_query) {

@@ -116,13 +116,21 @@ Client_query_queue::initQueriesParallel() {
     M_ASSERT_V(thd_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
     for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+#if SINGLE_NODE
+            BaseQuery * query = gen->create_query(_wl,thread_id);
+#else
             BaseQuery * query = gen->create_query(_wl,g_node_id);
+#endif
             // Assum YCSB workload for now
             YCSBQuery * ycsb_query = (YCSBQuery*)query;
             uint64_t qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
+            assert(qslot == thread_id);
 #if INIT_QUERY_MSGS
-            queries_msgs[qslot][query_id] = Message::create_message(query,CL_QRY);
-
+            Message * msg = Message::create_message(query,CL_QRY);
+            queries_msgs[qslot][query_id] = msg;
+            assert(msg->rtype == CL_QRY);
+//            if ( query_id < 100 && qslot==1)
+//                DEBUG_Q("added to qslot =%ld, query_id=%d\n", qslot, query_id);
 #else
             queries[qslot][query_id] = query;
 
@@ -172,6 +180,7 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
         query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     }
     Message *query = queries_msgs[server_id][query_id];
+    M_ASSERT_V(query, "server_id=%ld, query_id=%ld\n", server_id, query_id);
     return query;
 }
 #else

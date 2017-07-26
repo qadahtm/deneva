@@ -1027,7 +1027,6 @@ RC WorkerThread::run_normal_mode() {
         }
 
         //uint64_t starttime = get_sys_clock();
-#if !SINGLE_NODE
         if(msg->rtype != CL_QRY || CC_ALG == CALVIN) {
           txn_man = get_transaction_manager(msg);
 
@@ -1073,7 +1072,7 @@ RC WorkerThread::run_normal_mode() {
           }
           txn_man->register_thread(this);
         }
-#endif
+
         process(msg);
 
         ready_starttime = get_sys_clock();
