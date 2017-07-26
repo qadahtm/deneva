@@ -210,6 +210,12 @@ int main(int argc, char* argv[])
   client_query_queue.init(m_wl);
   printf("Done\n");
   fflush(stdout);
+
+#if CREATE_TXN_FILE
+    printf("Generating transactions only ... exitting now! ");
+    return(0);
+#endif
+
 #endif
     stats.printProcInfo();
 #if CC_ALG == QUECC

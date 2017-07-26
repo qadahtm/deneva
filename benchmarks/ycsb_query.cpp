@@ -25,6 +25,8 @@
 
 uint64_t YCSBQueryGenerator::the_n = 0;
 double YCSBQueryGenerator::denom = 0;
+uint64_t YCSBQueryGenerator::the_n_part = 0;
+double YCSBQueryGenerator::denom_part = 0;
 
 void YCSBQueryGenerator::init() {
     mrand = (myrand *) mem_allocator.alloc(sizeof(myrand));
@@ -34,6 +36,9 @@ void YCSBQueryGenerator::init() {
         uint64_t table_size = g_synth_table_size / g_part_cnt;
         the_n = table_size - 1;
         denom = zeta(the_n, g_zipf_theta);
+
+        the_n_part = g_part_cnt;
+        denom_part = zeta(the_n_part, g_zipf_theta);
     }
 }
 
@@ -217,6 +222,19 @@ uint64_t YCSBQueryGenerator::zipf(uint64_t n, double theta) {
     return 1 + (uint64_t) (n * pow(eta * u - eta + 1, alpha));
 }
 
+uint64_t YCSBQueryGenerator::zipf_part(uint64_t n, double theta) {
+    assert(this->the_n_part == n);
+    assert(theta == g_zipf_theta);
+    double alpha = 1 / (1 - theta);
+    double zetan = denom_part;
+    double eta = (1 - pow(2.0 / n, 1 - theta)) /
+                 (1 - zeta_2_theta / zetan);
+    double u = (double) (mrand->next() % 10000000) / 10000000;
+    double uz = u * zetan;
+    if (uz < 1) return 1;
+    if (uz < 1 + pow(0.5, theta)) return 2;
+    return 1 + (uint64_t) (n * pow(eta * u - eta + 1, alpha));
+}
 
 BaseQuery *YCSBQueryGenerator::gen_requests_hot(uint64_t home_partition_id, Workload *h_wl) {
     YCSBQuery *query = (YCSBQuery *) mem_allocator.alloc(sizeof(YCSBQuery));
@@ -337,11 +355,14 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
 //        if (FIRST_PART_LOCAL && rid == 0) {
 //            partition_id = home_partition_id;;
 //        } else {
-            partition_id = mrand->next() % g_part_cnt;
+        // Avoid uniform access for partition
+//            partition_id = mrand->next() % g_part_cnt;
+            partition_id = zipf_part(g_part_cnt, g_zipf_theta) % g_part_cnt;
             if (g_strict_ppt && g_part_per_txn <= g_part_cnt) {
                 while ((partitions_accessed.size() < g_part_per_txn && partitions_accessed.count(partition_id) > 0) ||
                        (partitions_accessed.size() == g_part_per_txn && partitions_accessed.count(partition_id) == 0)) {
-                    partition_id = mrand->next() % g_part_cnt;
+//                    partition_id = mrand->next() % g_part_cnt;
+                    partition_id = zipf_part(g_part_cnt, g_zipf_theta) % g_part_cnt;
                 }
             }
 //        }

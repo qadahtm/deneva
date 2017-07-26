@@ -63,10 +63,15 @@ private:
 	// for Zipfian distribution
 	double zeta(uint64_t n, double theta);
 	uint64_t zipf(uint64_t n, double theta);
+	uint64_t zipf_part(uint64_t n, double theta);
 	
 	myrand * mrand;
 	static uint64_t the_n;
 	static double denom;
+
+	static uint64_t the_n_part;
+	static double denom_part;
+
 	double zeta_2_theta;
 
 
