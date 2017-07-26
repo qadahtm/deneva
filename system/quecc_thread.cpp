@@ -2028,7 +2028,7 @@ RC PlannerThread::run_normal_mode() {
 
 //                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
                 tctx->txn_id = planner_txn_id;
-//                tctx->txn_state = TXN_INITIALIZED;
+                tctx->txn_state = TXN_INITIALIZED;
                 tctx->completion_cnt.store(0);
 #if !SERVER_GENERATE_QUERIES
                 tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;

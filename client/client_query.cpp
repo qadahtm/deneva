@@ -113,11 +113,13 @@ Client_query_queue::initQueriesParallel() {
     DEBUG_WL("QueCC server-side generation ...\n")
     thd_cnt = g_plan_thread_cnt;
 #endif
+    M_ASSERT_V(thd_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
     for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
             BaseQuery * query = gen->create_query(_wl,g_node_id);
             // Assum YCSB workload for now
-            uint64_t qslot = ((YCSBWorkload *) _wl)->key_to_part(((YCSBQuery*)query)->requests[0]->key);
+            YCSBQuery * ycsb_query = (YCSBQuery*)query;
+            uint64_t qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
 #if INIT_QUERY_MSGS
             queries_msgs[qslot][query_id] = Message::create_message(query,CL_QRY);
 

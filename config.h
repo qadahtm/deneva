@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -112,7 +112,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO
-#define CC_ALG SILO
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -164,11 +164,12 @@
 
 
 // [QUECC]
-#define PLAN_THREAD_CNT 8
+// Planner thread cnt should be equal to part_cnt
+#define PLAN_THREAD_CNT PART_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 #define BATCH_SIZE 5*56*6*3*6
-#define BATCH_MAP_LENGTH 300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -259,10 +260,11 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
 //#define SYNTH_TABLE_SIZE 1024
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 #define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.9//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
@@ -370,7 +372,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

@@ -811,12 +811,13 @@ RC WorkerThread::run_normal_mode() {
         expected = (uint64_t) batch_part;
 #if BATCH_MAP_ORDER == BATCH_ET_PT
         while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
-#else
-        while(!work_queue.batch_map[batch_slot][wplanner_id][_thd_id].compare_exchange_strong(expected, desired)){
-#endif
             DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
         }
-
+#else
+        while(!work_queue.batch_map[batch_slot][wplanner_id][_thd_id].compare_exchange_strong(expected, desired)){
+            DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
+        }
+#endif
         if (!batch_part->single_q){
             // free batch_partition
             batch_part->exec_qs->clear();
@@ -870,11 +871,77 @@ RC WorkerThread::run_normal_mode() {
 //                DEBUG_Q("ET_%ld: allowing PTs to procced, wbatch_id = %ld at slot = %ld"
 //                                "\n",
 //                        _thd_id,  wbatch_id, batch_slot);
-                // TODO(tq): use RR for this, now we just statically asisng this task to the ET_0
                 desired8 = PG_AVAILABLE;
                 expected8 = PG_READY;
                 for (uint64_t i =0; i < g_plan_thread_cnt; ++i){
-                    while(!work_queue.batch_pg_map[batch_slot][i].status.compare_exchange_strong(expected8, desired8)){};
+                    uint64_t commit_cnt = 0;
+                    priority_group * planner_pg = NULL;
+                    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+                    planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+                    assert(planner_pg->status.load() == PG_READY);
+                    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
+                    volatile bool canCommit = true;
+                    //loop over all transactions in the priority group
+                    for (uint64_t j = 0; j < planner_batch_size; j++){
+                        if (txn_ctxs[j].txn_state != READY_TO_ABORT){
+#if BUILD_TXN_DEPS
+                            // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
+                            // to check if we need to abort, we lookup transaction dependency graph
+                            auto search = planner_pg->txn_dep_graph->find(txn_ctxs[j].txn_id);
+                            if (search != planner_pg->txn_dep_graph->end()){
+                                // print dependenent transactions for now.
+                                if (search->second->size() > 0){
+                                    // there are dependen transactions
+            //                        DEBUG_Q("CT_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[i].txn_id, search->second->size());
+            //                        for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
+            //                            DEBUG_Q("CT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[i].txn_id, (uint64_t) *it);
+            //                        }
+                                    uint64_t d_txn_id = search->second->back();
+                                    uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
+                                    M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
+                                               "Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
+                                                       "c_txn_id = %ld, batch_starting_txn_id = %ld\n",
+                                               txn_ctxs[d_txn_ctx_idx].txn_id,
+                                               d_txn_id, d_txn_ctx_idx, txn_ctxs[i].txn_id, planner_pg->batch_starting_txn_id
+                                    );
+                                    if (txn_ctxs[d_txn_ctx_idx].txn_state == READY_TO_ABORT){
+                                        // abort
+            //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+                                        canCommit = false;
+                                    }
+                                }
+                            }
+#endif
+
+                            if (canCommit){
+                                // Committing
+                                // Sending response to client a
+#if !SERVER_GENERATE_QUERIES
+                                Message * rsp_msg = Message::create_message(CL_RSP);
+                                rsp_msg->txn_id = txn_ctxs[i].txn_id;
+                                rsp_msg->batch_id = batch_id; // using batch_id from local, we can also use the one in the context
+                                ((ClientResponseMessage *) rsp_msg)->client_startts = txn_ctxs[i].client_startts;
+                                rsp_msg->lat_work_queue_time = 0;
+                                rsp_msg->lat_msg_queue_time = 0;
+                                rsp_msg->lat_cc_block_time = 0;
+                                rsp_msg->lat_cc_time = 0;
+                                rsp_msg->lat_process_time = 0;
+                                rsp_msg->lat_network_time = 0;
+                                rsp_msg->lat_other_time = 0;
+
+                                msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[j].return_node_id);
+#endif
+                                commit_cnt++;
+                            }
+                        }
+                    }
+
+                    INC_STATS(_thd_id, txn_cnt, commit_cnt);
+                    INC_STATS(_thd_id, total_txn_abort_cnt, planner_batch_size-commit_cnt);
+
+                    while(!work_queue.batch_pg_map[batch_slot][i].status.compare_exchange_strong(expected8, desired8)){
+                        M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+                    };
                 }
 
 //                DEBUG_Q("ET_%ld: allowing PTs to procced, wbatch_id = %ld at slot = %ld"
@@ -883,8 +950,7 @@ RC WorkerThread::run_normal_mode() {
                 desired8 = 0;
                 expected8 = g_thread_cnt;
                 while(!work_queue.batch_map_comp_cnts[batch_slot].compare_exchange_strong(expected8, desired8)){};
-
-                INC_STATS(get_thd_id(), txn_cnt, g_batch_size);
+                INC_STATS(_thd_id, txn_cnt, g_batch_size);
             }
             else {
                 while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot].load() != 0){
