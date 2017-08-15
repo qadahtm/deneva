@@ -127,7 +127,9 @@ private:
 
 	// For QueCC
 	RC run_quecc_txn(exec_queue_entry * exec_qe);
-	RC      run_hstore_txn();
+	RC run_hstore_txn();
+	RC execute_lads_action(gdgcc::Action * action, int eid);
+	RC resolve_txn_dependencies(Message* msg);
 	uint64_t parts_processed_count;
 
   void next_pps_state();

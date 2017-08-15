@@ -1019,6 +1019,18 @@ RC PPSTxnManager::run_hstore_txn() {
     return rc;
 }
 
+RC PPSTxnManager::execute_lads_action(gdgcc::Action *action, int eid) {
+    RC rc = RCOK;
+    // not implemented yet
+    assert(false);
+    return rc;
+}
+
+RC PPSTxnManager::resolve_txn_dependencies(Message* msg){
+    assert(false);
+    return RCOK;
+}
+
 RC PPSTxnManager::run_calvin_txn() {
   RC rc = RCOK;
   uint64_t starttime = get_sys_clock();

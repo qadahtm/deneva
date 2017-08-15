@@ -30,6 +30,7 @@
 #include "row_mvcc.h"
 #include "mem_alloc.h"
 #include "query.h"
+#include "lads.h"
 
 int YCSBWorkload::next_tid;
 
@@ -63,6 +64,33 @@ RC YCSBWorkload::init_schema(const char * schema_file) {
 	Workload::init_schema(schema_file);
 	the_table = tables["MAIN_TABLE"]; 	
 	the_index = indexes["MAIN_INDEX"];
+	return RCOK;
+}
+
+RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
+//	assert(false);
+	YCSBClientQueryMessage* ycsb_msg = (YCSBClientQueryMessage *) msg;
+
+	//there are no logical dependency in YCSB
+	gdgcc::Action* tmpAction = nullptr;
+	for(uint64_t i=0; i<ycsb_msg->requests.size(); i++) {
+		action_allocator->get(cid, tmpAction);
+		ycsb_request* req = ycsb_msg->requests.get(i);
+		if (req->acctype == RD){
+			tmpAction->setFuncId(LADS_READ_FUNC);
+		}
+		else if (req->acctype == WR){
+			tmpAction->setFuncId(LADS_WRITE_FUNC);
+		}
+		else{
+			M_ASSERT_V(false, "Only read and write functions are supported in LADS\n")
+		}
+        tmpAction->setKey(req->key);
+        tmpAction->req->copy(req);
+
+		dgraphs[cid]->addActionToGraph(req->key, tmpAction);
+	}
+
 	return RCOK;
 }
 	

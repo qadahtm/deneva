@@ -946,6 +946,18 @@ RC TPCCTxnManager::run_hstore_txn() {
     return rc;
 }
 
+RC TPCCTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
+    RC rc = RCOK;
+    // not implemented yet
+    assert(false);
+    return rc;
+}
+
+RC TPCCTxnManager::resolve_txn_dependencies(Message* msg){
+    assert(false);
+    return RCOK;
+}
+
 RC TPCCTxnManager::run_calvin_txn() {
   RC rc = RCOK;
   uint64_t starttime = get_sys_clock();

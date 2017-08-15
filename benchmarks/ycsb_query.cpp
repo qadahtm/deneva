@@ -27,6 +27,8 @@ uint64_t YCSBQueryGenerator::the_n = 0;
 double YCSBQueryGenerator::denom = 0;
 uint64_t YCSBQueryGenerator::the_n_part = 0;
 double YCSBQueryGenerator::denom_part = 0;
+uint64_t YCSBQueryGenerator::the_n_record = 0;
+double YCSBQueryGenerator::denom_record = 0;
 
 void YCSBQueryGenerator::init() {
     mrand = (myrand *) mem_allocator.alloc(sizeof(myrand));
@@ -34,11 +36,15 @@ void YCSBQueryGenerator::init() {
     if (SKEW_METHOD == ZIPF) {
         zeta_2_theta = zeta(2, g_zipf_theta);
         uint64_t table_size = g_synth_table_size / g_part_cnt;
+
         the_n = table_size - 1;
         denom = zeta(the_n, g_zipf_theta);
 
         the_n_part = g_part_cnt;
         denom_part = zeta(the_n_part, g_zipf_theta);
+
+        the_n_record = g_synth_table_size-1;
+        denom_record = zeta(the_n_record, g_zipf_theta);
     }
 }
 
@@ -236,6 +242,20 @@ uint64_t YCSBQueryGenerator::zipf_part(uint64_t n, double theta) {
     return 1 + (uint64_t) (n * pow(eta * u - eta + 1, alpha));
 }
 
+uint64_t YCSBQueryGenerator::zipf_record(uint64_t n, double theta) {
+    assert(this->the_n_record == n);
+    assert(theta == g_zipf_theta);
+    double alpha = 1 / (1 - theta);
+    double zetan = denom_record;
+    double eta = (1 - pow(2.0 / n, 1 - theta)) /
+                 (1 - zeta_2_theta / zetan);
+    double u = (double) (mrand->next() % 10000000) / 10000000;
+    double uz = u * zetan;
+    if (uz < 1) return 1;
+    if (uz < 1 + pow(0.5, theta)) return 2;
+    return 1 + (uint64_t) (n * pow(eta * u - eta + 1, alpha));
+}
+
 BaseQuery *YCSBQueryGenerator::gen_requests_hot(uint64_t home_partition_id, Workload *h_wl) {
     YCSBQuery *query = (YCSBQuery *) mem_allocator.alloc(sizeof(YCSBQuery));
     query->requests.init(g_req_per_query);
@@ -352,6 +372,8 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
     for (UInt32 i = 0; i < g_req_per_query; i++) {
         double r = (double) (mrand->next() % 10000) / 10000;
         uint64_t partition_id;
+
+#if !RECORD_ZIPF
         if (FIRST_PART_LOCAL && rid == 0) {
             partition_id = home_partition_id;;
         } else {
@@ -372,6 +394,7 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
                 }
             }
         }
+#endif
         ycsb_request *req = (ycsb_request *) mem_allocator.alloc(sizeof(ycsb_request));
         if (r_twr < g_txn_read_perc || r < g_tup_read_perc)
             req->acctype = RD;
@@ -379,11 +402,60 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
             req->acctype = WR;
 
         //TQ: We need to generate a row_id withing the selected partition
-        uint64_t row_id = zipf(table_size - 1, g_zipf_theta);;
-        assert(row_id < table_size);
+        uint64_t row_id;
+        uint64_t primary_key;
 //        uint64_t primary_key = row_id * g_part_cnt + partition_id;
-        uint64_t primary_key = row_id + (partition_id * table_size);
+
+#if !RECORD_ZIPF
+
+        row_id = zipf(table_size - 1, g_zipf_theta);
+        assert(row_id < table_size);
+        primary_key = row_id + (partition_id * table_size);
         assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
+#else
+        if (FIRST_PART_LOCAL && rid == 0) {
+            table_size = g_synth_table_size / g_part_cnt;
+            partition_id = home_partition_id;;
+            row_id = zipf(table_size - 1, g_zipf_theta);
+            assert(row_id < table_size);
+            primary_key = row_id + (partition_id * table_size);
+//            primary_key = row_id * g_part_cnt + partition_id;
+//            if (partition_id==g_part_cnt-1){
+//                DEBUG_Q("part_id = %ld, row_id=%ld, key=%ld, key_to_part=%ld, key rem g_part_cnt = %ld, "
+//                                "we are accessing %ld partitions\n",
+//                        partition_id, row_id, primary_key, (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key),
+//                        (primary_key % (uint64_t)g_part_cnt), partitions_accessed.size()
+//                );
+//            }
+
+        } else {
+            table_size = g_synth_table_size;
+            row_id = zipf_record(table_size - 1, g_zipf_theta);
+            assert(row_id < table_size);
+//            row_id = zipf(table_size - 1, g_zipf_theta);
+//            primary_key = row_id * g_part_cnt + partition_id;
+            primary_key = row_id;
+            partition_id= (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key);
+            if (g_strict_ppt && g_part_per_txn <= g_part_cnt) {
+                while ((partitions_accessed.size() < g_part_per_txn && partitions_accessed.count(partition_id) > 0) ||
+                       (partitions_accessed.size() == g_part_per_txn && partitions_accessed.count(partition_id) == 0)) {
+//                    DEBUG_Q("this is not good, generting another access, "
+//                            "part_id = %ld, row_id=%ld, key=%ld, key_to_part=%ld, key rem g_part_cnt = %ld, "
+//                                    "we are accessing %ld partitions\n",
+//                            partition_id, row_id, primary_key, (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key),
+//                            (primary_key % (uint64_t)g_part_cnt), partitions_accessed.size()
+//                    );
+                    row_id = zipf_record(table_size - 1, g_zipf_theta);
+                    assert(row_id < table_size);
+//                    row_id = zipf(table_size - 1, g_zipf_theta);
+//                    primary_key = row_id * g_part_cnt + partition_id;
+                    primary_key = row_id;
+                    partition_id= (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key);
+                }
+            }
+        }
+        assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
+#endif
 //        DEBUG_WL("Selected part_id = %ld, key=%ld, computed_part_id=%d\n", partition_id, primary_key, ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
         assert(primary_key < g_synth_table_size);
 

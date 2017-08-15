@@ -189,13 +189,12 @@ void parser(int argc, char * argv[]) {
   g_total_thread_cnt -= 1;
 #endif
 
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC || CC_ALG == LADS
     g_total_thread_cnt += g_plan_thread_cnt; // planner threads
     g_total_thread_cnt -= 1; // remove abort thread
 #if CT_ENABLED
     g_total_thread_cnt += 1; // add commit thread
 #endif
-
 #endif
 
 #if CC_ALG == DUMMY_CC

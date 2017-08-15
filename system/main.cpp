@@ -41,6 +41,7 @@
 #include "quecc_thread.h"
 #include "plock.h"
 #include <jemalloc/jemalloc.h>
+#include "lads.h"
 
 void network_test();
 void network_test_recv();
@@ -62,6 +63,11 @@ PlannerThread * planner_thds;
 #if CT_ENABLED
 CommitThread * commit_thds;
 #endif
+#endif
+
+#if CC_ALG == LADS
+gdgcc::Constructor * constructor_thds;
+gdgcc::Executor *    executor_thds;
 #endif
 
 // defined in parser.cpp
@@ -223,6 +229,52 @@ int main(int argc, char* argv[])
     fflush(stdout);
     quecc_pool.init(m_wl,0);
     printf("Done\n");
+#endif
+
+#if CC_ALG == LADS
+    // initialize global data structures for LADS
+    // Initialize ConfigInfo
+    printf("Initializing LADS data strutures:\nInitializing ConfigInfo ... ");
+    fflush(stdout);
+
+    configinfo = new gdgcc::ConfigInfo();
+    configinfo->worker_thread_cnt = g_thread_cnt;
+    configinfo->partition_cnt = g_part_cnt;
+    configinfo->unordered_map_bucket_cnt = g_synth_table_size; // should not be used
+    configinfo->machine_id = g_node_id;
+    configinfo->Conf_charLength = LADS_CHAR_LEN; // should not be used
+    configinfo->Conf_charCnt = LADS_CHAR_LEN;// should not be used
+    configinfo->Conf_intCnt = 0;
+    configinfo->Conf_doubleCnt = 0;
+    configinfo->Conf_tupleCnt = 0;
+    configinfo->Conf_DATASIZE = g_synth_table_size;
+    configinfo->Conf_ActionBuffer_Size = ACTION_BUF_SIZE;
+    configinfo->Conf_ExecutableSet_Cnt = g_thread_cnt;
+    configinfo->Conf_DGCC_Batch_size = g_batch_size;
+//    configinfo->Txn_Queue_Size = 100000; // should not be used
+    printf("Done\n");
+
+    // Initialize SyncWorker
+    printf("Initializing SyncWorker ... ");
+    fflush(stdout);
+    sync_worker = new gdgcc::SyncWorker(configinfo);
+    printf("Done\n");
+
+    // Initialize Action Pool
+    printf("Initializing ActionBuffer ... ");
+    fflush(stdout);
+    action_allocator = new gdgcc::ActionBuffer();
+    action_allocator->init(configinfo, nullptr);
+    printf("Done\n");
+    stats.printProcInfo();
+    // initialize ActionGraph
+    printf("Initializing ActionDependencyGraphs ... ");
+    fflush(stdout);
+    dgraphs = new gdgcc::ActionDependencyGraph*[THREAD_CNT];
+    for(UInt32 i=0; i< g_thread_cnt; i++) {
+        dgraphs[i] = new gdgcc::ActionDependencyGraph(configinfo);
+    }
+    printf("Done\n");
     stats.printProcInfo();
 #endif
 
@@ -249,6 +301,12 @@ int main(int argc, char* argv[])
 
 #endif
 
+#if CC_ALG == LADS
+    // executor threads will be the same as worker threads
+    all_thd_cnt += g_thread_cnt; // for constructors which is equal to executors
+    all_thd_cnt -= 1; // remove abort thread from count for now
+#endif
+
 #if CC_ALG == DUMMY_CC
     all_thd_cnt -= 1; // remove abort thread
 #endif
@@ -257,14 +315,16 @@ int main(int argc, char* argv[])
     // remove io threads
     all_thd_cnt -= (rthd_cnt + sthd_cnt);
 #endif
-
-    DEBUG_Q("all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n", all_thd_cnt, g_this_total_thread_cnt);
-    assert(all_thd_cnt == g_this_total_thread_cnt);
+    DEBUG_Q("all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n",
+            all_thd_cnt, g_this_total_thread_cnt);
+    M_ASSERT_V(all_thd_cnt == g_this_total_thread_cnt, "all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n",
+               all_thd_cnt, g_this_total_thread_cnt);
 
     pthread_t * p_thds;
     pthread_attr_t attr;
     uint64_t id = 0;
 
+    // Set affinity for main thread (parent thread)
 #if SET_AFFINITY
     uint64_t cpu_cnt = 0;
     cpu_set_t cpus;
@@ -528,7 +588,8 @@ int main(int argc, char* argv[])
     quecc_pool.print_stats();
 #endif
     return 0;
-#else
+
+#else // if FIXED_MODE
 
     p_thds =
     (pthread_t *) malloc(sizeof(pthread_t) * (all_thd_cnt));
@@ -549,8 +610,13 @@ int main(int argc, char* argv[])
 #if CT_ENABLED
     commit_thds = new CommitThread[1];
 #endif // CT_ENABLED
-
 #endif
+
+#if CC_ALG == LADS
+    constructor_thds = new gdgcc::Constructor[g_plan_thread_cnt];
+    executor_thds = new gdgcc::Executor[g_thread_cnt];
+#endif
+
 	// query_queue should be the last one to be initialized!!!
 	// because it collects txn latency
 	//if (WORKLOAD != TEST) {
@@ -580,7 +646,7 @@ int main(int argc, char* argv[])
   // spawn and run txns again.
   starttime = get_server_clock();
   simulation->run_starttime = starttime;
-
+#if CC_ALG != LADS
   for (uint64_t i = 0; i < wthd_cnt; i++) {
 #if SET_AFFINITY
       CPU_ZERO(&cpus);
@@ -593,7 +659,7 @@ int main(int argc, char* argv[])
       pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
       pthread_setname_np(p_thds[id-1], "s_worker");
 	}
-
+#endif
 #if !SERVER_GENERATE_QUERIES
 	for (uint64_t j = 0; j < rthd_cnt ; j++) {
 #if SET_AFFINITY
@@ -635,7 +701,7 @@ int main(int argc, char* argv[])
     pthread_setname_np(p_thds[id-1], "s_logger");
 #endif
 
-#if CC_ALG != CALVIN && CC_ALG != QUECC && CC_ALG != DUMMY_CC
+#if CC_ALG != CALVIN && CC_ALG != QUECC && CC_ALG != DUMMY_CC && CC_ALG != LADS
 #if SET_AFFINITY
       CPU_ZERO(&cpus);
       CPU_SET(cpu_cnt, &cpus);
@@ -700,6 +766,58 @@ int main(int argc, char* argv[])
     DEBUG_Q("DONE: Initilizing Quecc threads\n");
     DEBUG_Q("total thread count = %ld, ids = %ld\n", all_thd_cnt, id);
 #endif
+
+#if CC_ALG == LADS
+    DEBUG_Q("Initilizing LADS threads .. \n");
+    M_ASSERT_V(g_plan_thread_cnt==g_thread_cnt, "Executor thread cnt must equal to Constructors thread count\n");
+    // initialize constructors threads
+    int pthread_rc=0;
+    for (uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+#if SET_AFFINITY
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu_cnt, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        cpu_cnt++;
+#endif
+        constructor_thds[i].init(id, g_node_id, m_wl);
+        constructor_thds[i].set_config_info(configinfo);
+        constructor_thds[i].set_cid(i);
+        constructor_thds[i].set_workload(m_wl);
+        constructor_thds[i].setActionAllocator(action_allocator);
+        constructor_thds[i].setDependencyGraph(dgraphs[i]);
+        constructor_thds[i].setSyncWorker(sync_worker);
+
+        // set properties for constructor threads
+        pthread_rc = pthread_create(&p_thds[id++], &attr, run_thread, (void *) &constructor_thds[i]);
+        if (EAGAIN == pthread_rc){
+            DEBUG_Q("EAGAIN = %d\n", EAGAIN);
+        }else if (EAGAIN == pthread_rc){
+            DEBUG_Q("EINVAL = %d\n", EINVAL);
+        }
+        M_ASSERT_V(pthread_rc == 0, "Could not create s_constr_%ld with id=%ld, cpu_cnt=%ld\n", i, id, cpu_cnt);
+        pthread_setname_np(p_thds[id - 1], "s_constr");
+    }
+
+    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+#if SET_AFFINITY
+      CPU_ZERO(&cpus);
+      CPU_SET(cpu_cnt, &cpus);
+      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+      cpu_cnt++;
+#endif
+      executor_thds[i].init(id,g_node_id,m_wl);
+        executor_thds[i].setDependencyGraphQueue(dgraphs);
+        executor_thds[i].set_workload(m_wl);
+        executor_thds[i].setSyncWorker(sync_worker);
+        executor_thds[i].set_eid(i);
+      // set properties for executor threads
+        pthread_rc = pthread_create(&p_thds[id++], &attr, run_thread, (void *)&executor_thds[i]);
+      M_ASSERT_V(pthread_rc == 0, "Could not create s_constr_%ld with id=%ld\n", i, id);
+      pthread_setname_np(p_thds[id-1], "s_exec");
+    }
+    DEBUG_Q("DONE:Initilizing LADS threads\n");
+#endif
+
 
 #if SERVER_GENERATE_QUERIES
     //TQ: start simulation, there is no need to wait anymore

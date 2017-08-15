@@ -55,7 +55,8 @@ void row_t::init_manager(row_t * row) {
   return;
 #endif
   DEBUG_M("row_t::init_manager alloc \n");
-#if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC
+	// TODO(tq): revisit this for QUECC and LADS as we don't actually need a manager
+#if CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC  || CC_ALG == LADS
 	manager = (Row_lock *) mem_allocator.align_alloc(sizeof(Row_lock));
 #elif CC_ALG == SILO
 	manager = (Row_silo *) mem_allocator.align_alloc(sizeof(Row_silo));
@@ -69,7 +70,7 @@ void row_t::init_manager(row_t * row) {
     manager = (Row_maat *) mem_allocator.align_alloc(sizeof(Row_maat));
 #endif
 
-#if CC_ALG != HSTORE && CC_ALG != HSTORE_SPEC 
+#if CC_ALG != HSTORE && CC_ALG != HSTORE_SPEC
 	manager->init(this);
 #endif
 }
@@ -206,7 +207,7 @@ RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
     return rc;
 #endif
 //TODO(tq): We should use this to support aborts
-#if CC_ALG == QUECC || CC_ALG == DUMMY_CC
+#if CC_ALG == QUECC || CC_ALG == DUMMY_CC || CC_ALG == LADS
 	// For QueCC no locking needed
 	// This line is added just to compile
 	// row is not accessed here.

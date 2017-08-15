@@ -86,6 +86,14 @@ class Plock;
 //#if CC_ALG == QUECC
 class QueCCPool;
 //#endif
+//#if CC_ALG == LADS
+namespace gdgcc {
+	class ConfigInfo;
+	class SyncWorker;
+	class ActionDependencyGraph;
+	class ActionBuffer;
+}
+//#endif
 
 typedef uint32_t UInt32;
 typedef int32_t SInt32;
@@ -122,11 +130,20 @@ extern Sequencer seq_man;
 extern Logger logger;
 extern TimeTable time_table;
 // For Hstore
+//#if CC_ALG == HSTORE
 extern Plock part_lock_man;
+//#endif
 // for QueCC
 //#if CC_ALG == QUECC
 extern QueCCPool quecc_pool;
 //#endif
+//#if CC_ALG == LADS
+extern gdgcc::ConfigInfo* configinfo;
+extern gdgcc::SyncWorker* sync_worker;
+extern gdgcc::ActionDependencyGraph** dgraphs;
+extern gdgcc::ActionBuffer* action_allocator;
+//#endif
+
 extern bool volatile warmup_done;
 extern bool volatile enable_thread_mem_pool;
 extern pthread_barrier_t warmup_bar;

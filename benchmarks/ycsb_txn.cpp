@@ -110,6 +110,53 @@ RC YCSBTxnManager::run_hstore_txn(){
     return Commit;
 }
 
+RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
+    RC rc = RCOK;
+
+    //extract the primary key from the action
+    ycsb_request *req = action->req;
+
+//    quecc_prof_time = get_sys_clock();
+    // get pointer to record in row
+    rc = run_ycsb_0(req, row);
+    assert(rc == RCOK);
+//    INC_STATS(get_thd_id(), exec_txn_index_lookup_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
+
+//    quecc_prof_time = get_sys_clock();
+    // perfrom access
+    rc = run_ycsb_1(req->acctype, row);
+    assert(rc == RCOK);
+
+
+//    uint32_t fid = action->getFuncId();
+//    if(fid == 0) {  //read function
+//        target_row->get_column(1);    //assume there are one column in each ycsb tuple
+//    }else if(fid == 1){ //write function
+//        std::string tmpstr = RandFunc::rand_string(10);
+//        target_row->update(1, tmpstr); //TODO
+//    }else{          //insert function
+//        //TODO
+//    }
+
+    /*
+     * temporal
+     * */
+    gdgcc::Action* action_temporal = action->next;
+    if(action_temporal != nullptr) {
+        action_temporal->subIndegreeByOne();
+    }
+    /*
+     * logical
+     * */
+//    gdgcc::Action* action_logical = nullptr;
+    int size = action->logical_dependency.size();
+    for(int i=0; i<size; i++) {
+        action->logical_dependency[i]->subIndegreeByOne();
+    }
+
+    return rc;
+}
+
 RC YCSBTxnManager::run_txn() {
     RC rc = RCOK;
     assert(CC_ALG != CALVIN);
@@ -241,14 +288,14 @@ RC YCSBTxnManager::run_txn_state() {
 inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     RC rc = RCOK;
     int part_id = _wl->key_to_part(req->key);
-#if !(CC_ALG == QUECC || CC_ALG == HSTORE)
+#if !(CC_ALG == QUECC || CC_ALG == HSTORE || CC_ALG == LADS)
     access_t type = req->acctype;
 #endif
     itemid_t *m_item;
 
     m_item = index_read(_wl->the_index, req->key, part_id);
 
-#if CC_ALG == QUECC || CC_ALG == HSTORE
+#if CC_ALG == QUECC || CC_ALG == HSTORE || CC_ALG == LADS
 //    // just access row, no need to go throught lock manager path
     row_local = ((row_t *) m_item->location);
 #else
@@ -269,6 +316,7 @@ inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
         // TQ: perform the actual read by
         // However this only reads 8 bytes of the data
         fval = *(uint64_t *) (&data[fid * 100]);
+        //TODO(tq): we assume that isolation level is always set to serializable
 #if CC_ALG != QUECC && (ISOLATION_LEVEL == READ_COMMITTED || ISOLATION_LEVEL == READ_UNCOMMITTED)
         // Release lock after read
         release_last_row_lock();

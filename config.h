@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -111,8 +111,8 @@
 /***********************************************/
 // Concurrency Control
 /***********************************************/
-// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO
-#define CC_ALG HSTORE
+// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -168,8 +168,10 @@
 #define PLAN_THREAD_CNT PART_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
-#define BATCH_SIZE 5*56*6*3*6
-#define BATCH_MAP_LENGTH 100//300//1024 // width of map is PLAN_THREAD_CNT
+// batch size must be divisible by thread_cnt and partition cnt
+//#define BATCH_SIZE 5*56*6*3*6
+#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3
+#define BATCH_MAP_LENGTH 16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -223,6 +225,16 @@
 
 #define SINGLE_NODE true
 
+// LADS
+#define LADS_ACTION_BUFFER_SIZE 1024*20
+#define LADS_CHAR_LEN 10
+#define LADS_CHAR_CNT 1
+
+#define LADS_READ_FUNC 0
+#define LADS_WRITE_FUNC 1
+
+#define ACTION_BUF_SIZE BATCH_SIZE*REQ_PER_QUERY
+
 /***********************************************/
 // Logging
 /***********************************************/
@@ -246,7 +258,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    (0.1) * MILLION
+#define MAX_TXN_PER_PART    (0.1/PART_CNT) * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -260,11 +272,11 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
 //#define SYNTH_TABLE_SIZE 1024
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
-#define ZIPF_THETA 0.9//0.3 0.0 -> Uniform
+#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
 #define TUP_WRITE_PERC 0.5
@@ -272,7 +284,7 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN PART_CNT
+#define PART_PER_TXN 1
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
@@ -281,6 +293,7 @@
 #define STRICT_PPT true
 // Pick partitions according to Zipfian distribution
 #define PART_ZIPF false
+#define RECORD_ZIPF true
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
 // small tpcc schemas shrink the table size.
@@ -374,7 +387,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

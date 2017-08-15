@@ -17,7 +17,7 @@ import time
 from datetime import timedelta
 import multiprocessing
 
-def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
     
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -34,8 +34,8 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
 
     if nwthd_cnt == 0:
         nwthd_cnt = wthd_cnt
-    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}'
-        .format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, ets))
+    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}, PPT={}, STRICT_PPT={}'
+        .format(ncc_alg, nwthd_cnt, theta, pt_cnt, nwthd_cnt, ets, pa,strict))
 
     for line in oconf:
     #     print(line, end='')
@@ -50,7 +50,7 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
         if (ccalg_m):
             # print(ccalg_m.group(1))
             nline = '#define CC_ALG {}\n'.format(ncc_alg)
-        theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d)', line.strip())
+        theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d+)', line.strip())
         if (theta_m):
             # print(theta_m.group(1))
             nline = '#define ZIPF_THETA {}\n'.format(theta)
@@ -59,7 +59,16 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets):
             nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))            
         etsync_m =    re.search('#define COMMIT_BEHAVIOR\s+(IMMEDIATE|AFTER_BATCH_COMP|AFTER_PG_COMP)',line.strip())
         if etsync_m:
-             nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
+            nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
+        pa_m =    re.search('#define PART_PER_TXN\s+(\d+|THREAD_CNT|PART_CNT)',line.strip())
+        if pa_m:
+            nline = '#define PART_PER_TXN {}\n'.format(pa)
+        strict_m =    re.search('#define STRICT_PPT\s+(true|false)',line.strip())
+        if strict_m:
+            if strict:
+                nline = '#define STRICT_PPT {}\n'.format('true')
+            else:
+                nline = '#define STRICT_PPT {}\n'.format('false')
         nconf.write(nline)
     nconf.close()
     oconf.close()
@@ -262,8 +271,12 @@ num_trials = 2;
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
 # cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
+# cc_algs = ['QUECC','HSTORE']
+# cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
+# cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'QUECC']
+# cc_algs = ['OCC']
 # cc_algs = ['QUECC']
-cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', ]
+cc_algs = ['LADS']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -273,6 +286,8 @@ cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC',
 # wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
 wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
+# wthreads = [16,32,48,64,80,96,112,124] # for x1.32xlarge for QueCC -  Normal mode
+# wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]
@@ -287,10 +302,15 @@ pt_perc = [0.5]
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
 # et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
+strict = [True, False]
 et_sync = ['AFTER_BATCH_COMP']
 # zipftheta = [0.0]
-zipftheta = [0.9, 0.6, 0.0]
-# zipftheta = [0.0]
+# zipftheta = [0.9]
+# zipftheta = [0.9, 0.6]
+zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
+# parts_accessed = [1,2,4,8,16,24,32]
+# parts_accessed = [1,32]
+parts_accessed = [0.5]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 procs = []
@@ -319,51 +339,65 @@ for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:
             runexp = True
-            # if wthd == 20  and ncc_alg != 'QUECC':
-                #Don't run other CCs with 1 thread 
-                # runexp = False
+            for pa in parts_accessed:
+                # if wthd == 20  and ncc_alg != 'QUECC':
+                    #Don't run other CCs with 1 thread 
+                    # runexp = False
 
-            # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
-            # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
-                #Don't run QueCC with more than 30 threads 
-                # runexp = False
-            exp_cnt = 0
-            for pt in pt_perc:
-                for ets in et_sync:
-                    if ncc_alg != 'QUECC' and exp_cnt >= 1:
-                        runexp = False
+                # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
+                # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
+                    #Don't run QueCC with more than 30 threads 
+                    # runexp = False 
+                assert(pa > 0) 
+                if pa < 1:
+                    pa = int(wthd*pa)
 
-                    if runexp:
-                        exp_cnt = exp_cnt + 1        
-                        if ncc_alg != 'QUECC' and pt != 1:
-                            pt = 1
-                        set_config(ncc_alg, wthd, theta, pt, ets)
-                        # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                        build_project()
-                        for trial in list(range(num_trials)):
-                            if pt <= 1:
-                                pt_cnt = str(int(pt*wthd))
-                                et_cnt = str(wthd-int(pt*wthd));
-                                pt_perc_str = str(int(pt*100))
-                            else:
-                                pt_cnt = str(pt)
-                                et_cnt = str(wthd-pt);
-                                pt_perc_str = str(0)
-                            
-                            if (wthd-int(pt*wthd)) == 0:
-                                et_cnt = str(wthd);
-                            if prefix != "":
-                                nprefix = prefix + '_' + ets + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_';
-                            else:
-                                nprefix = ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_';
-                            run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                            # print('Dry run: {}, {}, {}, t{}, {}'
-                                # .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
-                            seq_no = seq_no + 1
-                        cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
-                        cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
-                        # print("cp {} {}".format(cfgfname, cfg_copy))
-                        exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
+                for ppts in strict:
+                    exp_cnt = 0
+                    for pt in pt_perc:                    
+                        for ets in et_sync:
+                            #use this condition if QUECC is included only
+                            if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                                runexp = False
+
+                            if runexp:
+                                exp_cnt = exp_cnt + 1        
+                                if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
+                                    pt = 1
+                                set_config(ncc_alg, wthd, theta, pt, ets, pa, ppts)
+                                # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                                build_project()
+                                for trial in list(range(num_trials)):
+                                    if pt <= 1:
+                                        pt_cnt = str(int(pt*wthd))
+                                        et_cnt = str(wthd-int(pt*wthd));
+                                        pt_perc_str = str(int(pt*100))
+                                    else:
+                                        pt_cnt = str(pt)
+                                        et_cnt = str(wthd-pt);
+                                        pt_perc_str = str(0)
+                                    
+                                    if (wthd-int(pt*wthd)) == 0:
+                                        et_cnt = str(wthd);
+
+                                    if prefix != "":
+                                        if ppts:
+                                            nprefix = prefix + '_pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                        else:
+                                            nprefix = prefix + '_pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                    else:
+                                        if ppts:
+                                            nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                        else:
+                                            nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                    # print('Dry run: {}, {}, {}, t{}, {}'
+                                    #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                    seq_no = seq_no + 1
+                                cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                                cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                                # print("cp {} {}".format(cfgfname, cfg_copy))
+                                exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)

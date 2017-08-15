@@ -23,6 +23,7 @@
 #include "array.h"
 //#include "wl.h"
 #include "quecc_thread.h"
+#include "lads.h"
 
 class Workload;
 class Thread;
@@ -33,6 +34,7 @@ class INDEX;
 class TxnQEntry; 
 class YCSBQuery;
 class TPCCQuery;
+//class gdgcc::Action;
 //class r_query;
 
 enum TxnState {START,INIT,EXEC,PREP,FIN,DONE};
@@ -156,6 +158,9 @@ public:
     virtual RC      run_quecc_txn(exec_queue_entry * exec_qe) = 0;
     // For HStore
     virtual RC      run_hstore_txn() = 0;
+    // For LADS
+    virtual RC      execute_lads_action(gdgcc::Action * action, int eid) = 0;
+
     virtual RC      acquire_locks() = 0;
     void            register_thread(Thread * h_thd);
     uint64_t        get_thd_id();

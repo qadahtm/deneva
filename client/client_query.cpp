@@ -115,6 +115,7 @@ Client_query_queue::initQueriesParallel() {
 #endif
     M_ASSERT_V(thd_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
     for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
+        DEBUG_Q("Server-side generation for part %d ... ", thread_id);
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
 #if SINGLE_NODE
             BaseQuery * query = gen->create_query(_wl,thread_id);
@@ -136,28 +137,29 @@ Client_query_queue::initQueriesParallel() {
 
 #endif
         }
+        DEBUG_Q("Done\n");
     }
 #else
 
-    UInt32 gq_cnt = 0;
-#if CREATE_TXN_FILE
-  DEBUG_WL("single threaded generation ...\n")
-  for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
-    // SINGLE thread
+//    UInt32 gq_cnt = 0;
+//#if CREATE_TXN_FILE
+//  DEBUG_WL("single threaded generation ...\n")
+//  for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
+//    // SINGLE thread
+////    for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+//    for (UInt32 query_id = 0; query_id < final_request; query_id ++) {
+//      queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+//      gq_cnt++;
+//    }
+//  }
+//#else
+//  for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
 //    for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
-    for (UInt32 query_id = 0; query_id < final_request; query_id ++) {
-      queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
-      gq_cnt++;
-    }
-  }
-#else
-  for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
-    for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
-      queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
-      gq_cnt++;
-    }
-  }
-#endif
+//      queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+//      gq_cnt++;
+//    }
+//  }
+//#endif
   DEBUG_WL("final_request = %d\n", final_request)
   DEBUG_WL("request_cnt = %lu\n", request_cnt)
   DEBUG_WL("g_init_parallelism = %d\n", g_init_parallelism)

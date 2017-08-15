@@ -47,6 +47,8 @@ public :
 
     int key_to_part(uint64_t key);
 
+    RC resolve_txn_dependencies(Message* msg, int cid);
+
     INDEX *the_index;
     table_t *the_table;
 private:
@@ -82,7 +84,13 @@ public:
 
     // For QueCC
     RC run_quecc_txn(exec_queue_entry * exec_qe);
+
+    // For HStore
     RC run_hstore_txn();
+
+    // For LADS
+    RC execute_lads_action(gdgcc::Action * action, int eid);
+
     void copy_remote_requests(YCSBQueryMessage *msg);
 
 private:
