@@ -268,6 +268,8 @@ int main(int argc, char* argv[])
     printf("Done\n");
     stats.printProcInfo();
     // initialize ActionGraph
+
+    //TODO(tq) make this run in parallel to speed up experiment execution
     printf("Initializing ActionDependencyGraphs ... ");
     fflush(stdout);
     dgraphs = new gdgcc::ActionDependencyGraph*[THREAD_CNT];

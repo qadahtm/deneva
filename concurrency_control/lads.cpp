@@ -743,14 +743,15 @@ implementation of Action
         if( c_finish_cnt == configinfo->worker_thread_cnt) {
             DEBUG_Q("All ConstTs are done, c_finish_cnt = %d\n", c_finish_cnt);
             c_finish_cnt = 0;
-//            execution_cv->notify_all();
+
             const_phase.store(false);
             batch_ready.store(true);
+
+            execution_cv->notify_all();
         }
         construction_lock_mutex->unlock();
         //wait executor to wake it up
-
-//        construction_cv->wait(lck);
+        construction_cv->wait(lck);
     }
 
 
@@ -769,16 +770,16 @@ implementation of Action
                 INC_STATS(eid, txn_cnt, g_batch_size); // should we increment by batch size here
                 dgraphs[i]->clear();
             }
-//            construction_cv->notify_all();
             const_phase.store(true);
             batch_ready.store(false);
+            construction_cv->notify_all();
         }
         execution_lock_mutex->unlock();
 
 
         //wait contructor to wait it up
         // TQ: no need to wait here
-//        execution_cv->wait(lck);
+        execution_cv->wait(lck);
     }
 
 
@@ -970,24 +971,30 @@ implementation of Action
                 // wait for executor to process the batch
 //                    DEBUG_Q("ConstT_%d: going to wait\n", cid);
                 // threads will not actually wait
-                    syncworker->constructor_wait();
 
-                DEBUG_Q("ConstT_%d: going to spin until all other ConsTs are done\n", cid);
-                while (!sync_worker->batch_ready.load()){
-                    if(idle_starttime == 0){
-                        idle_starttime = get_sys_clock();
-                    }
+
+//                DEBUG_Q("ConstT_%d: going to spin until all other ConsTs are done\n", cid);
+//                while (!sync_worker->batch_ready.load()){
+//                    if(idle_starttime == 0){
+//                        idle_starttime = get_sys_clock();
+//                    }
+//                }
+
+
+//                DEBUG_Q("ConstT_%d: going to spin until ETs are done\n", cid);
+//                while (sync_worker->batch_ready.load()){
+//                    if(idle_starttime == 0){
+//                        idle_starttime = get_sys_clock();
+//                    }
+//                }
+
+//                DEBUG_Q("ConstT_%d: All ETs are done starting next batch\n", cid);
+
+                if(idle_starttime == 0){
+                    idle_starttime = get_sys_clock();
                 }
 
-
-                DEBUG_Q("ConstT_%d: going to spin until ETs are done\n", cid);
-                while (sync_worker->batch_ready.load()){
-                    if(idle_starttime == 0){
-                        idle_starttime = get_sys_clock();
-                    }
-                }
-
-                DEBUG_Q("ConstT_%d: All ETs are done starting next batch\n", cid);
+                syncworker->constructor_wait();
 
                 if(idle_starttime > 0) {
                     INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
@@ -1010,14 +1017,14 @@ implementation of Action
             sync_worker->batch_ready.store(true);
         }
 
-//        if(cid == 0) {
-//            *(syncworker->execution_continue) = false;
-//            DEBUG_Q("ConstT_%d: Notifying ETs\n", cid);
-//            syncworker->execution_cv->notify_all();
+        if(cid == 0) {
+            *(syncworker->execution_continue) = false;
+            DEBUG_Q("ConstT_%d: Notifying ETs\n", cid);
+            syncworker->execution_cv->notify_all();
 
 //            DEBUG_Q("ConstT_%d: going to wait now\n", cid);
 //            syncworker->constructor_wait();
-//        }
+        }
         return rc;
     }
 
@@ -1117,8 +1124,8 @@ implementation of Action
                 do_work(wset, wsize);
             }
 
-            DEBUG_Q("ET_%d: going to wait -- for next batch\n", eid);
-            syncworker->executor_wait(eid, dgraph_cnt, dgraphs);
+//            DEBUG_Q("ET_%d: going to wait -- for next batch\n", eid);
+//            syncworker->executor_wait(eid, dgraph_cnt, dgraphs);
 //        }//end while
     }
 
@@ -1128,7 +1135,6 @@ implementation of Action
         cur_action = tset->fetchAction();
         while(cur_action != nullptr) {
             if(cur_action->getIndegree() == 0) {
-                //TODO(tq) this needs to call TxnManager tot execute actio
 //                workload->executeAction(cur_action, db);
 //                DEBUG_Q("ET_%d: executing action\n",eid);
                 txn_man->execute_lads_action(cur_action, this->eid);
@@ -1187,7 +1193,11 @@ implementation of Action
                 run_one_queue();
                 DEBUG_Q("ET_%d: DONE!! processing batch\n", eid);
                 // spin until all ETs are done
-                while(sync_worker->batch_ready.load()){}
+//                while(sync_worker->batch_ready.load()){}
+
+//                sync_worker->executor_wait(eid, dgra, dgraphs)
+                DEBUG_Q("ET_%d: going to wait -- for next batch\n", eid);
+                syncworker->executor_wait(eid, g_plan_thread_cnt, dgraphs);
             }
         }
 

@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 18
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -112,7 +112,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG HSTORE
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -130,8 +130,8 @@
 #define ENABLE_LATCH        false
 #define CENTRAL_INDEX       false
 #define CENTRAL_MANAGER       false
-//#define INDEX_STRUCT        IDX_HASH
-#define INDEX_STRUCT        IDX_HASH_SIMPLE
+#define INDEX_STRUCT        IDX_HASH
+//#define INDEX_STRUCT        IDX_HASH_SIMPLE
 #define BTREE_ORDER         16
 
 // [TIMESTAMP]
