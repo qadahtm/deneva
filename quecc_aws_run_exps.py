@@ -273,10 +273,11 @@ num_trials = 2;
 # cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
 # cc_algs = ['QUECC','HSTORE']
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
-# cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'QUECC']
+cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
 # cc_algs = ['OCC']
 # cc_algs = ['QUECC']
-cc_algs = ['LADS']
+# cc_algs = ['LADS']
+# cc_algs = ['HSTORE']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -285,8 +286,8 @@ cc_algs = ['LADS']
 # wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
-wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
-# wthreads = [16,32,48,64,80,96,112,124] # for x1.32xlarge for QueCC -  Normal mode
+# wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
+wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
 # wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
@@ -306,8 +307,8 @@ strict = [True, False]
 et_sync = ['AFTER_BATCH_COMP']
 # zipftheta = [0.0]
 # zipftheta = [0.9]
-# zipftheta = [0.9, 0.6]
-zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
+zipftheta = [0.99, 0.0]
+# zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
 # parts_accessed = [1,2,4,8,16,24,32]
 # parts_accessed = [1,32]
 parts_accessed = [0.5]
@@ -334,6 +335,8 @@ if (len(sys.argv) == 2):
 exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.txt'), env)
 exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
 exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
+
+is_azure = False
 
 for ncc_alg in cc_algs:
     for wthd in wthreads:
@@ -403,4 +406,7 @@ eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
 send_email(subject, '')
+# if is_azure:
+    # exec_cmd('az vm deallocate -g quecc -n quecc', env)
+# else:
 exec_cmd('sudo shutdown -h now', env)

@@ -47,6 +47,7 @@
 #include "txn_table.h"
 #include "logger.h"
 #include "sim_manager.h"
+#include "smanager.h"
 //#include "maat.h"
 
 #ifdef __APPLE__
@@ -129,6 +130,8 @@ extern Client_txn client_man;
 extern Sequencer seq_man;
 extern Logger logger;
 extern TimeTable time_table;
+extern RIDMgr rid_man;
+
 // For Hstore
 //#if CC_ALG == HSTORE
 extern Plock part_lock_man;

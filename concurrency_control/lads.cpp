@@ -370,10 +370,10 @@ implementation of Action
             this->_parameters_tuple = new void *[configinfo->Conf_tupleCnt];
             this->_parameters_tuple_cnt = configinfo->Conf_tupleCnt;
         }
-
+#if WORKLOAD == YCSB
         //TODO(tq): when to free this??
         this->req = (ycsb_request*) mem_allocator.alloc(sizeof(ycsb_request));
-
+#endif
         //@deprecated member
         this->type = 0;
     }
@@ -387,7 +387,9 @@ implementation of Action
         this->_indegree = 0;
         this->next = nullptr;
         logical_dependency.clear();
+#if WORKLOAD == YCSB
         memset(this->req, 0, sizeof(ycsb_request));
+#endif
     }
 
     uint32_t Action::getTxnId() {

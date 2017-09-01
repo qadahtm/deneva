@@ -112,7 +112,7 @@ RC YCSBTxnManager::run_hstore_txn(){
 
 RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
     RC rc = RCOK;
-
+#if WORKLOAD == YCSB
     //extract the primary key from the action
     ycsb_request *req = action->req;
 
@@ -137,7 +137,7 @@ RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
 //    }else{          //insert function
 //        //TODO
 //    }
-
+#endif
     /*
      * temporal
      * */
@@ -427,6 +427,8 @@ inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 //    uint64_t starttime = get_sys_clock();
 //    uint64_t quecc_prof_time = 0;
     //TQ: dirty code: using a char buffer to store ycsb_request
+#if WORKLOAD == YCSB
+
     ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
 
 //    quecc_prof_time = get_sys_clock();
@@ -439,6 +441,7 @@ inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     // perfrom access
     rc = run_ycsb_1(req->acctype, row);
     assert(rc == RCOK);
+#endif
 //    INC_STATS(get_thd_id(), exec_txn_proc_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
 
 //    uint64_t curr_time = get_sys_clock();

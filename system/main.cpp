@@ -111,6 +111,11 @@ int main(int argc, char* argv[])
   simulation->init();
   printf("Done\n");
   fflush(stdout);
+    printf("Initializing RID manager... ");
+    fflush(stdout);
+    rid_man.init();
+    printf("Done\n");
+
 	Workload * m_wl;
 	switch (WORKLOAD) {
 		case YCSB :
@@ -181,6 +186,8 @@ int main(int argc, char* argv[])
   fflush(stdout);
   txn_table.init();
   printf("Done\n");
+
+
 #if CC_ALG == HSTORE
     printf("Initializing partition lock manager... ");
     fflush(stdout);

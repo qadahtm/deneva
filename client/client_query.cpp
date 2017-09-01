@@ -108,12 +108,16 @@ Client_query_queue::initQueriesParallel() {
     PPSQueryGenerator * gen = new PPSQueryGenerator;
 #endif
 #if SERVER_GENERATE_QUERIES
-    UInt32 thd_cnt = g_thread_cnt;
+//    UInt32 thd_cnt = g_thread_cnt;
+    UInt32 thd_cnt = g_part_cnt;
+
 #if CC_ALG == QUECC
     DEBUG_WL("QueCC server-side generation ...\n")
     thd_cnt = g_plan_thread_cnt;
 #endif
-    M_ASSERT_V(thd_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
+#if WORKLOAD == YCSB
+    M_ASSERT_V(g_thread_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
+#endif
     for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
         DEBUG_Q("Server-side generation for part %d ... ", thread_id);
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
@@ -123,9 +127,15 @@ Client_query_queue::initQueriesParallel() {
             BaseQuery * query = gen->create_query(_wl,g_node_id);
 #endif
             // Assum YCSB workload for now
+
+            uint64_t qslot;
+#if WORKLOAD == YCSB
             YCSBQuery * ycsb_query = (YCSBQuery*)query;
-            uint64_t qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
+            qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
             assert(qslot == thread_id);
+#else
+            qslot = thread_id;
+#endif
 #if INIT_QUERY_MSGS
             Message * msg = Message::create_message(query,CL_QRY);
             queries_msgs[qslot][query_id] = msg;
@@ -181,6 +191,9 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
         __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
         query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     }
+    // TODO(tq):FixME
+//    Message *query = queries_msgs[server_id][query_id];
+//    server_id = 0;
     Message *query = queries_msgs[server_id][query_id];
     M_ASSERT_V(query, "server_id=%ld, query_id=%ld\n", server_id, query_id);
     return query;

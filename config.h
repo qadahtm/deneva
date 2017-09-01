@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 18
+#define THREAD_CNT 12
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -44,7 +44,8 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD YCSB
+//#define WORKLOAD YCSB
+#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -112,7 +113,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG HSTORE
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -133,6 +134,10 @@
 #define INDEX_STRUCT        IDX_HASH
 //#define INDEX_STRUCT        IDX_HASH_SIMPLE
 #define BTREE_ORDER         16
+
+// [STORAGE]
+#define INSERT_RID_BATCH_SIZE   2*1024
+#define TPCC_SCHISM     false
 
 // [TIMESTAMP]
 #define TS_TWR            false
@@ -271,11 +276,11 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-//#define SYNTH_TABLE_SIZE 1024
+#define SYNTH_TABLE_SIZE 1024
 //#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -387,7 +392,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

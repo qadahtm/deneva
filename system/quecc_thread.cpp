@@ -26,6 +26,7 @@
 //TQ: we will use standard lib version for now. We can use optimized implementation later
 #include <unordered_map>
 
+#if CC_ALG == QUECC
 void assign_entry_clear(assign_entry * &a_entry){
     a_entry->exec_qs = NULL;
     a_entry->exec_thd_id = 0;
@@ -346,11 +347,13 @@ void PlannerThread::setup() {
 
 uint32_t PlannerThread::get_bucket(uint64_t key) {
     uint64_t no_buckets = g_thread_cnt;
+#if WORKLOAD == YCSB
     for (uint64_t i = 0; i < no_buckets; i++){
         if (key >= (i*bucket_size) && key < ((i+1)*bucket_size)){
             return i;
         }
     }
+#endif
     return 0;
 }
 
@@ -387,6 +390,8 @@ RC PlannerThread::run() {
 }
 
 RC PlannerThread::run_fixed_mode2() {
+
+#if WORKLOAD == YCSB
     tsetup();
     Message * msg __attribute__ ((unused));
     uint64_t batch_cnt = 0;
@@ -461,6 +466,8 @@ RC PlannerThread::run_fixed_mode2() {
         quecc_pool.exec_queue_release(exec_q, _planner_id, et_id);
     }
 
+#endif
+
     printf("FINISH PT %ld:%ld\n",_node_id,_thd_id);
     fflush(stdout);
     return FINISH;
@@ -524,7 +531,7 @@ RC PlannerThread::run_fixed_mode() {
     // Array to track ranges
     Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
     exec_qs_ranges->init(g_exec_qs_max_size);
-
+#if WORKLOAD == YCSB
     for (uint64_t i =0; i<g_thread_cnt; ++i){
 
         if (i == 0){
@@ -534,7 +541,7 @@ RC PlannerThread::run_fixed_mode() {
 
         exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
     }
-
+#endif
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
     // there will be an array pointer.
@@ -1390,6 +1397,7 @@ RC PlannerThread::run_normal_mode() {
     // Array to track ranges
     Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
     exec_qs_ranges->init(g_exec_qs_max_size);
+#if WORKLOAD == YCSB
     for (uint64_t i =0; i<g_thread_cnt; ++i){
 
         if (i == 0){
@@ -1399,7 +1407,7 @@ RC PlannerThread::run_normal_mode() {
 
         exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
     }
-
+#endif
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
     // there will be an array pointer.
@@ -2586,3 +2594,4 @@ void QueCCPool::print_stats() {
     fflush(stdout);
 
 }
+#endif

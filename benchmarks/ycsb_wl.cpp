@@ -69,6 +69,7 @@ RC YCSBWorkload::init_schema(const char * schema_file) {
 
 RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
 //	assert(false);
+#if WORKLOAD == YCSB
 	YCSBClientQueryMessage* ycsb_msg = (YCSBClientQueryMessage *) msg;
 
 	//there are no logical dependency in YCSB
@@ -90,7 +91,7 @@ RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
 
 		dgraphs[cid]->addActionToGraph(req->key, tmpAction);
 	}
-
+#endif
 	return RCOK;
 }
 	
@@ -115,7 +116,7 @@ RC YCSBWorkload::init_table() {
               continue;
             }
             row_t * new_row = NULL;
-			uint64_t row_id;
+			uint64_t row_id = rid_man.next_rid(0);
             rc = the_table->get_new_row(new_row, part_id, row_id); 
             // insertion of last row may fail after the table_size
             // is updated. So never access the last record in a table
@@ -199,7 +200,7 @@ void *YCSBWorkload::init_table_slice() {
 		}
 //		printf("tid=%d. key=%ld\n", tid, key);
 		row_t *new_row = NULL;
-		uint64_t row_id;
+		uint64_t row_id = rid_man.next_rid((uint64_t)tid);
 		int part_id = key_to_part(key); // % g_part_cnt;
 		rc = the_table->get_new_row(new_row, part_id, row_id);
 		assert(rc == RCOK);

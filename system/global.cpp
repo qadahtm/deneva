@@ -59,6 +59,7 @@ Client_txn client_man;
 Sequencer seq_man;
 Logger logger;
 TimeTable time_table;
+RIDMgr rid_man;
 // for Hstore
 //#if CC_ALG == HSTORE
 Plock part_lock_man;
