@@ -68,7 +68,6 @@ RC YCSBWorkload::init_schema(const char * schema_file) {
 }
 
 RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
-//	assert(false);
 #if WORKLOAD == YCSB
 	YCSBClientQueryMessage* ycsb_msg = (YCSBClientQueryMessage *) msg;
 
@@ -91,6 +90,8 @@ RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
 
 		dgraphs[cid]->addActionToGraph(req->key, tmpAction);
 	}
+#else
+	assert(false);
 #endif
 	return RCOK;
 }

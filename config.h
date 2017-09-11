@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 12
+#define THREAD_CNT 2
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -113,7 +113,8 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG NO_WAIT
+//#define CC_ALG NO_WAIT
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -208,7 +209,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 4
+#define EXECQ_CAP_FACTOR 20*PLAN_THREAD_CNT
 #define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 // used for building histogram for planning
@@ -276,11 +277,11 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
-#define SYNTH_TABLE_SIZE 1024
+//#define SYNTH_TABLE_SIZE 1024
 //#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -336,7 +337,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.0
+#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

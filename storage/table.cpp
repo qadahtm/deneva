@@ -46,7 +46,7 @@ RC table_t::get_new_row(row_t *& row, uint64_t part_id, uint64_t &row_id) {
 //	DEBUG_Q("table_t::get_new_row alloc, rid = %ld\n", row_id);
 	void * ptr = mem_allocator.alloc(sizeof(row_t));
 	assert (ptr != NULL);
-	
+
 	row = (row_t *) ptr;
 	rc = row->init(this, part_id, row_id);
 	row->init_manager(row);

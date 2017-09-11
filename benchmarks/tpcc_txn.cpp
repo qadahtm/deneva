@@ -760,7 +760,7 @@ inline RC TPCCTxnManager::new_order_4(uint64_t w_id, uint64_t d_id, uint64_t c_i
 	EXEC SQL SELECT d_next_o_id, d_tax
 		INTO :d_next_o_id, :d_tax
 		FROM district WHERE d_id = :d_id AND d_w_id = :w_id;
-	EXEC SQL UPDATE d istrict SET d _next_o_id = :d _next_o_id + 1
+	EXEC SQL UPDATE district SET d _next_o_id = :d _next_o_id + 1
 		WH ERE d _id = :d_id AN D d _w _id = :w _id ;
 	+===================================================*/
 	key = distKey(d_id, w_id);
@@ -802,6 +802,7 @@ inline RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_i
         VALUES (:o_id, :d_id, :w_id);
     +=======================================================*/
 	row_t * r_no;
+    row_id = rid_man.next_rid(this->h_thd->_thd_id);
 	_wl->t_neworder->get_new_row(r_no, wh_to_part(w_id), row_id);
 	r_no->set_value(NO_O_ID, *o_id);
 	r_no->set_value(NO_D_ID, d_id);
@@ -934,8 +935,46 @@ inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, 
 
 RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
-    // not implemented yet
-    assert(false);
+    switch (exec_qe->type){
+        case TPCC_PAYMENT_UPDATE_W:
+            rc = run_payment_update_w(exec_qe);
+            break;
+        case TPCC_PAYMENT_UPDATE_D:
+            rc = run_payment_update_d(exec_qe);
+            break;
+        case TPCC_PAYMENT_UPDATE_C:
+            rc = run_payment_update_c(exec_qe);
+            break;
+        case TPCC_PAYMENT_INSERT_H:
+            rc = run_payment_insert_h(exec_qe);
+            break;
+        case TPCC_NEWORDER_READ_W:
+            rc = run_neworder_read_w(exec_qe);
+            break;
+        case TPCC_NEWORDER_READ_C:
+            rc = run_neworder_read_c(exec_qe);
+            break;
+        case TPCC_NEWORDER_UPDATE_D:
+            rc = run_neworder_update_d(exec_qe);
+            break;
+        case TPCC_NEWORDER_INSERT_O:
+            rc = run_neworder_insert_o(exec_qe);
+            break;
+        case TPCC_NEWORDER_INSERT_NO:
+            rc = run_neworder_insert_no(exec_qe);
+            break;
+        case TPCC_NEWORDER_READ_I:
+            rc = run_neworder_read_i(exec_qe);
+            break;
+        case TPCC_NEWORDER_UPDATE_S:
+            rc = run_neworder_update_s(exec_qe);
+            break;
+        case TPCC_NEWORDER_INSERT_OL:
+            rc = run_neworder_insert_ol(exec_qe);
+            break;
+        default:
+            assert(false);
+    }
     return rc;
 }
 

@@ -604,6 +604,7 @@ RC WorkerThread::run_normal_mode() {
     TxnManager * my_txn_man;
     _wl->get_txn_man(my_txn_man);
     my_txn_man->init(_thd_id, _wl);
+    my_txn_man->register_thread(this);
 //    bool batch_done = false;
 
     while (!simulation->is_done()) {
@@ -900,9 +901,10 @@ RC WorkerThread::run_normal_mode() {
                                     uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
                                     M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
                                                "Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
-                                                       "c_txn_id = %ld, batch_starting_txn_id = %ld\n",
+                                                       "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld) \n",
                                                txn_ctxs[d_txn_ctx_idx].txn_id,
-                                               d_txn_id, d_txn_ctx_idx, txn_ctxs[i].txn_id, planner_pg->batch_starting_txn_id
+                                               d_txn_id, d_txn_ctx_idx, txn_ctxs[i].txn_id, planner_pg->batch_starting_txn_id,
+                                               (uint64_t)txn_ctxs
                                     );
                                     if (txn_ctxs[d_txn_ctx_idx].txn_state == READY_TO_ABORT){
                                         // abort

@@ -14,6 +14,9 @@
 #include <unordered_map>
 #include <vector>
 #include <boost/lockfree/spsc_queue.hpp>
+#include <boost/random/uniform_int_distribution.hpp>
+#include <boost/random.hpp>
+
 class Workload;
 
 typedef std::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
@@ -37,6 +40,24 @@ struct transaction_context {
 #endif
 //    uint64_t batch_id;
     uint8_t txn_state;
+#if WORKLOAD == TPCC
+    atomic<int64_t> o_id;
+#endif
+};
+
+enum tpcc_txn_frag_t{
+    TPCC_PAYMENT_UPDATE_W=0,
+    TPCC_PAYMENT_UPDATE_D,
+    TPCC_PAYMENT_UPDATE_C,
+    TPCC_PAYMENT_INSERT_H,
+    TPCC_NEWORDER_READ_W,
+    TPCC_NEWORDER_READ_C,
+    TPCC_NEWORDER_UPDATE_D,
+    TPCC_NEWORDER_INSERT_O,
+    TPCC_NEWORDER_INSERT_NO,
+    TPCC_NEWORDER_READ_I,
+    TPCC_NEWORDER_UPDATE_S,
+    TPCC_NEWORDER_INSERT_OL
 };
 
 struct exec_queue_entry {
@@ -49,9 +70,28 @@ struct exec_queue_entry {
     // 1 byte for value
     char req_buffer[17];
 //    ycsb_request req;
+#elif WORKLOAD == TPCC
+    tpcc_txn_frag_t type;
+    uint64_t rid;
+    row_t * row;
+    double h_amount;
+    uint64_t w_id;
+    uint64_t d_id;
+    uint64_t c_id;
+    uint64_t c_w_id;
+    uint64_t c_d_id;
+    bool remote;
+    uint64_t  ol_cnt;
+    uint64_t  o_entry_d;
+    uint64_t ol_quantity;
+    uint64_t ol_i_id;
+    uint64_t ol_supply_w_id;
+    uint64_t  ol_number;
+    uint64_t ol_amount;
+#endif
+
 #if !SERVER_GENERATE_QUERIES
     uint64_t return_node_id; //8
-#endif
 #endif
 };
 
@@ -163,35 +203,96 @@ public:
     uint32_t get_bucket(uint64_t key);
     uint32_t get_split(uint64_t key, uint32_t range_cnt, uint64_t range_start, uint64_t range_end);
     uint32_t get_split(uint64_t key, Array<uint64_t> * ranges);
+
+    inline void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
+    inline void process_client_msg(Message *msg, transaction_context * txn_ctxs);
+    inline void do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
+
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
     uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
-
+#elif WORKLOAD == TPCC
+    // 9223372036854775807 = 2^63
+    // FIXME(tq): Use a parameter to determine the maximum database size
+    uint64_t bucket_size = (9223372036854775807) / g_thread_cnt;
+#else
+    uint64_t bucket_size = 0;
 #endif
 
     RC run_fixed_mode();
     RC run_fixed_mode2();
     RC run_normal_mode();
 private:
-    uint64_t last_batchtime;
-
-    uint64_t batch_id = 0;
+    // txn related
     uint64_t planner_txn_id = 0;
-//    uint64_t batch_starting_txn_id = txn_prefix_planner_base;
+    uint64_t txn_prefix_base = 0x0010000000000000;
+    uint64_t txn_prefix_planner_base = 0;
+    TxnManager * my_txn_man;
+
+    // Batch related
+    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+    uint64_t batch_id = 0;
+    uint64_t batch_cnt = 0;
+    bool force_batch_delivery = false;
+    uint64_t batch_starting_txn_id;
+
+    exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.align_alloc(sizeof(exec_queue_entry));
+    uint64_t et_id = 0;
+    boost::random::mt19937 plan_rng;
+    boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
+
+    // measurements
+    uint64_t idle_starttime = 0;
     uint64_t batch_start_time = 0;
     uint64_t prof_starttime = 0;
     uint64_t txn_prof_starttime = 0;
     uint64_t plan_starttime = 0;
-    bool force_batch_delivery = false;
 
+    // CAS related
     uint64_t expected = 0;
     uint64_t desired = 0;
     uint8_t expected8 = 0;
     uint8_t desired8 = 0;
     uint64_t slot_num = 0;
+
+    // For txn dependency tracking
 #if BUILD_TXN_DEPS
     hash_table_t access_table;
     hash_table_t * txn_dep_graph;
+#endif
+
+    // create and and pre-allocate execution queues
+    // For each mrange which will be assigned to an execution thread
+    // there will be an array pointer.
+    // When the batch is complete we will CAS the exec_q array to allow
+    // execution threads to be
+    Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
+    Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
+
+#if SPLIT_MERGE_ENABLED
+
+#if SPLIT_STRATEGY == LAZY_SPLIT
+    split_max_heap_t pq_test;
+    split_min_heap_t range_sorted;
+    exec_queue_limit = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
+    boost::lockfree::spsc_queue<split_entry *> * split_entry_free_list =
+            new boost::lockfree::spsc_queue<split_entry *>(FREE_LIST_INITIAL_SIZE*10);
+    split_entry ** nsp_entries = (split_entry **) mem_allocator.alloc(sizeof(split_entry*)*2);
+    volatile bool ranges_stored = false;
+     Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+            sizeof(Array<exec_queue_entry> *) * 2);
+
+#elif SPLIT_STRATEGY == EAGER_SPLIT
+    Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
+    Array<uint64_t> * exec_qs_ranges_tmp_tmp = new Array<uint64_t>();
+    Array<Array<exec_queue_entry> *> * exec_queues_tmp;
+    Array<Array<exec_queue_entry> *> * exec_queues_tmp_tmp;
+#endif
+    assign_ptr_min_heap_t assignment;
+    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
+    boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
+            new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
+
 #endif
 };
 

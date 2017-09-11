@@ -31,10 +31,18 @@ struct Item_no {
 	uint64_t ol_i_id;
 	uint64_t ol_supply_w_id;
 	uint64_t ol_quantity;
+
+// TODO(tq): ol_amount should be computed by the transaction
+//	ol_amount = ol_quantity * i_price * (1+w_tax+d_tax) * (1-c_discount);
+//	amt[ol_number-1]=ol_amount;
+//	total += ol_amount;
+// for now, we just store it here
+	uint64_t ol_amount;
   void copy(Item_no * item) {
     ol_i_id = item->ol_i_id;
     ol_supply_w_id = item->ol_supply_w_id;
     ol_quantity = item->ol_quantity;
+	  ol_amount=item->ol_amount;
   }
 };
 

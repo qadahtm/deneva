@@ -12,8 +12,11 @@ public:
     uint64_t next_rid(uint64_t thd_id);
     void init();
     void reserve_rid_range(uint64_t thd_id);
+    // for TPCC
+    uint64_t next_rid_fixed(uint64_t part_id);
 
     std::atomic<uint64_t> batch_max_rid;
+    std::atomic<uint64_t> ** rid_ranges;
 
 private:
 

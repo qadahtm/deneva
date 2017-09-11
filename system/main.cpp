@@ -116,7 +116,7 @@ int main(int argc, char* argv[])
     rid_man.init();
     printf("Done\n");
 
-	Workload * m_wl;
+    Workload * m_wl;
 	switch (WORKLOAD) {
 		case YCSB :
 			m_wl = new YCSBWorkload; break;
@@ -130,6 +130,7 @@ int main(int argc, char* argv[])
 	m_wl->init();
 	printf("Workload initialized!\n");
   fflush(stdout);
+
 #if NETWORK_TEST
 	tport_man.init(g_node_id,m_wl);
 	sleep(3);

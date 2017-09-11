@@ -13,6 +13,8 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 */
+#ifndef _TPCC_CONST_H_
+#define _TPCC_CONST_H_
 
 #if TPCC_SMALL 
 enum {
@@ -207,4 +209,5 @@ enum {
 	S_REMOTE_CNT,
 	S_DATA
 };
+#endif
 #endif
