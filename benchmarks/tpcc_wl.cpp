@@ -81,8 +81,8 @@ RC TPCCWorkload::init_schema(const char *schema_file) {
     i_customer_id = indexes["CUSTOMER_ID_IDX"];
     i_customer_last = indexes["CUSTOMER_LAST_IDX"];
     i_stock = indexes["STOCK_IDX"];
-//	i_order = indexes["ORDER_IDX"];
-//	i_orderline = indexes["ORDER-LINE_IDX"];
+	i_order = indexes["ORDER_IDX"];
+	i_orderline = indexes["ORDER-LINE_IDX"];
     return RCOK;
 }
 

@@ -154,8 +154,10 @@ public:
     virtual RC      run_txn() = 0;
     virtual RC      run_txn_post_wait() = 0;
     virtual RC      run_calvin_txn() = 0;
+#if CC_ALG == QUECC
     // For QueCC
     virtual RC      run_quecc_txn(exec_queue_entry * exec_qe) = 0;
+#endif
     // For HStore
     virtual RC      run_hstore_txn() = 0;
     // For LADS

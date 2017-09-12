@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 2
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -37,7 +37,7 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-#define CPU_FREQ          2.6
+#define CPU_FREQ          2.4//2.6
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -177,7 +177,7 @@
 // batch size must be divisible by thread_cnt and partition cnt
 //#define BATCH_SIZE 5*56*6*3*6
 #define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3
-#define BATCH_MAP_LENGTH 16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 8//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -209,7 +209,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 20*PLAN_THREAD_CNT
+#define EXECQ_CAP_FACTOR 30
 #define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 // used for building histogram for planning
@@ -314,7 +314,7 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH PART_CNT
+#define NUM_WH 24//PART_CNT
 // % of transactions that access multiple partitions
 #define MPR 1.0
 #define MPIR 0.01
@@ -337,7 +337,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 100.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

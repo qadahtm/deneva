@@ -137,6 +137,7 @@ public:
     TPCCRemTxnType state;
     void copy_remote_items(TPCCQueryMessage * msg);
 
+
 #if CC_ALG == QUECC
     RC run_quecc_txn(exec_queue_entry * exec_qe);
 
@@ -158,7 +159,7 @@ public:
 
         entry->rid = r_wh_local->get_row_id();
         entry->row = r_wh_local;
-        entry->h_amount = h_amount;
+        entry->txn_ctx->h_amount = h_amount;
         entry->type = TPCC_PAYMENT_UPDATE_W;
 
         return RCOK;
@@ -168,7 +169,7 @@ public:
         row_t * r_wh_local = entry->row;
         r_wh_local->get_value(W_YTD, w_ytd);
         if (g_wh_update) {
-            r_wh_local->set_value(W_YTD, w_ytd + entry->h_amount);
+            r_wh_local->set_value(W_YTD, w_ytd + entry->txn_ctx->h_amount);
         }
         return RCOK;
     };
@@ -186,7 +187,7 @@ public:
         assert(r_dist_local != NULL);
         entry->row = r_dist_local;
         entry->rid = r_dist_local->get_row_id();
-        entry->h_amount = h_amount;
+        entry->txn_ctx->h_amount = h_amount;
         entry->type = TPCC_PAYMENT_UPDATE_D;
 
         return RCOK;
@@ -197,7 +198,7 @@ public:
 
         double d_ytd;
         r_dist_local->get_value(D_YTD, d_ytd);
-        r_dist_local->set_value(D_YTD, d_ytd + entry->h_amount);
+        r_dist_local->set_value(D_YTD, d_ytd + entry->txn_ctx->h_amount);
 
         return RCOK;
     };
@@ -237,7 +238,7 @@ public:
     };
     inline RC plan_payment_update_c(double h_amount, row_t * r_cust_local, exec_queue_entry *& entry){
         entry->row = r_cust_local;
-        entry->h_amount = h_amount;
+        entry->txn_ctx->h_amount = h_amount;
         entry->rid = r_cust_local->get_row_id();
         entry->type = TPCC_PAYMENT_UPDATE_C;
         return RCOK;
@@ -251,9 +252,9 @@ public:
         double c_payment_cnt;
 
         r_cust_local->get_value(C_BALANCE, c_balance);
-        r_cust_local->set_value(C_BALANCE, c_balance - entry->h_amount);
+        r_cust_local->set_value(C_BALANCE, c_balance - entry->txn_ctx->h_amount);
         r_cust_local->get_value(C_YTD_PAYMENT, c_ytd_payment);
-        r_cust_local->set_value(C_YTD_PAYMENT, c_ytd_payment + entry->h_amount);
+        r_cust_local->set_value(C_YTD_PAYMENT, c_ytd_payment + entry->txn_ctx->h_amount);
         r_cust_local->get_value(C_PAYMENT_CNT, c_payment_cnt);
         r_cust_local->set_value(C_PAYMENT_CNT, c_payment_cnt + 1);
         return RCOK;
@@ -261,31 +262,34 @@ public:
     inline RC plan_payment_insert_h(uint64_t w_id, uint64_t d_id,uint64_t c_id,uint64_t c_w_id, uint64_t c_d_id, double h_amount, exec_queue_entry *& entry){
 
         uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
-        RC rc = _wl->t_history->get_new_row(entry->row, wh_to_part(entry->c_w_id), row_id);
-        assert(rc == RCOK);
+
         entry->rid = row_id;
-        entry->w_id = w_id;
-        entry->d_id = d_id;
-        entry->c_id = c_id;
-        entry->c_w_id = c_w_id;
-        entry->c_d_id = c_d_id;
-        entry->h_amount = h_amount;
+        entry->txn_ctx->w_id = w_id;
+        entry->txn_ctx->d_id = d_id;
+        entry->txn_ctx->c_id = c_id;
+        entry->txn_ctx->c_w_id = c_w_id;
+        entry->txn_ctx->c_d_id = c_d_id;
+        entry->txn_ctx->h_amount = h_amount;
         entry->type = TPCC_PAYMENT_INSERT_H;
 
-        return rc;
+        return RCOK;
     };
     inline RC run_payment_insert_h(exec_queue_entry * entry){
-        row_t * r_hist = entry->row;
 
-        r_hist->set_value(H_C_ID, entry->c_id);
-        r_hist->set_value(H_C_D_ID, entry->c_d_id);
-        r_hist->set_value(H_C_W_ID, entry->c_w_id);
-        r_hist->set_value(H_D_ID, entry->d_id);
-        r_hist->set_value(H_W_ID, entry->w_id);
+        row_t * r_hist;
+        RC rc = _wl->t_history->get_new_row(r_hist, wh_to_part(entry->txn_ctx->c_w_id), entry->rid);
+        assert(rc == RCOK);
+        r_hist->set_value(H_C_ID, entry->txn_ctx->c_id);
+        r_hist->set_value(H_C_D_ID, entry->txn_ctx->c_d_id);
+        r_hist->set_value(H_C_W_ID, entry->txn_ctx->c_w_id);
+        r_hist->set_value(H_D_ID, entry->txn_ctx->d_id);
+        r_hist->set_value(H_W_ID, entry->txn_ctx->w_id);
         int64_t date = 2017;
         r_hist->set_value(H_DATE, date);
-        r_hist->set_value(H_AMOUNT, entry->h_amount);
-        insert_row(r_hist, _wl->t_history);
+        r_hist->set_value(H_AMOUNT, entry->txn_ctx->h_amount);
+        // TQ: the following just records the insert into the transaction manager. The actual insert is done above by get_new_row
+        // Since this is a MainMemory-DB, allocating the row is basically an insert.
+//        insert_row(r_hist, _wl->t_history);
         return RCOK;
     };
 
@@ -378,63 +382,68 @@ public:
     };
 
     inline RC plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry){
-        row_t * r_order;
         uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
-        _wl->t_order->get_new_row(r_order, wh_to_part(entry->w_id), row_id);
-
-        entry->rid = row_id;
-        entry->w_id = w_id;
-        entry->d_id = d_id;
-        entry->c_id = c_id;
-        entry->o_entry_d = o_entry_d;
-        entry->ol_cnt = ol_cnt;
-        entry->remote = remote;
+                entry->rid = row_id;
+        entry->txn_ctx->w_id = w_id;
+        entry->txn_ctx->d_id = d_id;
+        entry->txn_ctx->c_id = c_id;
+        entry->txn_ctx->o_entry_d = o_entry_d;
+        entry->txn_ctx->ol_cnt = ol_cnt;
+        entry->txn_ctx->remote = remote;
         entry->type = TPCC_NEWORDER_INSERT_O;
 
         return RCOK;
 
     };
     inline RC run_neworder_insert_o(exec_queue_entry * entry){
-        row_t * r_order = entry->row;
+        row_t * r_order;
+        // insert by allocating memory here
+        RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
-        r_order->set_value(O_C_ID, entry->c_id);
-        r_order->set_value(O_D_ID, entry->d_id);
-        r_order->set_value(O_W_ID, entry->w_id);
-        r_order->set_value(O_ENTRY_D, entry->o_entry_d);
-        r_order->set_value(O_OL_CNT, entry->ol_cnt);
-        int64_t all_local = (entry->remote? 0 : 1);
+        r_order->set_value(O_C_ID, entry->txn_ctx->c_id);
+        r_order->set_value(O_D_ID, entry->txn_ctx->d_id);
+        r_order->set_value(O_W_ID, entry->txn_ctx->w_id);
+        r_order->set_value(O_ENTRY_D, entry->txn_ctx->o_entry_d);
+        r_order->set_value(O_OL_CNT, entry->txn_ctx->ol_cnt);
+        int64_t all_local = (entry->txn_ctx->remote? 0 : 1);
         r_order->set_value(O_ALL_LOCAL, all_local);
 
-        while (entry->txn_ctx->o_id.load() == 0){} // spin here until order id for this txn is set
+        // may get stuck here when simulation is done
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) break;
+        } // spin here until order id for this txn is set
         r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
 
-        insert_row(r_order, _wl->t_order);
-        return RCOK;
+//        _wl->index_insert(_wl->i_order, orderPrimaryKey(entry->w_id,entry->d_id,entry->txn_ctx->o_id), r_order, wh_to_part(entry->w_id));
+        return rc;
     };
 
     inline RC plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
-        row_t * r_no;
         uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
-        _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->w_id), row_id);
-        entry->w_id = w_id;
-        entry->d_id = d_id;
-        entry->row = r_no;
+
+        entry->txn_ctx->w_id = w_id;
+        entry->txn_ctx->d_id = d_id;
         entry->rid = row_id;
         entry->type = TPCC_NEWORDER_INSERT_NO;
 
         return RCOK;
     };
     inline RC run_neworder_insert_no(exec_queue_entry * entry){
-        row_t * r_no = entry->row;
+        row_t * r_no;
 
-        r_no->set_value(NO_D_ID, entry->d_id);
-        r_no->set_value(NO_W_ID, entry->w_id);
+        RC rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
-        while (entry->txn_ctx->o_id.load() == 0){} // spin here until order id for this txn is set
+        r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
+        r_no->set_value(NO_W_ID, entry->txn_ctx->w_id);
+
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) break;
+        } // spin here until order id for this txn is set
         r_no->set_value(NO_O_ID, entry->txn_ctx->o_id.load());
 
-        insert_row(r_no, _wl->t_neworder);
-        return RCOK;
+        //TQ: do we need to have an index for NewOrder table??
+
+        return rc;
     };
 
     inline RC neworder_lookup_i(uint64_t ol_i_id, row_t *& r_item_local){
@@ -479,8 +488,8 @@ public:
     inline RC plan_neworder_update_s(uint64_t ol_quantity, bool remote, row_t *& r_stock_local, exec_queue_entry * entry){
         entry->row = r_stock_local;
         entry->rid = r_stock_local->get_row_id();
-        entry->ol_quantity = ol_quantity;
-        entry->remote = remote;
+        entry->txn_ctx->ol_quantity = ol_quantity;
+        entry->txn_ctx->remote = remote;
         entry->type = TPCC_NEWORDER_UPDATE_S;
         return RCOK;
     };
@@ -499,22 +508,22 @@ public:
         int64_t s_order_cnt;
         char * s_data __attribute__ ((unused));
         r_stock_local->get_value(S_YTD, s_ytd);
-        r_stock_local->set_value(S_YTD, s_ytd + entry->ol_quantity);
+        r_stock_local->set_value(S_YTD, s_ytd + entry->txn_ctx->ol_quantity);
         // In Coordination Avoidance, this record must be protected!
         r_stock_local->get_value(S_ORDER_CNT, s_order_cnt);
         r_stock_local->set_value(S_ORDER_CNT, s_order_cnt + 1);
         s_data = r_stock_local->get_value(S_DATA);
 #endif
-        if (entry->remote) {
+        if (entry->txn_ctx->remote) {
             s_remote_cnt = *(int64_t*)r_stock_local->get_value(S_REMOTE_CNT);
             s_remote_cnt ++;
             r_stock_local->set_value(S_REMOTE_CNT, &s_remote_cnt);
         }
         uint64_t quantity;
-        if (s_quantity > entry->ol_quantity + 10) {
-            quantity = s_quantity - entry->ol_quantity;
+        if (s_quantity > entry->txn_ctx->ol_quantity + 10) {
+            quantity = s_quantity - entry->txn_ctx->ol_quantity;
         } else {
-            quantity = s_quantity - entry->ol_quantity + 91;
+            quantity = s_quantity - entry->txn_ctx->ol_quantity + 91;
         }
         r_stock_local->set_value(S_QUANTITY, &quantity);
         return RCOK;
@@ -523,13 +532,12 @@ public:
     inline RC plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, row_t *& r_ol_local, exec_queue_entry * entry){
 
         uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
-        _wl->t_orderline->get_new_row(r_ol_local, wh_to_part(ol_supply_w_id), row_id);
-        entry->row = r_ol_local;
+
         entry->rid = row_id;
-        entry->ol_supply_w_id = ol_supply_w_id;
-        entry->ol_i_id = ol_i_id;
-        entry->ol_quantity = ol_quantity;
-        entry->ol_number = ol_number;
+        entry->txn_ctx->ol_supply_w_id = ol_supply_w_id;
+        entry->txn_ctx->ol_i_id = ol_i_id;
+        entry->txn_ctx->ol_quantity = ol_quantity;
+        entry->txn_ctx->ol_number = ol_number;
         entry->type = TPCC_NEWORDER_INSERT_OL;
 
         return RCOK;
@@ -544,25 +552,27 @@ public:
 				:ol_i_id, :ol_supply_w_id,
 				:ol_quantity, :ol_amount, :ol_dist_info);
 		+====================================================*/
-        row_t * r_ol = entry->row;
+        row_t * r_ol;
+        _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->txn_ctx->ol_supply_w_id), entry->rid);
 
-        r_ol->set_value(OL_D_ID, &entry->d_id);
-        r_ol->set_value(OL_W_ID, &entry->w_id);
-        r_ol->set_value(OL_NUMBER, &entry->ol_number);
-        r_ol->set_value(OL_I_ID, &entry->ol_i_id);
+        r_ol->set_value(OL_D_ID, &entry->txn_ctx->d_id);
+        r_ol->set_value(OL_W_ID, &entry->txn_ctx->w_id);
+        r_ol->set_value(OL_NUMBER, &entry->txn_ctx->ol_number);
+        r_ol->set_value(OL_I_ID, &entry->txn_ctx->ol_i_id);
 #if !TPCC_SMALL
-        r_ol->set_value(OL_SUPPLY_W_ID, &entry->ol_supply_w_id);
-        r_ol->set_value(OL_QUANTITY, &entry->ol_quantity);
+        r_ol->set_value(OL_SUPPLY_W_ID, &entry->txn_ctx->ol_supply_w_id);
+        r_ol->set_value(OL_QUANTITY, &entry->txn_ctx->ol_quantity);
         uint64_t ol_amount = URand(1, 10); // TODO(tq): Fix this. Compute OL_AMOUNT proparly
 //        ol_amount = ol_quantity * i_price * (1+w_tax+d_tax) * (1-c_discount);
 //        amt[ol_number-1]=ol_amount;
 //        total += ol_amount;
         r_ol->set_value(OL_AMOUNT, ol_amount);
 #endif
-        while (entry->txn_ctx->o_id.load() == 0){} // spin here until order id for this txn is set
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) break;
+        } // spin here until order id for this txn is set
         r_ol->set_value(OL_O_ID, entry->txn_ctx->o_id.load());
 
-        insert_row(r_ol, _wl->t_orderline);
         return RCOK;
     };
 #endif

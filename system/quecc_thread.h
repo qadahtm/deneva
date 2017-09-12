@@ -42,6 +42,20 @@ struct transaction_context {
     uint8_t txn_state;
 #if WORKLOAD == TPCC
     atomic<int64_t> o_id;
+    double h_amount;
+    uint64_t w_id;
+    uint64_t d_id;
+    uint64_t c_id;
+    uint64_t c_w_id;
+    uint64_t c_d_id;
+    bool remote;
+    uint64_t  ol_cnt;
+    uint64_t  o_entry_d;
+    uint64_t ol_quantity;
+    uint64_t ol_i_id;
+    uint64_t ol_supply_w_id;
+    uint64_t  ol_number;
+//    uint64_t ol_amount;
 #endif
 };
 
@@ -74,20 +88,6 @@ struct exec_queue_entry {
     tpcc_txn_frag_t type;
     uint64_t rid;
     row_t * row;
-    double h_amount;
-    uint64_t w_id;
-    uint64_t d_id;
-    uint64_t c_id;
-    uint64_t c_w_id;
-    uint64_t c_d_id;
-    bool remote;
-    uint64_t  ol_cnt;
-    uint64_t  o_entry_d;
-    uint64_t ol_quantity;
-    uint64_t ol_i_id;
-    uint64_t ol_supply_w_id;
-    uint64_t  ol_number;
-    uint64_t ol_amount;
 #endif
 
 #if !SERVER_GENERATE_QUERIES

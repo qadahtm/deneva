@@ -932,7 +932,7 @@ inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, 
 
 	return RCOK;
 }
-
+#if CC_ALG == QUECC
 RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
     switch (exec_qe->type){
@@ -977,6 +977,7 @@ RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     }
     return rc;
 }
+#endif
 
 RC TPCCTxnManager::run_hstore_txn() {
     RC rc = RCOK;
