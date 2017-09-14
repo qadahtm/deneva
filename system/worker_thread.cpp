@@ -139,11 +139,15 @@ void WorkerThread::calvin_wrapup() {
     txn_man->release_locks(RCOK);
     txn_man->commit_stats();
     DEBUG("(%ld,%ld) calvin ack to %ld\n", txn_man->get_txn_id(), txn_man->get_batch_id(), txn_man->return_id);
+#if !SINGLE_NODE
     if (txn_man->return_id == g_node_id) {
         work_queue.sequencer_enqueue(_thd_id, Message::create_message(txn_man, CALVIN_ACK));
     } else {
         msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, CALVIN_ACK), txn_man->return_id);
     }
+#else
+    work_queue.sequencer_enqueue(_thd_id, Message::create_message(txn_man, CALVIN_ACK));
+#endif
     release_txn_man();
 }
 
@@ -164,6 +168,7 @@ void WorkerThread::commit() {
     msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
 #endif
     // remove txn from pool
+    // -- actually return to txn_mgr pool
     release_txn_man();
     // Do not use txn_man after this
 
@@ -600,11 +605,12 @@ RC WorkerThread::run_normal_mode() {
     uint8_t expected8 = 0;
 #endif
     RC rc __attribute__((unused)) = RCOK;
-#endif
+
     TxnManager * my_txn_man;
     _wl->get_txn_man(my_txn_man);
     my_txn_man->init(_thd_id, _wl);
     my_txn_man->register_thread(this);
+#endif
 //    bool batch_done = false;
 
     while (!simulation->is_done()) {
@@ -1031,7 +1037,7 @@ RC WorkerThread::run_normal_mode() {
         //uint64_t starttime = get_sys_clock();
         if(msg->rtype != CL_QRY || CC_ALG == CALVIN) {
           txn_man = get_transaction_manager(msg);
-
+#if !SINGLE_NODE
           if (CC_ALG != CALVIN && IS_LOCAL(txn_man->get_txn_id())) {
             if (msg->rtype != RTXN_CONT && ((msg->rtype != RACK_PREP) || (txn_man->get_rsp_cnt() == 1))) {
               txn_man->txn_stats.work_queue_time_short += msg->lat_work_queue_time;
@@ -1062,7 +1068,7 @@ RC WorkerThread::run_normal_mode() {
           //txn_man->txn_stats.network_time += msg->ntwk_time;
           msg->wq_time = 0;
           txn_man->txn_stats.work_queue_cnt += 1;
-
+#endif
 
           ready_starttime = get_sys_clock();
           bool ready = txn_man->unset_ready();
@@ -1356,6 +1362,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
 
     } else {
         txn_man->txn_stats.restart_starttime = get_sys_clock();
+        txn_id = msg->txn_id;
         DEBUG("RESTART %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
               txn_man->txn_stats.starttime);
     }
@@ -1389,8 +1396,9 @@ RC WorkerThread::process_rtxn(Message *msg) {
             // Execute transaction
             rc = txn_man->run_hstore_txn();
             part_lock_man.unlock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
+//        DEBUG_Q("WT_%ld: executed multipart txn_id = %ld with RCOK = %d, is new order? %d\n",
+//                _thd_id, txn_id, (rc == RCOK), ((TPCCQuery *)txn_man->query)->txn_type == TPCC_NEW_ORDER);
         }
-//        DEBUG_Q("WT_%ld: executed multipart txn_id = %ld with RCOK = %d\n",_thd_id, txn_id, (rc == RCOK));
     }
     else{
         // There is at least one partitions and partition id must equal thread id
@@ -1398,7 +1406,8 @@ RC WorkerThread::process_rtxn(Message *msg) {
                    "THD_%ld: mismatch partition id = %ld, thd_id = %ld", _thd_id,
                    txn_man->query->partitions[0], _thd_id);
         rc = txn_man->run_hstore_txn();
-//        DEBUG_Q("WT_%ld: executed single part txn_id = %ld with RCOK = %d\n",_thd_id, txn_id, (rc == RCOK));
+//        DEBUG_Q("WT_%ld: executed single part txn_id = %ld with RCOK = %d, is new order? %d\n",
+//                _thd_id, txn_id, (rc == RCOK), ((TPCCQuery *)txn_man->query)->txn_type == TPCC_NEW_ORDER );
     }
 #else
     // Execute transaction
@@ -1468,8 +1477,9 @@ RC WorkerThread::process_calvin_rtxn(Message *msg) {
 
     DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
           txn_man->txn_stats.starttime);
-
+#if !SINGLE_NODE
     assert(ISSERVERN(txn_man->return_id));
+#endif
     txn_man->txn_stats.local_wait_time += get_sys_clock() - txn_man->txn_stats.wait_starttime;
     // Execute
     RC rc = txn_man->run_calvin_txn();

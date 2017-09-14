@@ -16,6 +16,7 @@
 #ifndef _TPCC_CONST_H_
 #define _TPCC_CONST_H_
 
+#if WORKLOAD == TPCC
 #if TPCC_SMALL 
 enum {
 	W_ID,
@@ -210,4 +211,6 @@ enum {
 	S_DATA
 };
 #endif
+
+#endif //WORKLOAD == TPCC
 #endif

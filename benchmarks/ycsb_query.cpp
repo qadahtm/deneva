@@ -23,6 +23,7 @@
 #include "helper.h"
 #include "message.h"
 
+#if WORKLOAD == YCSB
 uint64_t YCSBQueryGenerator::the_n = 0;
 double YCSBQueryGenerator::denom = 0;
 uint64_t YCSBQueryGenerator::the_n_part = 0;
@@ -497,3 +498,5 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
     return query;
 
 }
+
+#endif // #if WORKLOAD == YCSB

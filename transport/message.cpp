@@ -525,7 +525,7 @@ void YCSBClientQueryMessage::copy_to_buf(char * buf) {
  assert(ptr == get_size());
 }
 /************************/
-
+#if WORKLOAD == TPCC
 void TPCCClientQueryMessage::init() {
 }
 
@@ -687,10 +687,203 @@ void TPCCClientQueryMessage::copy_to_buf(char * buf) {
 }
 
 
-/************************/
+void TPCCQueryMessage::init() {
+}
+
+void TPCCQueryMessage::release() {
+  QueryMessage::release();
+  // Freeing items is the responsibility of txn
+  /*
+  for(uint64_t i = 0; i < items.size(); i++) {
+    DEBUG_M("TPCCQueryMessage::release item free\n");
+    mem_allocator.free(items[i],sizeof(Item_no));
+  }
+  */
+  items.release();
+}
+
+uint64_t TPCCQueryMessage::get_size() {
+  uint64_t size = QueryMessage::get_size();
+
+  size += sizeof(uint64_t); //txn_type
+  size += sizeof(uint64_t); //state
+  size += sizeof(uint64_t) * 3; // w_id, d_id, c_id
+
+  // Payment
+  if(txn_type == TPCC_PAYMENT) {
+
+    size += sizeof(uint64_t) * 4; // d_w_id, c_w_id, c_d_id;, h_amount
+    size += sizeof(char) * LASTNAME_LEN; // c_last[LASTNAME_LEN]
+    size += sizeof(bool); // by_last_name
+
+  }
+
+  // New Order
+  if(txn_type == TPCC_NEW_ORDER) {
+    size += sizeof(uint64_t) * 2; // ol_cnt, o_entry_d,
+    size += sizeof(bool) * 2; // rbk, remote
+    size += sizeof(Item_no) * items.size();
+    size += sizeof(uint64_t); // items size
+  }
+
+  return size;
+}
+
+void TPCCQueryMessage::copy_from_txn(TxnManager * txn) {
+  QueryMessage::copy_from_txn(txn);
+  TPCCQuery* tpcc_query = (TPCCQuery*)(txn->query);
+
+  txn_type = tpcc_query->txn_type;
+  state = (uint64_t)((TPCCTxnManager*)txn)->state;
+	// common txn input for both payment & new-order
+  w_id = tpcc_query->w_id;
+  d_id = tpcc_query->d_id;
+  c_id = tpcc_query->c_id;
+
+  // payment
+  if(txn_type == TPCC_PAYMENT) {
+    d_w_id = tpcc_query->d_w_id;
+    c_w_id = tpcc_query->c_w_id;
+    c_d_id = tpcc_query->c_d_id;
+    strcpy(c_last,tpcc_query->c_last);
+    h_amount = tpcc_query->h_amount;
+    by_last_name = tpcc_query->by_last_name;
+  }
+
+  // new order
+  //items.copy(tpcc_query->items);
+  if(txn_type == TPCC_NEW_ORDER) {
+    ((TPCCTxnManager*)txn)->copy_remote_items(this);
+    rbk = tpcc_query->rbk;
+    remote = tpcc_query->remote;
+    ol_cnt = tpcc_query->ol_cnt;
+    o_entry_d = tpcc_query->o_entry_d;
+  }
+
+}
+
+void TPCCQueryMessage::copy_to_txn(TxnManager * txn) {
+  QueryMessage::copy_to_txn(txn);
+
+  TPCCQuery* tpcc_query = (TPCCQuery*)(txn->query);
+
+  tpcc_query->txn_type = (TPCCTxnType)txn_type;
+  ((TPCCTxnManager*)txn)->state = (TPCCRemTxnType)state;
+	// common txn input for both payment & new-order
+  tpcc_query->w_id = w_id;
+  tpcc_query->d_id = d_id;
+  tpcc_query->c_id = c_id;
+
+  // payment
+  if(txn_type == TPCC_PAYMENT) {
+    tpcc_query->d_w_id = d_w_id;
+    tpcc_query->c_w_id = c_w_id;
+    tpcc_query->c_d_id = c_d_id;
+    strcpy(tpcc_query->c_last,c_last);
+    tpcc_query->h_amount = h_amount;
+    tpcc_query->by_last_name = by_last_name;
+  }
+
+  // new order
+  if(txn_type == TPCC_NEW_ORDER) {
+    tpcc_query->items.append(items);
+    tpcc_query->rbk = rbk;
+    tpcc_query->remote = remote;
+    tpcc_query->ol_cnt = ol_cnt;
+    tpcc_query->o_entry_d = o_entry_d;
+  }
 
 
+}
+
+
+void TPCCQueryMessage::copy_from_buf(char * buf) {
+  QueryMessage::copy_from_buf(buf);
+  uint64_t ptr = QueryMessage::get_size();
+
+  COPY_VAL(txn_type,buf,ptr);
+  assert(txn_type == TPCC_PAYMENT || txn_type == TPCC_NEW_ORDER);
+  COPY_VAL(state,buf,ptr);
+	// common txn input for both payment & new-order
+  COPY_VAL(w_id,buf,ptr);
+  COPY_VAL(d_id,buf,ptr);
+  COPY_VAL(c_id,buf,ptr);
+
+  // payment
+  if(txn_type == TPCC_PAYMENT) {
+    COPY_VAL(d_w_id,buf,ptr);
+    COPY_VAL(c_w_id,buf,ptr);
+    COPY_VAL(c_d_id,buf,ptr);
+    COPY_VAL(c_last,buf,ptr);
+    COPY_VAL(h_amount,buf,ptr);
+    COPY_VAL(by_last_name,buf,ptr);
+  }
+
+  // new order
+  if(txn_type == TPCC_NEW_ORDER) {
+    size_t size;
+    COPY_VAL(size,buf,ptr);
+    items.init(size);
+    for(uint64_t i = 0 ; i < size;i++) {
+      DEBUG_M("TPCCQueryMessage::copy item alloc\n");
+      Item_no * item = (Item_no*)mem_allocator.alloc(sizeof(Item_no));
+      COPY_VAL(*item,buf,ptr);
+      items.add(item);
+    }
+
+    COPY_VAL(rbk,buf,ptr);
+    COPY_VAL(remote,buf,ptr);
+    COPY_VAL(ol_cnt,buf,ptr);
+    COPY_VAL(o_entry_d,buf,ptr);
+  }
+
+ assert(ptr == get_size());
+
+}
+
+void TPCCQueryMessage::copy_to_buf(char * buf) {
+  QueryMessage::copy_to_buf(buf);
+  uint64_t ptr = QueryMessage::get_size();
+
+  COPY_BUF(buf,txn_type,ptr);
+  COPY_BUF(buf,state,ptr);
+	// common txn input for both payment & new-order
+  COPY_BUF(buf,w_id,ptr);
+  COPY_BUF(buf,d_id,ptr);
+  COPY_BUF(buf,c_id,ptr);
+
+  // payment
+  if(txn_type == TPCC_PAYMENT) {
+    COPY_BUF(buf,d_w_id,ptr);
+    COPY_BUF(buf,c_w_id,ptr);
+    COPY_BUF(buf,c_d_id,ptr);
+    COPY_BUF(buf,c_last,ptr);
+    COPY_BUF(buf,h_amount,ptr);
+    COPY_BUF(buf,by_last_name,ptr);
+  }
+
+  if(txn_type == TPCC_NEW_ORDER) {
+    size_t size = items.size();
+    COPY_BUF(buf,size,ptr);
+    for(uint64_t i = 0; i < items.size(); i++) {
+      Item_no * item = items[i];
+      COPY_BUF(buf,*item,ptr);
+    }
+
+    COPY_BUF(buf,rbk,ptr);
+    COPY_BUF(buf,remote,ptr);
+    COPY_BUF(buf,ol_cnt,ptr);
+    COPY_BUF(buf,o_entry_d,ptr);
+  }
+ assert(ptr == get_size());
+
+}
 /************************/
+#endif //WORKLOAD == TPCC
+
+/************************/
+
+#if WORKLOAD == PPS
 
 void PPSClientQueryMessage::init() {
 }
@@ -842,6 +1035,198 @@ void PPSClientQueryMessage::copy_to_buf(char * buf) {
 }
 
 
+void PPSQueryMessage::init() {
+}
+
+void PPSQueryMessage::release() {
+  QueryMessage::release();
+}
+
+uint64_t PPSQueryMessage::get_size() {
+  uint64_t size = QueryMessage::get_size();
+
+  size += sizeof(uint64_t); // txn_type
+  size += sizeof(uint64_t); // state
+  size += sizeof(uint64_t); // part/product/supply key
+  size += sizeof(size_t);
+  size += sizeof(uint64_t) * part_keys.size();
+  return size;
+}
+
+void PPSQueryMessage::copy_from_txn(TxnManager * txn) {
+  QueryMessage::copy_from_txn(txn);
+  PPSQuery* pps_query = (PPSQuery*)(txn->query);
+
+  txn_type = pps_query->txn_type;
+  state = (uint64_t)((PPSTxnManager*)txn)->state;
+
+  if (txn_type == PPS_GETPART) {
+    part_key = pps_query->part_key;
+  }
+  if (txn_type == PPS_GETPRODUCT) {
+    product_key = pps_query->product_key;
+  }
+  if (txn_type == PPS_GETSUPPLIER) {
+    supplier_key = pps_query->supplier_key;
+  }
+  if (txn_type == PPS_GETPARTBYPRODUCT) {
+    //product_key = pps_query->product_key;
+    part_key = pps_query->part_key;
+  }
+  if (txn_type == PPS_GETPARTBYSUPPLIER) {
+    //supplier_key = pps_query->supplier_key;
+    part_key = pps_query->part_key;
+  }
+  if (txn_type == PPS_ORDERPRODUCT) {
+      part_key = pps_query->part_key;
+  }
+  if (txn_type == PPS_UPDATEPRODUCTPART) {
+      product_key = pps_query->product_key;
+  }
+  if (txn_type == PPS_UPDATEPART) {
+      part_key = pps_query->part_key;
+  }
+
+  part_keys.copy(pps_query->part_keys);
+
+}
+
+void PPSQueryMessage::copy_to_txn(TxnManager * txn) {
+  QueryMessage::copy_to_txn(txn);
+
+  PPSQuery* pps_query = (PPSQuery*)(txn->query);
+
+  pps_query->txn_type = (PPSTxnType)txn_type;
+  ((PPSTxnManager*)txn)->state = (PPSRemTxnType)state;
+
+  if (txn_type == PPS_GETPART) {
+    pps_query->part_key = part_key;
+  }
+  if (txn_type == PPS_GETPRODUCT) {
+    pps_query->product_key = product_key;
+  }
+  if (txn_type == PPS_GETSUPPLIER) {
+    pps_query->supplier_key = supplier_key;
+  }
+  if (txn_type == PPS_GETPARTBYPRODUCT) {
+    //pps_query->product_key = product_key;
+    pps_query->part_key = part_key;
+  }
+  if (txn_type == PPS_GETPARTBYSUPPLIER) {
+    //pps_query->supplier_key = supplier_key;
+    pps_query->part_key = part_key;
+  }
+  if (txn_type == PPS_ORDERPRODUCT) {
+    //pps_query->product_key = product_key;
+    pps_query->part_key = part_key;
+  }
+  if (txn_type == PPS_UPDATEPRODUCTPART) {
+      pps_query->product_key = product_key;
+  }
+  if (txn_type == PPS_UPDATEPART) {
+      pps_query->part_key = part_key;
+  }
+  pps_query->part_keys.append(part_keys);
+
+}
+
+
+void PPSQueryMessage::copy_from_buf(char * buf) {
+  QueryMessage::copy_from_buf(buf);
+  uint64_t ptr = QueryMessage::get_size();
+
+  COPY_VAL(txn_type,buf,ptr);
+  COPY_VAL(state,buf,ptr);
+  if (txn_type == PPS_GETPART) {
+    COPY_VAL(part_key,buf,ptr);
+  }
+  if (txn_type == PPS_GETPRODUCT) {
+    COPY_VAL(product_key,buf,ptr);
+  }
+  if (txn_type == PPS_GETSUPPLIER) {
+    COPY_VAL(supplier_key,buf,ptr);
+  }
+  if (txn_type == PPS_GETPARTBYPRODUCT) {
+    //COPY_VAL(product_key,buf,ptr);
+    COPY_VAL(part_key,buf,ptr);
+  }
+  if (txn_type == PPS_GETPARTBYSUPPLIER) {
+    //COPY_VAL(supplier_key,buf,ptr);
+    COPY_VAL(part_key,buf,ptr);
+  }
+  if (txn_type == PPS_ORDERPRODUCT) {
+    //COPY_VAL(product_key,buf,ptr);
+    COPY_VAL(part_key,buf,ptr);
+  }
+  if (txn_type == PPS_UPDATEPRODUCTPART) {
+      COPY_VAL(product_key,buf,ptr);
+  }
+  if (txn_type == PPS_UPDATEPART) {
+      COPY_VAL(part_key,buf,ptr);
+  }
+
+  size_t size;
+  COPY_VAL(size,buf,ptr);
+  part_keys.init(size);
+  for(uint64_t i = 0 ; i < size;i++) {
+    uint64_t item;
+    COPY_VAL(item,buf,ptr);
+    part_keys.add(item);
+  }
+
+ assert(ptr == get_size());
+
+}
+
+void PPSQueryMessage::copy_to_buf(char * buf) {
+  QueryMessage::copy_to_buf(buf);
+  uint64_t ptr = QueryMessage::get_size();
+
+  COPY_BUF(buf,txn_type,ptr);
+  COPY_BUF(buf,state,ptr);
+
+  if (txn_type == PPS_GETPART) {
+    COPY_BUF(buf,part_key,ptr);
+  }
+  if (txn_type == PPS_GETPRODUCT) {
+    COPY_BUF(buf,product_key,ptr);
+  }
+  if (txn_type == PPS_GETSUPPLIER) {
+    COPY_BUF(buf,supplier_key,ptr);
+  }
+  if (txn_type == PPS_GETPARTBYPRODUCT) {
+    //COPY_BUF(buf,product_key,ptr);
+    COPY_BUF(buf,part_key,ptr);
+  }
+  if (txn_type == PPS_GETPARTBYSUPPLIER) {
+    //COPY_BUF(buf,supplier_key,ptr);
+    COPY_BUF(buf,part_key,ptr);
+  }
+  if (txn_type == PPS_ORDERPRODUCT) {
+    //COPY_BUF(buf,product_key,ptr);
+    COPY_BUF(buf,part_key,ptr);
+  }
+  if (txn_type == PPS_UPDATEPRODUCTPART) {
+    //COPY_BUF(buf,product_key,ptr);
+    COPY_BUF(buf,product_key,ptr);
+  }
+  if (txn_type == PPS_UPDATEPART) {
+    //COPY_BUF(buf,product_key,ptr);
+    COPY_BUF(buf,part_key,ptr);
+  }
+
+  size_t size = part_keys.size();
+  COPY_BUF(buf,size,ptr);
+  for(uint64_t i = 0; i < part_keys.size(); i++) {
+    uint64_t item = part_keys[i];
+    COPY_BUF(buf,item,ptr);
+  }
+
+ assert(ptr == get_size());
+
+}
+
+#endif // #if WORKLOAD == PPS
 /************************/
 
 void ClientQueryMessage::init() {
@@ -1379,390 +1764,5 @@ void YCSBQueryMessage::copy_to_buf(char * buf) {
     COPY_BUF(buf,*req,ptr);
   }
  assert(ptr == get_size());
-}
-/************************/
-
-void TPCCQueryMessage::init() {
-}
-
-void TPCCQueryMessage::release() {
-  QueryMessage::release();
-  // Freeing items is the responsibility of txn
-  /*
-  for(uint64_t i = 0; i < items.size(); i++) {
-    DEBUG_M("TPCCQueryMessage::release item free\n");
-    mem_allocator.free(items[i],sizeof(Item_no));
-  }
-  */
-  items.release();
-}
-
-uint64_t TPCCQueryMessage::get_size() {
-  uint64_t size = QueryMessage::get_size();
-
-  size += sizeof(uint64_t); //txn_type
-  size += sizeof(uint64_t); //state
-  size += sizeof(uint64_t) * 3; // w_id, d_id, c_id
-
-  // Payment
-  if(txn_type == TPCC_PAYMENT) {
-  
-    size += sizeof(uint64_t) * 4; // d_w_id, c_w_id, c_d_id;, h_amount
-    size += sizeof(char) * LASTNAME_LEN; // c_last[LASTNAME_LEN]
-    size += sizeof(bool); // by_last_name
-
-  }
-
-  // New Order
-  if(txn_type == TPCC_NEW_ORDER) {
-    size += sizeof(uint64_t) * 2; // ol_cnt, o_entry_d,
-    size += sizeof(bool) * 2; // rbk, remote
-    size += sizeof(Item_no) * items.size();
-    size += sizeof(uint64_t); // items size
-  }
-
-  return size;
-}
-
-void TPCCQueryMessage::copy_from_txn(TxnManager * txn) {
-  QueryMessage::copy_from_txn(txn);
-  TPCCQuery* tpcc_query = (TPCCQuery*)(txn->query);
-  
-  txn_type = tpcc_query->txn_type;
-  state = (uint64_t)((TPCCTxnManager*)txn)->state;
-	// common txn input for both payment & new-order
-  w_id = tpcc_query->w_id;
-  d_id = tpcc_query->d_id;
-  c_id = tpcc_query->c_id;
-
-  // payment
-  if(txn_type == TPCC_PAYMENT) {
-    d_w_id = tpcc_query->d_w_id;
-    c_w_id = tpcc_query->c_w_id;
-    c_d_id = tpcc_query->c_d_id;
-    strcpy(c_last,tpcc_query->c_last);
-    h_amount = tpcc_query->h_amount;
-    by_last_name = tpcc_query->by_last_name;
-  }
-
-  // new order
-  //items.copy(tpcc_query->items);
-  if(txn_type == TPCC_NEW_ORDER) {
-    ((TPCCTxnManager*)txn)->copy_remote_items(this);
-    rbk = tpcc_query->rbk;
-    remote = tpcc_query->remote;
-    ol_cnt = tpcc_query->ol_cnt;
-    o_entry_d = tpcc_query->o_entry_d;
-  }
-
-}
-
-void TPCCQueryMessage::copy_to_txn(TxnManager * txn) {
-  QueryMessage::copy_to_txn(txn);
-
-  TPCCQuery* tpcc_query = (TPCCQuery*)(txn->query);
-
-  tpcc_query->txn_type = (TPCCTxnType)txn_type;
-  ((TPCCTxnManager*)txn)->state = (TPCCRemTxnType)state;
-	// common txn input for both payment & new-order
-  tpcc_query->w_id = w_id;
-  tpcc_query->d_id = d_id;
-  tpcc_query->c_id = c_id;
-
-  // payment
-  if(txn_type == TPCC_PAYMENT) {
-    tpcc_query->d_w_id = d_w_id;
-    tpcc_query->c_w_id = c_w_id;
-    tpcc_query->c_d_id = c_d_id;
-    strcpy(tpcc_query->c_last,c_last);
-    tpcc_query->h_amount = h_amount;
-    tpcc_query->by_last_name = by_last_name;
-  }
-
-  // new order
-  if(txn_type == TPCC_NEW_ORDER) {
-    tpcc_query->items.append(items);
-    tpcc_query->rbk = rbk;
-    tpcc_query->remote = remote;
-    tpcc_query->ol_cnt = ol_cnt;
-    tpcc_query->o_entry_d = o_entry_d;
-  }
-
-
-}
-
-
-void TPCCQueryMessage::copy_from_buf(char * buf) {
-  QueryMessage::copy_from_buf(buf);
-  uint64_t ptr = QueryMessage::get_size();
-
-  COPY_VAL(txn_type,buf,ptr); 
-  assert(txn_type == TPCC_PAYMENT || txn_type == TPCC_NEW_ORDER);
-  COPY_VAL(state,buf,ptr); 
-	// common txn input for both payment & new-order
-  COPY_VAL(w_id,buf,ptr);
-  COPY_VAL(d_id,buf,ptr);
-  COPY_VAL(c_id,buf,ptr);
-
-  // payment
-  if(txn_type == TPCC_PAYMENT) {
-    COPY_VAL(d_w_id,buf,ptr);
-    COPY_VAL(c_w_id,buf,ptr);
-    COPY_VAL(c_d_id,buf,ptr);
-    COPY_VAL(c_last,buf,ptr);
-    COPY_VAL(h_amount,buf,ptr);
-    COPY_VAL(by_last_name,buf,ptr);
-  }
-
-  // new order
-  if(txn_type == TPCC_NEW_ORDER) {
-    size_t size;
-    COPY_VAL(size,buf,ptr);
-    items.init(size);
-    for(uint64_t i = 0 ; i < size;i++) {
-      DEBUG_M("TPCCQueryMessage::copy item alloc\n");
-      Item_no * item = (Item_no*)mem_allocator.alloc(sizeof(Item_no));
-      COPY_VAL(*item,buf,ptr);
-      items.add(item);
-    }
-
-    COPY_VAL(rbk,buf,ptr);
-    COPY_VAL(remote,buf,ptr);
-    COPY_VAL(ol_cnt,buf,ptr);
-    COPY_VAL(o_entry_d,buf,ptr);
-  }
-
- assert(ptr == get_size());
-
-}
-
-void TPCCQueryMessage::copy_to_buf(char * buf) {
-  QueryMessage::copy_to_buf(buf);
-  uint64_t ptr = QueryMessage::get_size();
-
-  COPY_BUF(buf,txn_type,ptr); 
-  COPY_BUF(buf,state,ptr); 
-	// common txn input for both payment & new-order
-  COPY_BUF(buf,w_id,ptr);
-  COPY_BUF(buf,d_id,ptr);
-  COPY_BUF(buf,c_id,ptr);
-
-  // payment
-  if(txn_type == TPCC_PAYMENT) {
-    COPY_BUF(buf,d_w_id,ptr);
-    COPY_BUF(buf,c_w_id,ptr);
-    COPY_BUF(buf,c_d_id,ptr);
-    COPY_BUF(buf,c_last,ptr);
-    COPY_BUF(buf,h_amount,ptr);
-    COPY_BUF(buf,by_last_name,ptr);
-  }
-
-  if(txn_type == TPCC_NEW_ORDER) {
-    size_t size = items.size();
-    COPY_BUF(buf,size,ptr);
-    for(uint64_t i = 0; i < items.size(); i++) {
-      Item_no * item = items[i];
-      COPY_BUF(buf,*item,ptr);
-    }
-
-    COPY_BUF(buf,rbk,ptr);
-    COPY_BUF(buf,remote,ptr);
-    COPY_BUF(buf,ol_cnt,ptr);
-    COPY_BUF(buf,o_entry_d,ptr);
-  }
- assert(ptr == get_size());
-
-}
-/************************/
-
-void PPSQueryMessage::init() {
-}
-
-void PPSQueryMessage::release() {
-  QueryMessage::release();
-}
-
-uint64_t PPSQueryMessage::get_size() {
-  uint64_t size = QueryMessage::get_size();
-
-  size += sizeof(uint64_t); // txn_type
-  size += sizeof(uint64_t); // state
-  size += sizeof(uint64_t); // part/product/supply key 
-  size += sizeof(size_t);
-  size += sizeof(uint64_t) * part_keys.size();
-  return size;
-}
-
-void PPSQueryMessage::copy_from_txn(TxnManager * txn) {
-  QueryMessage::copy_from_txn(txn);
-  PPSQuery* pps_query = (PPSQuery*)(txn->query);
-  
-  txn_type = pps_query->txn_type;
-  state = (uint64_t)((PPSTxnManager*)txn)->state;
-
-  if (txn_type == PPS_GETPART) {
-    part_key = pps_query->part_key;
-  }
-  if (txn_type == PPS_GETPRODUCT) {
-    product_key = pps_query->product_key;
-  }
-  if (txn_type == PPS_GETSUPPLIER) {
-    supplier_key = pps_query->supplier_key;
-  }
-  if (txn_type == PPS_GETPARTBYPRODUCT) {
-    //product_key = pps_query->product_key;
-    part_key = pps_query->part_key;
-  }
-  if (txn_type == PPS_GETPARTBYSUPPLIER) {
-    //supplier_key = pps_query->supplier_key;
-    part_key = pps_query->part_key;
-  }
-  if (txn_type == PPS_ORDERPRODUCT) {
-      part_key = pps_query->part_key;
-  }
-  if (txn_type == PPS_UPDATEPRODUCTPART) {
-      product_key = pps_query->product_key;
-  }
-  if (txn_type == PPS_UPDATEPART) {
-      part_key = pps_query->part_key;
-  }
-
-  part_keys.copy(pps_query->part_keys);
-
-}
-
-void PPSQueryMessage::copy_to_txn(TxnManager * txn) {
-  QueryMessage::copy_to_txn(txn);
-
-  PPSQuery* pps_query = (PPSQuery*)(txn->query);
-
-  pps_query->txn_type = (PPSTxnType)txn_type;
-  ((PPSTxnManager*)txn)->state = (PPSRemTxnType)state;
-
-  if (txn_type == PPS_GETPART) {
-    pps_query->part_key = part_key;
-  }
-  if (txn_type == PPS_GETPRODUCT) {
-    pps_query->product_key = product_key;
-  }
-  if (txn_type == PPS_GETSUPPLIER) {
-    pps_query->supplier_key = supplier_key;
-  }
-  if (txn_type == PPS_GETPARTBYPRODUCT) {
-    //pps_query->product_key = product_key;
-    pps_query->part_key = part_key;
-  }
-  if (txn_type == PPS_GETPARTBYSUPPLIER) {
-    //pps_query->supplier_key = supplier_key;
-    pps_query->part_key = part_key;
-  }
-  if (txn_type == PPS_ORDERPRODUCT) {
-    //pps_query->product_key = product_key;
-    pps_query->part_key = part_key;
-  }
-  if (txn_type == PPS_UPDATEPRODUCTPART) {
-      pps_query->product_key = product_key;
-  }
-  if (txn_type == PPS_UPDATEPART) {
-      pps_query->part_key = part_key;
-  }
-  pps_query->part_keys.append(part_keys);
-
-}
-
-
-void PPSQueryMessage::copy_from_buf(char * buf) {
-  QueryMessage::copy_from_buf(buf);
-  uint64_t ptr = QueryMessage::get_size();
-
-  COPY_VAL(txn_type,buf,ptr); 
-  COPY_VAL(state,buf,ptr); 
-  if (txn_type == PPS_GETPART) {
-    COPY_VAL(part_key,buf,ptr); 
-  }
-  if (txn_type == PPS_GETPRODUCT) {
-    COPY_VAL(product_key,buf,ptr); 
-  }
-  if (txn_type == PPS_GETSUPPLIER) {
-    COPY_VAL(supplier_key,buf,ptr); 
-  }
-  if (txn_type == PPS_GETPARTBYPRODUCT) {
-    //COPY_VAL(product_key,buf,ptr); 
-    COPY_VAL(part_key,buf,ptr); 
-  }
-  if (txn_type == PPS_GETPARTBYSUPPLIER) {
-    //COPY_VAL(supplier_key,buf,ptr); 
-    COPY_VAL(part_key,buf,ptr); 
-  }
-  if (txn_type == PPS_ORDERPRODUCT) {
-    //COPY_VAL(product_key,buf,ptr); 
-    COPY_VAL(part_key,buf,ptr); 
-  }
-  if (txn_type == PPS_UPDATEPRODUCTPART) {
-      COPY_VAL(product_key,buf,ptr);
-  }
-  if (txn_type == PPS_UPDATEPART) {
-      COPY_VAL(part_key,buf,ptr);
-  }
-
-  size_t size;
-  COPY_VAL(size,buf,ptr);
-  part_keys.init(size);
-  for(uint64_t i = 0 ; i < size;i++) {
-    uint64_t item;
-    COPY_VAL(item,buf,ptr);
-    part_keys.add(item);
-  }
-
- assert(ptr == get_size());
-
-}
-
-void PPSQueryMessage::copy_to_buf(char * buf) {
-  QueryMessage::copy_to_buf(buf);
-  uint64_t ptr = QueryMessage::get_size();
-
-  COPY_BUF(buf,txn_type,ptr); 
-  COPY_BUF(buf,state,ptr); 
-
-  if (txn_type == PPS_GETPART) {
-    COPY_BUF(buf,part_key,ptr); 
-  }
-  if (txn_type == PPS_GETPRODUCT) {
-    COPY_BUF(buf,product_key,ptr); 
-  }
-  if (txn_type == PPS_GETSUPPLIER) {
-    COPY_BUF(buf,supplier_key,ptr); 
-  }
-  if (txn_type == PPS_GETPARTBYPRODUCT) {
-    //COPY_BUF(buf,product_key,ptr); 
-    COPY_BUF(buf,part_key,ptr); 
-  }
-  if (txn_type == PPS_GETPARTBYSUPPLIER) {
-    //COPY_BUF(buf,supplier_key,ptr); 
-    COPY_BUF(buf,part_key,ptr); 
-  }
-  if (txn_type == PPS_ORDERPRODUCT) {
-    //COPY_BUF(buf,product_key,ptr); 
-    COPY_BUF(buf,part_key,ptr); 
-  }
-  if (txn_type == PPS_UPDATEPRODUCTPART) {
-    //COPY_BUF(buf,product_key,ptr);
-    COPY_BUF(buf,product_key,ptr);
-  }
-  if (txn_type == PPS_UPDATEPART) {
-    //COPY_BUF(buf,product_key,ptr);
-    COPY_BUF(buf,part_key,ptr);
-  }
-
-  size_t size = part_keys.size();
-  COPY_BUF(buf,size,ptr);
-  for(uint64_t i = 0; i < part_keys.size(); i++) {
-    uint64_t item = part_keys[i];
-    COPY_BUF(buf,item,ptr);
-  }
-
- assert(ptr == get_size());
-
 }
 

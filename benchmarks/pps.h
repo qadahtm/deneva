@@ -17,6 +17,7 @@
 #ifndef _PPS_H_
 #define _PPS_H_
 
+#if WORKLOAD == PPS
 #include "wl.h"
 #include "txn.h"
 #include "query.h"
@@ -170,4 +171,5 @@ inline RC run_updatepart_0(uint64_t part_key, row_t *& r_local);
 inline RC run_updatepart_1(row_t *& r_local);
 };
 
+#endif // #if WORKLOAD == PPS
 #endif

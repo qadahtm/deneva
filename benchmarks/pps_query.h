@@ -17,6 +17,7 @@
 #ifndef _PPSQUERY_H_
 #define _PPSQUERY_H_
 
+#if WORKLOAD == PPS
 #include "global.h"
 #include "helper.h"
 #include "query.h"
@@ -76,4 +77,5 @@ public:
 
 };
 
+#endif // #if WORKLOAD == PPS
 #endif

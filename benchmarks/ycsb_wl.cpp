@@ -32,6 +32,8 @@
 #include "query.h"
 #include "lads.h"
 
+#if WORKLOAD == YCSB
+
 int YCSBWorkload::next_tid;
 
 RC YCSBWorkload::init() {
@@ -249,3 +251,4 @@ RC YCSBWorkload::get_txn_man(TxnManager *& txn_manager){
 	return RCOK;
 }
 
+#endif // #if WORKLOAD == YCSB

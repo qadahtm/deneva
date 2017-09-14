@@ -22,9 +22,13 @@
 #include "array.h"
 
 class Workload;
+#if WORKLOAD == YCSB
 class YCSBQuery;
+#elif WORKLOAD == TPCC
 class TPCCQuery;
+#elif WORKLOAD == PPS
 class PPSQuery;
+#endif
 
 class BaseQuery {
 public:

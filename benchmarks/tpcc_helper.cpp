@@ -15,7 +15,7 @@
 */
 
 #include "tpcc_helper.h"
-
+#if WORKLOAD == TPCC
 uint64_t distKey(uint64_t d_id, uint64_t d_w_id)  {
 	return d_w_id * g_dist_per_wh + d_id; 
 }
@@ -162,3 +162,4 @@ uint64_t wh_to_part(uint64_t wid) {
 	assert(g_part_cnt <= g_num_wh);
 	return (wid-1) % g_part_cnt ;
 }
+#endif //WORKLOAD == TPCC

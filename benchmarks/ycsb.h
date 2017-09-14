@@ -22,6 +22,8 @@
 #include "global.h"
 #include "helper.h"
 
+#if WORKLOAD == YCSB
+
 class YCSBQuery;
 
 class YCSBQueryMessage;
@@ -115,5 +117,7 @@ private:
     YCSBRemTxnType state;
     uint64_t next_record_id;
 };
+
+#endif // #if WORKLOAD == YCSB
 
 #endif

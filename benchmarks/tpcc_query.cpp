@@ -23,6 +23,7 @@
 #include "table.h"
 #include "message.h"
 
+#if WORKLOAD == TPCC
 BaseQuery * TPCCQueryGenerator::create_query(Workload * h_wl,uint64_t home_partition_id) {
   double x = (double)(rand() % 100) / 100.0;
 	if (x < g_perc_payment)
@@ -168,13 +169,14 @@ BaseQuery * TPCCQueryGenerator::gen_payment(uint64_t home_partition) {
 	double x = (double)(rand() % 10000) / 10000;
 	int y = URand(1, 100);
 
-	//if(x > g_mpr) { 
-	if(x > 0.15) { 
+	if(x >= g_mpr) {
+//	if(x > 0.15) {
 		// home warehouse
 		query->c_d_id = query->d_id;
 		query->c_w_id = query->w_id;
 	} else {	
 		// remote warehouse
+        M_ASSERT_V(false, "x = %f, g_mpr = %f\n",x, g_mpr);
 		query->c_d_id = URand(1, g_dist_per_wh);
 		if(g_num_wh > 1) {
 			while((query->c_w_id = URand(1, g_num_wh)) == query->w_id) {}
@@ -202,63 +204,81 @@ BaseQuery * TPCCQueryGenerator::gen_payment(uint64_t home_partition) {
 }
 
 BaseQuery * TPCCQueryGenerator::gen_new_order(uint64_t home_partition) {
-  TPCCQuery * query = new TPCCQuery;
-	set<uint64_t> partitions_accessed;
+    TPCCQuery * query = new TPCCQuery;
+    set<uint64_t> partitions_accessed;
 
-	query->txn_type = TPCC_NEW_ORDER;
-  query->items.init(g_max_items_per_txn);
-	if (FIRST_PART_LOCAL) {
-    while(wh_to_part(query->w_id = URand(1, g_num_wh)) != home_partition) {}
-  }
-	else
-		query->w_id = URand(1, g_num_wh);
+    query->txn_type = TPCC_NEW_ORDER;
+    query->items.init(g_max_items_per_txn);
+    if (FIRST_PART_LOCAL) {
+        while(wh_to_part(query->w_id = URand(1, g_num_wh)) != home_partition) {}
+    }
+    else
+        query->w_id = URand(1, g_num_wh);
 
-	query->d_id = URand(1, g_dist_per_wh);
-	query->c_id = NURand(1023, 1, g_cust_per_dist);
-  // TODO TPCC rollback
-	//rbk = URand(1, 100) == 1 ? true : false;
-	query->rbk = false;
-	query->ol_cnt = URand(5, g_max_items_per_txn);
-	query->o_entry_d = 2013;
+    query->d_id = URand(1, g_dist_per_wh);
+    query->c_id = NURand(1023, 1, g_cust_per_dist);
+    // TODO TPCC rollback
+    //rbk = URand(1, 100) == 1 ? true : false;
+    query->rbk = false;
+    query->ol_cnt = URand(5, g_max_items_per_txn);
+    query->o_entry_d = 2013;
 
-  partitions_accessed.insert(wh_to_part(query->w_id));
+    partitions_accessed.insert(wh_to_part(query->w_id));
 
-  double r_mpr = (double)(rand() % 10000) / 10000;
-  uint64_t part_limit;
-  if(r_mpr < g_mpr)
-    part_limit = g_part_per_txn;
-  else
-    part_limit = 1;
+    double r_mpr = (double)(rand() % 10000) / 10000;
+    uint64_t part_limit;
+    if(r_mpr < g_mpr)
+        part_limit = g_part_per_txn;
+    else
+        part_limit = 1;
 
-  std::set<uint64_t> ol_i_ids;
-  while(query->items.size() < query->ol_cnt) {
-      Item_no * item = new Item_no;
+    std::set<uint64_t> ol_i_ids;
+    while(query->items.size() < query->ol_cnt) {
+        Item_no * item = new Item_no;
 
-    while(ol_i_ids.count( item->ol_i_id = NURand(8191, 1, g_max_items)) > 0) {}
-    ol_i_ids.insert(item->ol_i_id);
-    item->ol_quantity = URand(1, 10);
-    double r_rem = (double)(rand() % 100000) / 100000;
-		if (r_rem > 0.01 || r_mpr > g_mpr || g_num_wh == 1) {
-			// home warehouse
-			item->ol_supply_w_id = query->w_id;
-    } else {
-      if(partitions_accessed.size() < part_limit) {
-        item->ol_supply_w_id = URand(1, g_num_wh);
-        partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
-      } else {
-        // select warehouse from among those already selected
-        while( partitions_accessed.count(wh_to_part(item->ol_supply_w_id = URand(1, g_num_wh))) == 0) {}
-      }
+        while(ol_i_ids.count( item->ol_i_id = NURand(8191, 1, g_max_items)) > 0) {}
+        ol_i_ids.insert(item->ol_i_id);
+        item->ol_quantity = URand(1, 10);
+//        double r_rem = (double)(rand() % 100000) / 100000;
+//        if (r_rem > 0.01 || r_mpr > g_mpr || g_num_wh == 1) {
+        if (r_mpr > g_mpr || g_num_wh == 1) {
+            // home warehouse
+            item->ol_supply_w_id = query->w_id;
+        } else {
+            if(partitions_accessed.size() < part_limit) {
+
+                if (STRICT_PPT){
+                    // Need to make sure that we are adding a new partition towards the limit
+                    int osize = partitions_accessed.size();
+                    item->ol_supply_w_id = URand(1, g_num_wh);
+                    partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
+                    while (osize == (int) partitions_accessed.size()){
+                        item->ol_supply_w_id = URand(1, g_num_wh);
+                        partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
+                    }
+
+                }
+                else{
+                    item->ol_supply_w_id = URand(1, g_num_wh);
+                    partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
+                }
+
+
+
+            } else {
+                // select warehouse from among those already selected
+                while( partitions_accessed.count(wh_to_part(item->ol_supply_w_id = URand(1, g_num_wh))) == 0) {}
+            }
+        }
+
+        query->items.add(item);
     }
 
-    query->items.add(item);
-  }
-
-  query->partitions.init(partitions_accessed.size());
-  for(auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
-    query->partitions.add(*it);
-  }
-  return query;
+    query->partitions.init(partitions_accessed.size());
+    for(auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
+        query->partitions.add(*it);
+    }
+    return query;
 
 }
 
@@ -330,3 +350,4 @@ void TPCCQuery::release_items() {
   }
 
 }
+#endif //WORKLOAD == TPCC

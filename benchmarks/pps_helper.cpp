@@ -15,7 +15,7 @@
 */
 
 #include "pps_helper.h"
-
+#if WORKLOAD == PPS
 uint64_t parts_to_partition(uint64_t part_key) {
 	return (part_key) % g_part_cnt ;
 }
@@ -28,11 +28,12 @@ uint64_t suppliers_to_partition(uint64_t supplier_key) {
 	return (supplier_key) % g_part_cnt ;
 }
 
-/*
+
 uint64_t URand(uint64_t x, uint64_t y) {
     return x + RAND(y - x + 1);
 }
 uint64_t RAND(uint64_t max) {
 	return rand() % max;
 }
-*/
+
+#endif

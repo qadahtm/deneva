@@ -17,6 +17,7 @@
 #ifndef _PPS_HELPER_H_
 #define _PPS_HELPER_H_
 
+#if WORKLOAD == PPS
 #include "global.h"
 #include "helper.h"
 #include "tpcc_helper.h"
@@ -40,11 +41,11 @@ uint64_t parts_to_partition(uint64_t part_key);
 uint64_t products_to_partition(uint64_t product_key); 
 uint64_t suppliers_to_partition(uint64_t supplier_key); 
 
-/*
+
 // return random data from [0, max-1]
 uint64_t RAND(uint64_t max);
 // random number from [x, y]
 uint64_t URand(uint64_t x, uint64_t y);
-*/
 
+#endif // #if WORKLOAD == PPS
 #endif

@@ -95,10 +95,14 @@ def build_project():
     exec_cmd(cmd, env)
 
 def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, prefix):
-    if not server_only:
-#         clcmd = "ssh {:s} 'cd {}; ./runcl -nid1 > {}/results/pyscript/{}_{}_t{}_{}.txt'"
-        clcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./runcl -nid1 > {}/{}{}_{}_t{}_{}.txt'"
-    dbcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./rundb -nid0 > {}/{}{}_{}_t{}_{}_{}.txt'"
+    if is_azure:
+        dbcmd = "ssh -i '~/.ssh/msa_id_rsa' qadahtm@{:s} 'cd {}; ./rundb -nid0 > {}/{}{}_{}_t{}_{}_{}.txt'" #Azure
+    else:
+        if not server_only:
+    #         clcmd = "ssh {:s} 'cd {}; ./runcl -nid1 > {}/results/pyscript/{}_{}_t{}_{}.txt'"
+            clcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./runcl -nid1 > {}/{}{}_{}_t{}_{}.txt'"
+        dbcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./rundb -nid0 > {}/{}{}_{}_t{}_{}_{}.txt'" # AWS setup
+    
     for i in range(ip_cnt):
         #run processes
         if (i < S_NODE_CNT):
@@ -273,9 +277,9 @@ num_trials = 2;
 # cc_algs = ['QUECC', 'WAIT_DIE', 'TIMESTAMP', 'MVCC']
 # cc_algs = ['QUECC','HSTORE']
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
-cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
+# cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
 # cc_algs = ['OCC']
-# cc_algs = ['QUECC']
+cc_algs = ['QUECC', "NO_WAIT"]
 # cc_algs = ['LADS']
 # cc_algs = ['HSTORE']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
@@ -287,7 +291,8 @@ cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 
 # wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
 # wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
-wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
+# wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
+wthreads = [4,8,16]
 # wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
@@ -305,9 +310,9 @@ pt_perc = [0.5]
 # et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
 strict = [True, False]
 et_sync = ['AFTER_BATCH_COMP']
-# zipftheta = [0.0]
+zipftheta = [0.0]
 # zipftheta = [0.9]
-zipftheta = [0.99, 0.0]
+# zipftheta = [0.99, 0.0]
 # zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
 # parts_accessed = [1,2,4,8,16,24,32]
 # parts_accessed = [1,32]
@@ -337,6 +342,9 @@ exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
 exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
 
 is_azure = False
+
+# if is_azure:
+#     exec_cmd('az login', env)
 
 for ncc_alg in cc_algs:
     for wthd in wthreads:
@@ -393,9 +401,9 @@ for ncc_alg in cc_algs:
                                             nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
                                         else:
                                             nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
-                                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                                    # print('Dry run: {}, {}, {}, t{}, {}'
-                                    #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                    # run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                    print('Dry run: {}, {}, {}, t{}, {}'
+                                        .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
                                     seq_no = seq_no + 1
                                 cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
                                 cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
@@ -406,7 +414,7 @@ eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
 send_email(subject, '')
-# if is_azure:
-    # exec_cmd('az vm deallocate -g quecc -n quecc', env)
-# else:
-exec_cmd('sudo shutdown -h now', env)
+if is_azure:
+    exec_cmd('az vm deallocate -g quecc -n quecc', env)
+else:
+    exec_cmd('sudo shutdown -h now', env)

@@ -17,6 +17,8 @@
 #ifndef _TPCCQuery_H_
 #define _TPCCQuery_H_
 
+#if WORKLOAD == TPCC
+
 #include "global.h"
 #include "helper.h"
 #include "query.h"
@@ -106,4 +108,5 @@ public:
 
 };
 
+#endif //WORKLOAD == TPCC
 #endif

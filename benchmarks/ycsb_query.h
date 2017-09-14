@@ -22,6 +22,7 @@
 #include "query.h"
 #include "array.h"
 
+#if WORKLOAD == YCSB
 class Workload;
 class Message;
 class YCSBQueryMessage;
@@ -115,4 +116,5 @@ public:
 
 };
 
+#endif // #if WORKLOAD == YCSB
 #endif

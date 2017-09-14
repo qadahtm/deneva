@@ -14,6 +14,7 @@
    limitations under the License.
 */
 
+
 #include "pps.h"
 #include "pps_query.h"
 #include "pps_helper.h"
@@ -27,6 +28,8 @@
 #include "transport.h"
 #include "msg_queue.h"
 #include "message.h"
+
+#if WORKLOAD == PPS
 
 void PPSTxnManager::init(uint64_t thd_id, Workload * h_wl) {
     TxnManager::init(thd_id, h_wl);
@@ -1293,4 +1296,4 @@ RC PPSTxnManager::run_pps_phase5() {
   return rc;
 
 }
-
+#endif // #if WORKLOAD == PPS

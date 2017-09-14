@@ -14,6 +14,7 @@
    limitations under the License.
 */
 
+
 #include "global.h"
 #include "helper.h"
 #include "pps.h"
@@ -27,6 +28,8 @@
 #include "query.h"
 #include "txn.h"
 #include "mem_alloc.h"
+
+#if WORKLOAD == PPS
 
 RC PPSWorkload::init() {
 	Workload::init();
@@ -285,3 +288,4 @@ void * PPSWorkload::threadInitUses(void * This) {
 	return NULL;
 }
 
+#endif //#if WORKLOAD == PPS

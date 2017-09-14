@@ -27,6 +27,7 @@
 #include "tpcc_const.h"
 #include "table.h"
 
+#if WORKLOAD == TPCC
 class TPCCQuery;
 class TPCCQueryMessage;
 struct Item_no;
@@ -575,7 +576,8 @@ public:
 
         return RCOK;
     };
-#endif
+
+#endif // End of CC_ALG == QUECC
 
 private:
     TPCCWorkload * _wl;
@@ -618,5 +620,7 @@ private:
     RC run_delivery(TPCCQuery * query);
     RC run_stock_level(TPCCQuery * query);
 };
+
+#endif //WORKLOAD == TPCC
 
 #endif

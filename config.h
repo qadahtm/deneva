@@ -44,8 +44,8 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-//#define WORKLOAD YCSB
-#define WORKLOAD TPCC
+#define WORKLOAD YCSB
+//#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -113,7 +113,6 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-//#define CC_ALG NO_WAIT
 #define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
@@ -290,7 +289,7 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN 1
+#define PART_PER_TXN 1//PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
@@ -314,9 +313,9 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH 24//PART_CNT
+#define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
-#define MPR 1.0
+#define MPR 0.0 // used for TPCC
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -488,8 +487,8 @@ enum PPSTxnType {PPS_ALL = 0,
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 #define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 60 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 30 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 30 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

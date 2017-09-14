@@ -29,6 +29,7 @@
 #include "msg_queue.h"
 #include "message.h"
 
+#if WORKLOAD == TPCC
 void TPCCTxnManager::init(uint64_t thd_id, Workload * h_wl) {
 	TxnManager::init(thd_id, h_wl);
 	_wl = (TPCCWorkload *) h_wl;
@@ -981,8 +982,74 @@ RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 
 RC TPCCTxnManager::run_hstore_txn() {
     RC rc = RCOK;
-    // not implemented yet
-    assert(false);
+    assert(CC_ALG == HSTORE);
+    TPCCQuery * tpcc_query = (TPCCQuery *) query;
+
+    uint64_t w_id = tpcc_query->w_id;
+    uint64_t d_id = tpcc_query->d_id;
+    uint64_t c_id = tpcc_query->c_id;
+    uint64_t d_w_id = tpcc_query->d_w_id;
+    uint64_t c_w_id = tpcc_query->c_w_id;
+    uint64_t c_d_id = tpcc_query->c_d_id;
+    char * c_last = tpcc_query->c_last;
+    double h_amount = tpcc_query->h_amount;
+    bool by_last_name = tpcc_query->by_last_name;
+    bool remote = tpcc_query->remote;
+    uint64_t ol_cnt = tpcc_query->ol_cnt;
+    uint64_t o_entry_d = tpcc_query->o_entry_d;
+
+//    uint64_t part_id_c_w = wh_to_part(c_w_id);
+    query->partitions_touched.add_unique(wh_to_part(w_id));
+    query->partitions_touched.add_unique(wh_to_part(c_w_id));
+//    bool w_loc = GET_NODE_ID(part_id_w) == g_node_id;
+    //bool c_w_loc = GET_NODE_ID(part_id_c_w) == g_node_id;
+
+    switch (tpcc_query->txn_type){
+        case TPCC_PAYMENT:
+
+            rc = run_payment_0(w_id, d_id, d_w_id, h_amount, row);
+            rc = run_payment_1(w_id, d_id, d_w_id, h_amount, row);
+            rc = run_payment_2(w_id, d_id, d_w_id, h_amount, row);
+            rc = run_payment_3(w_id, d_id, d_w_id, h_amount, row);
+            rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
+            rc = run_payment_5( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
+
+            rc = Commit;
+            break;
+        case TPCC_NEW_ORDER:
+            rc = new_order_0( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+            rc = new_order_1( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+            rc = new_order_2( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+            rc = new_order_3( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+            rc = new_order_4( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+            tpcc_query->o_id = *(int64_t *) row->get_value(D_NEXT_O_ID);
+            rc = new_order_5( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+
+            for(uint64_t i = 0; i < tpcc_query->ol_cnt; i++) {
+
+                uint64_t ol_number = i;
+                uint64_t ol_i_id = tpcc_query->items[ol_number]->ol_i_id;
+                uint64_t ol_supply_w_id = tpcc_query->items[ol_number]->ol_supply_w_id;
+                uint64_t ol_quantity = tpcc_query->items[ol_number]->ol_quantity;
+                uint64_t ol_amount = tpcc_query->ol_amount;
+//                uint64_t part_id_ol_supply_w = wh_to_part(ol_supply_w_id);
+//                bool ol_supply_w_loc = GET_NODE_ID(part_id_ol_supply_w) == g_node_id;
+//                if(ol_supply_w_loc) {
+                    rc = new_order_6(ol_i_id, row);
+                    rc = new_order_7(ol_i_id, row);
+                    rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, tpcc_query->o_id, row);
+                    rc = new_order_9( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, ol_amount, tpcc_query->o_id, row);
+//                }
+            }
+            // Should we always commit??
+            rc = Commit;
+            break;
+        default:
+            assert(false);
+    }
+
+    release_locks(RCOK);
+    commit_stats();
     return rc;
 }
 
@@ -1002,7 +1069,7 @@ RC TPCCTxnManager::run_calvin_txn() {
   RC rc = RCOK;
   uint64_t starttime = get_sys_clock();
   TPCCQuery* tpcc_query = (TPCCQuery*) query;
-  DEBUG("(%ld,%ld) Run calvin txn\n",txn->txn_id,txn->batch_id);
+  DEBUG_Q("(%ld,%ld) Run calvin txn, tpcc type = %d\n",txn->txn_id,txn->batch_id, tpcc_query->txn_type);
   while(!calvin_exec_phase_done() && rc == RCOK) {
     DEBUG("(%ld,%ld) phase %d\n",txn->txn_id,txn->batch_id,this->phase);
     switch(this->phase) {
@@ -1120,7 +1187,9 @@ RC TPCCTxnManager::run_tpcc_phase2() {
           }
         }
         break;
-    default: assert(false);
+    default:
+        M_ASSERT_V(false, "txn type = %d\n", tpcc_query->txn_type);
+//        assert(false);
   }
   return rc;
 }
@@ -1189,3 +1258,4 @@ RC TPCCTxnManager::run_tpcc_phase5() {
 
 }
 
+#endif //WORKLOAD == TPCC

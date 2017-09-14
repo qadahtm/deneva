@@ -276,7 +276,7 @@ public:
   Array<ycsb_request*> requests;
 
 };
-
+#if WORKLOAD == TPCC
 class TPCCClientQueryMessage : public ClientQueryMessage {
 public:
   void copy_from_buf(char * buf);
@@ -310,6 +310,7 @@ public:
   uint64_t o_entry_d;
 
 };
+#endif //WORKLOAD == TPCC
 
 class PPSClientQueryMessage : public ClientQueryMessage {
 public:

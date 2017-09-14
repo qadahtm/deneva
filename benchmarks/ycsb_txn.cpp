@@ -34,6 +34,7 @@
 #include "msg_queue.h"
 #include "message.h"
 
+#if WORKLOAD == YCSB
 void YCSBTxnManager::init(uint64_t thd_id, Workload *h_wl) {
     TxnManager::init(thd_id, h_wl);
     _wl = (YCSBWorkload *) h_wl;
@@ -105,6 +106,7 @@ RC YCSBTxnManager::run_hstore_txn(){
         assert(rc == RCOK);
     }
 
+    release_locks(RCOK);
     commit_stats();
     // we always commit in YCSB
     return Commit;
@@ -481,3 +483,4 @@ RC YCSBTxnManager::run_ycsb() {
 
 }
 
+#endif // #if WORKLOAD == YCSB

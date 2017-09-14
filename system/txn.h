@@ -31,9 +31,14 @@ class row_t;
 class table_t;
 class BaseQuery;
 class INDEX;
-class TxnQEntry; 
+class TxnQEntry;
+#if WORKLOAD == YCSB
 class YCSBQuery;
+#elif WORKLOAD == TPCC
 class TPCCQuery;
+#elif WORKLOAD == PPS
+class PPSQuery;
+#endif
 //class gdgcc::Action;
 //class r_query;
 

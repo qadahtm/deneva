@@ -29,6 +29,7 @@
 #include "mem_alloc.h"
 #include "tpcc_const.h"
 
+#if WORKLOAD == TPCC
 RC TPCCWorkload::init() {
     Workload::init();
     //char * cpath = getenv("GRAPHITE_HOME");
@@ -641,5 +642,5 @@ void *TPCCWorkload::threadInitOrder(void *This) {
     return NULL;
 }
 
-
+#endif //WORKLOAD == TPCC
 

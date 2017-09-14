@@ -23,6 +23,7 @@
 #include "table.h"
 #include "message.h"
 
+#if WORKLOAD == PPS
 BaseQuery * PPSQueryGenerator::create_query(Workload * h_wl,uint64_t home_partition_id) {
   double x = (double)(rand() % 100) / 100.0;
   if (x < g_perc_getparts) {
@@ -498,3 +499,4 @@ void PPSQuery::release() {
   DEBUG_M("PPSQuery::release() free\n");
 }
 
+#endif

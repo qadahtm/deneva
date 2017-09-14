@@ -117,16 +117,15 @@ int main(int argc, char* argv[])
     printf("Done\n");
 
     Workload * m_wl;
-	switch (WORKLOAD) {
-		case YCSB :
-			m_wl = new YCSBWorkload; break;
-		case TPCC :
-			m_wl = new TPCCWorkload; break;
-		case PPS :
-			m_wl = new PPSWorkload; break;
-		default:
-			assert(false);
-	}
+#if WORKLOAD == YCSB
+    m_wl = new YCSBWorkload;
+#elif WORKLOAD == TPCC
+    m_wl = new TPCCWorkload;
+#elif WORKLOAD == PPS
+    m_wl = new PPSWorkload;
+#else
+    assert(false);
+#endif
 	m_wl->init();
 	printf("Workload initialized!\n");
   fflush(stdout);
