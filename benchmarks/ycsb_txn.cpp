@@ -468,11 +468,13 @@ RC YCSBTxnManager::run_ycsb() {
             continue;
 
         uint64_t part_id = _wl->key_to_part(req->key);
+        query->partitions_touched.add_unique(part_id);
+//        DEBUG_Q("WT_%ld : accessing part %ld\n", get_thd_id(),part_id);
+#if !SINGLE_NODE
         bool loc = GET_NODE_ID(part_id) == g_node_id;
-
         if (!loc)
             continue;
-
+#endif
         rc = run_ycsb_0(req, row);
         assert(rc == RCOK);
 

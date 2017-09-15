@@ -89,10 +89,10 @@
 /***********************************************/
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
-#define SET_AFFINITY true
+#define SET_AFFINITY false
+#define SET_AFFINITY_AFTER_INIT true
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
-#define SET_AFFINITY true
 
 #define MAX_TPORT_NAME 128
 #define MSG_SIZE 128 // in bytes
@@ -113,7 +113,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -182,7 +182,7 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define INIT_QUERY_MSGS true
+#define INIT_QUERY_MSGS false
 
 // Controls the batching decitions in the planning phase
 #define BATCHING_MODE SIZE_BASED
@@ -277,10 +277,10 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
 //#define SYNTH_TABLE_SIZE 1024
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -487,8 +487,8 @@ enum PPSTxnType {PPS_ALL = 0,
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 #define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 30 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 30 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

@@ -136,9 +136,9 @@ void WorkerThread::release_txn_man() {
 }
 
 void WorkerThread::calvin_wrapup() {
+    DEBUG("(%ld,%ld) calvin ack to %ld\n", txn_man->get_txn_id(), txn_man->get_batch_id(), txn_man->return_id);
     txn_man->release_locks(RCOK);
     txn_man->commit_stats();
-    DEBUG("(%ld,%ld) calvin ack to %ld\n", txn_man->get_txn_id(), txn_man->get_batch_id(), txn_man->return_id);
 #if !SINGLE_NODE
     if (txn_man->return_id == g_node_id) {
         work_queue.sequencer_enqueue(_thd_id, Message::create_message(txn_man, CALVIN_ACK));
@@ -1095,8 +1095,8 @@ RC WorkerThread::run_normal_mode() {
 #if CC_ALG != CALVIN
 #if !INIT_QUERY_MSGS
         msg->release();
+//        Message::release_message(msg);
 #endif
-
 #endif
         INC_STATS(get_thd_id(),worker_release_msg_time,get_sys_clock() - ready_starttime);
 #endif // if QueCCC

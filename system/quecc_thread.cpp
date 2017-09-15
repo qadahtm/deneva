@@ -1203,7 +1203,7 @@ RC PlannerThread::run_fixed_mode() {
                     INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - txn_prof_starttime);
 #if !INIT_QUERY_MSGS
                     // Free message, as there is no need for it anymore
-                    msg->release();
+                    Message::release_message(msg);
 #endif
                     // increment for next ransaction
                     planner_txn_id++;
@@ -2187,7 +2187,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 
 #if !INIT_QUERY_MSGS
     // Free message, as there is no need for it anymore
-                msg->release();
+    Message::release_message(msg);
 #endif
 
 }

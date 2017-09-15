@@ -43,10 +43,9 @@ public:
 #endif
 	void initQueriesParallel();
 	static void * initQueriesHelper(void * context);
-
+	uint64_t size;
 private:
 	Workload * _wl;
-	uint64_t size;
 #if INIT_QUERY_MSGS
 	std::vector<std::vector<Message*>> queries_msgs;
 #else

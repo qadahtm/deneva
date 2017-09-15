@@ -74,7 +74,7 @@ class Sequencer {
   uint64_t last_time_batch;
 	qlite_ll * wl_head;		// list of txns in batch being executed
 	qlite_ll * wl_tail;		// list of txns in batch being executed
-	volatile uint32_t next_txn_id;
+	volatile uint64_t next_txn_id;
 	Workload * _wl;
 };
 

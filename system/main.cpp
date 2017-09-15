@@ -600,6 +600,7 @@ int main(int argc, char* argv[])
 
 #else // if FIXED_MODE
 
+    DEBUG_Q("all_thd_cnt = %ld\n",all_thd_cnt);
     p_thds =
     (pthread_t *) malloc(sizeof(pthread_t) * (all_thd_cnt));
     pthread_attr_init(&attr);
@@ -656,6 +657,7 @@ int main(int argc, char* argv[])
   starttime = get_server_clock();
   simulation->run_starttime = starttime;
 #if CC_ALG != LADS
+    DEBUG_Q("creating (%ld) WTs\n",wthd_cnt);
   for (uint64_t i = 0; i < wthd_cnt; i++) {
 #if SET_AFFINITY
       CPU_ZERO(&cpus);
@@ -716,9 +718,10 @@ int main(int argc, char* argv[])
       CPU_SET(cpu_cnt, &cpus);
       pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
       cpu_cnt++;
-    #endif
-  abort_thds[0].init(id,g_node_id,m_wl);
-  pthread_create(&p_thds[id++], &attr, run_thread, (void *)&abort_thds[0]);
+#endif
+    DEBUG_Q("creating abort thread\n");
+    abort_thds[0].init(id,g_node_id,m_wl);
+    pthread_create(&p_thds[id++], &attr, run_thread, (void *)&abort_thds[0]);
     pthread_setname_np(p_thds[id-1], "aborter");
 #endif
 
@@ -828,11 +831,11 @@ int main(int argc, char* argv[])
 #endif
 
 
-#if SERVER_GENERATE_QUERIES
+#if !SERVER_GENERATE_QUERIES
     //TQ: start simulation, there is no need to wait anymore
-//    simulation->process_setup_msg();
-    simulation->set_setup_done();
+    simulation->process_setup_msg();
 #endif
+    simulation->set_setup_done();
 
 	for (uint64_t i = 0; i < all_thd_cnt ; i++) 
 		pthread_join(p_thds[i], NULL);

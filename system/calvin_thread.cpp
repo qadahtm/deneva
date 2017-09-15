@@ -55,6 +55,7 @@ RC CalvinLockThread::run() {
                 idle_starttime = get_sys_clock();
             continue;
         }
+
         if(idle_starttime > 0) {
             INC_STATS(_thd_id,sched_idle_time,get_sys_clock() - idle_starttime);
             idle_starttime = 0;

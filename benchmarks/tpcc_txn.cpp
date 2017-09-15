@@ -1069,7 +1069,7 @@ RC TPCCTxnManager::run_calvin_txn() {
   RC rc = RCOK;
   uint64_t starttime = get_sys_clock();
   TPCCQuery* tpcc_query = (TPCCQuery*) query;
-  DEBUG_Q("(%ld,%ld) Run calvin txn, tpcc type = %d\n",txn->txn_id,txn->batch_id, tpcc_query->txn_type);
+  DEBUG("(%ld,%ld) Run calvin txn, tpcc type = %d\n",txn->txn_id,txn->batch_id, tpcc_query->txn_type);
   while(!calvin_exec_phase_done() && rc == RCOK) {
     DEBUG("(%ld,%ld) phase %d\n",txn->txn_id,txn->batch_id,this->phase);
     switch(this->phase) {

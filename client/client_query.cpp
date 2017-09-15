@@ -185,7 +185,7 @@ bool Client_query_queue::done() {
 
 #if INIT_QUERY_MSGS
 Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread_id) {
-    assert(server_id < size);
+    M_ASSERT_V(server_id < size, "server_id = %ld, size = %ld\n", server_id, size);
     uint64_t query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     if (query_id > g_max_txn_per_part) {
         __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
@@ -195,6 +195,9 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
 //    Message *query = queries_msgs[server_id][query_id];
 //    server_id = 0;
     Message *query = queries_msgs[server_id][query_id];
+#if CC_ALG == CALVIN
+    M_ASSERT_V(false, "flag init query msgs = true us not supported in calvin\n");
+#endif
     M_ASSERT_V(query, "server_id=%ld, query_id=%ld\n", server_id, query_id);
     return query;
 }

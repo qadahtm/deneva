@@ -148,6 +148,9 @@ private:
   uint64_t sched_ptr;
   BaseQuery * last_sched_dq;
   uint64_t curr_epoch;
+#if SINGLE_NODE && CC_ALG == CALVIN
+    uint64_t query_seq_cnt =0;
+#endif
 
     boost::random::mt19937 * rng;         // produces randomness out of thin air
     uint32_t max_planner_index = g_plan_thread_cnt-1;

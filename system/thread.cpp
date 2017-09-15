@@ -70,6 +70,13 @@ void Thread::tsetup() {
   fflush(stdout);
 	pthread_barrier_wait( &warmup_bar );
 
+#if SET_AFFINITY_AFTER_INIT
+    cpu_set_t cpus;
+    CPU_ZERO(&cpus);
+    CPU_SET(_thd_id, &cpus);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
+#endif
+
 #if TIME_ENABLE
   run_starttime = get_sys_clock();
 #else

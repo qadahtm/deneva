@@ -284,11 +284,6 @@ void Transaction::reset(uint64_t thd_id) {
 
 void Transaction::release_accesses(uint64_t thd_id) {
     for (uint64_t i = 0; i < accesses.size(); i++) {
-#if ROLL_BACK && (CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == HSTORE || CC_ALG == HSTORE_SPEC)
-        if (accesses[i]->type == WR) {
-            row_pool.put(thd_id, accesses[i]->orig_data);
-        }
-#endif
         access_pool.put(thd_id, accesses[i]);
     }
 }
