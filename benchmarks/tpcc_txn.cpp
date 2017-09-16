@@ -1215,6 +1215,10 @@ RC TPCCTxnManager::run_tpcc_phase5() {
 
 	uint64_t part_id_w = wh_to_part(w_id);
 	uint64_t part_id_c_w = wh_to_part(c_w_id);
+
+    query->partitions_touched.add_unique(part_id_w);
+    query->partitions_touched.add_unique(part_id_c_w);
+
   bool w_loc = GET_NODE_ID(part_id_w) == g_node_id;
   bool c_w_loc = GET_NODE_ID(part_id_c_w) == g_node_id;
 

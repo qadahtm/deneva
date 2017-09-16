@@ -431,100 +431,6 @@ void QueryMessage::copy_to_buf(char * buf) {
 #endif
 }
 
-/************************/
-
-void YCSBClientQueryMessage::init() {
-}
-
-void YCSBClientQueryMessage::release() {
-  ClientQueryMessage::release();
-  // Freeing requests is the responsibility of txn at commit time
-/*
-  for(uint64_t i = 0; i < requests.size(); i++) {
-    DEBUG_M("YCSBClientQueryMessage::release ycsb_request free\n");
-    mem_allocator.free(requests[i],sizeof(ycsb_request));
-  }
-*/
-  requests.release();
-}
-
-uint64_t YCSBClientQueryMessage::get_size() {
-  uint64_t size = ClientQueryMessage::get_size();
-  size += sizeof(size_t);
-  size += sizeof(ycsb_request) * requests.size();
-  return size;
-}
-
-void YCSBClientQueryMessage::copy_from_query(BaseQuery * query) {
-  ClientQueryMessage::copy_from_query(query);
-/*
-  requests.init(g_req_per_query);
-  for(uint64_t i = 0; i < ((YCSBQuery*)(query))->requests.size(); i++) {
-      YCSBQuery::copy_request_to_msg(((YCSBQuery*)(query)),this,i);
-  }
-*/
-  requests.copy(((YCSBQuery*)(query))->requests);
-}
-
-
-void YCSBClientQueryMessage::copy_from_txn(TxnManager * txn) {
-  ClientQueryMessage::mcopy_from_txn(txn);
-/*
-  requests.init(g_req_per_query);
-  for(uint64_t i = 0; i < ((YCSBQuery*)(txn->query))->requests.size(); i++) {
-      YCSBQuery::copy_request_to_msg(((YCSBQuery*)(txn->query)),this,i);
-  }
-*/
-  requests.copy(((YCSBQuery*)(txn->query))->requests);
-}
-
-void YCSBClientQueryMessage::copy_to_txn(TxnManager * txn) {
-  // this only copies over the pointers, so if requests are freed, we'll lose the request data
-  ClientQueryMessage::copy_to_txn(txn);
-  // Copies pointers to txn
-  ((YCSBQuery*)(txn->query))->requests.append(requests);
-/*
-  for(uint64_t i = 0; i < requests.size(); i++) {
-      YCSBQuery::copy_request_to_qry(((YCSBQuery*)(txn->query)),this,i);
-  }
-*/
-}
-
-void YCSBClientQueryMessage::copy_from_buf(char * buf) {
-  ClientQueryMessage::copy_from_buf(buf);
-  uint64_t ptr = ClientQueryMessage::get_size();
-  size_t size;
-  //DEBUG("1YCSBClientQuery %ld\n",ptr);
-  COPY_VAL(size,buf,ptr);
-  requests.init(size);
-  //DEBUG("2YCSBClientQuery %ld\n",ptr);
-  for(uint64_t i = 0 ; i < size;i++) {
-    DEBUG_M("YCSBClientQueryMessage::copy ycsb_request alloc\n");
-    ycsb_request * req = (ycsb_request*)mem_allocator.alloc(sizeof(ycsb_request));
-    COPY_VAL(*req,buf,ptr);
-    //DEBUG("3YCSBClientQuery %ld\n",ptr);
-    assert(req->key < g_synth_table_size);
-    requests.add(req);
-  }
- assert(ptr == get_size());
-}
-
-void YCSBClientQueryMessage::copy_to_buf(char * buf) {
-  ClientQueryMessage::copy_to_buf(buf);
-  uint64_t ptr = ClientQueryMessage::get_size();
-  //DEBUG("1YCSBClientQuery %ld\n",ptr);
-  size_t size = requests.size();
-  COPY_BUF(buf,size,ptr);
-  //DEBUG("2YCSBClientQuery %ld\n",ptr);
-  for(uint64_t i = 0; i < requests.size(); i++) {
-    ycsb_request * req = requests[i];
-    assert(req->key < g_synth_table_size);
-    COPY_BUF(buf,*req,ptr);
-    //DEBUG("3YCSBClientQuery %ld\n",ptr);
-  }
- assert(ptr == get_size());
-}
-/************************/
 #if WORKLOAD == TPCC
 void TPCCClientQueryMessage::init() {
 }
@@ -1700,6 +1606,100 @@ void InitDoneMessage::copy_to_buf(char * buf) {
 }
 
 /************************/
+#if WORKLOAD == YCSB
+
+
+void YCSBClientQueryMessage::init() {
+}
+
+void YCSBClientQueryMessage::release() {
+  ClientQueryMessage::release();
+  // Freeing requests is the responsibility of txn at commit time
+/*
+  for(uint64_t i = 0; i < requests.size(); i++) {
+    DEBUG_M("YCSBClientQueryMessage::release ycsb_request free\n");
+    mem_allocator.free(requests[i],sizeof(ycsb_request));
+  }
+*/
+  requests.release();
+}
+
+uint64_t YCSBClientQueryMessage::get_size() {
+  uint64_t size = ClientQueryMessage::get_size();
+  size += sizeof(size_t);
+  size += sizeof(ycsb_request) * requests.size();
+  return size;
+}
+
+void YCSBClientQueryMessage::copy_from_query(BaseQuery * query) {
+  ClientQueryMessage::copy_from_query(query);
+/*
+  requests.init(g_req_per_query);
+  for(uint64_t i = 0; i < ((YCSBQuery*)(query))->requests.size(); i++) {
+      YCSBQuery::copy_request_to_msg(((YCSBQuery*)(query)),this,i);
+  }
+*/
+  requests.copy(((YCSBQuery*)(query))->requests);
+}
+
+
+void YCSBClientQueryMessage::copy_from_txn(TxnManager * txn) {
+  ClientQueryMessage::mcopy_from_txn(txn);
+/*
+  requests.init(g_req_per_query);
+  for(uint64_t i = 0; i < ((YCSBQuery*)(txn->query))->requests.size(); i++) {
+      YCSBQuery::copy_request_to_msg(((YCSBQuery*)(txn->query)),this,i);
+  }
+*/
+  requests.copy(((YCSBQuery*)(txn->query))->requests);
+}
+
+void YCSBClientQueryMessage::copy_to_txn(TxnManager * txn) {
+  // this only copies over the pointers, so if requests are freed, we'll lose the request data
+  ClientQueryMessage::copy_to_txn(txn);
+  // Copies pointers to txn
+  ((YCSBQuery*)(txn->query))->requests.append(requests);
+/*
+  for(uint64_t i = 0; i < requests.size(); i++) {
+      YCSBQuery::copy_request_to_qry(((YCSBQuery*)(txn->query)),this,i);
+  }
+*/
+}
+
+void YCSBClientQueryMessage::copy_from_buf(char * buf) {
+  ClientQueryMessage::copy_from_buf(buf);
+  uint64_t ptr = ClientQueryMessage::get_size();
+  size_t size;
+  //DEBUG("1YCSBClientQuery %ld\n",ptr);
+  COPY_VAL(size,buf,ptr);
+  requests.init(size);
+  //DEBUG("2YCSBClientQuery %ld\n",ptr);
+  for(uint64_t i = 0 ; i < size;i++) {
+    DEBUG_M("YCSBClientQueryMessage::copy ycsb_request alloc\n");
+    ycsb_request * req = (ycsb_request*)mem_allocator.alloc(sizeof(ycsb_request));
+    COPY_VAL(*req,buf,ptr);
+    //DEBUG("3YCSBClientQuery %ld\n",ptr);
+    assert(req->key < g_synth_table_size);
+    requests.add(req);
+  }
+ assert(ptr == get_size());
+}
+
+void YCSBClientQueryMessage::copy_to_buf(char * buf) {
+  ClientQueryMessage::copy_to_buf(buf);
+  uint64_t ptr = ClientQueryMessage::get_size();
+  //DEBUG("1YCSBClientQuery %ld\n",ptr);
+  size_t size = requests.size();
+  COPY_BUF(buf,size,ptr);
+  //DEBUG("2YCSBClientQuery %ld\n",ptr);
+  for(uint64_t i = 0; i < requests.size(); i++) {
+    ycsb_request * req = requests[i];
+    assert(req->key < g_synth_table_size);
+    COPY_BUF(buf,*req,ptr);
+    //DEBUG("3YCSBClientQuery %ld\n",ptr);
+  }
+ assert(ptr == get_size());
+}
 
 void YCSBQueryMessage::init() {
 }
@@ -1766,3 +1766,4 @@ void YCSBQueryMessage::copy_to_buf(char * buf) {
  assert(ptr == get_size());
 }
 
+#endif // #if WORKLOAD == YCSB

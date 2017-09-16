@@ -1009,9 +1009,11 @@ implementation of Action
 
             // process message
             M_ASSERT_V(WORKLOAD == YCSB, "Only YCSB workload is supported by LADS for now\n");
-
+#if WORKLOAD == YCSB
             ((YCSBWorkload *)_wl)->resolve_txn_dependencies(msg, cid);
-
+#else
+            assert(false);
+#endif
         }
 
         if (sync_worker->const_phase.load()){
