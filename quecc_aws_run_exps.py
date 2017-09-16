@@ -81,9 +81,9 @@ def exec_cmd(cmd, env):
     print('Output:')
     for ol in p.stdout:
         print(ol.decode(encoding="utf-8", errors="strict"), end='')
-    # print('Error:')
-    # for el in p.stderr:
-        # print(el.decode(encoding="utf-8", errors="strict"), end='')
+    print('Error:')
+    for el in p.stderr:
+        print(el.decode(encoding="utf-8", errors="strict"), end='')
 
 def build_project():
     env = dict(os.environ)
@@ -137,8 +137,6 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, pref
     print("Done Trial {}".format(trial))
 
 def send_email(subject, msg):
-    with open('/quecc/deneva_project/secrets.json') as data_file:    
-        secrets = json.load(data_file)
     fromaddr = 'tq.autosender@gmail.com'
     toaddrs  = 'qadah.thamir@gmail.com'
     rmsg = "\r\n".join([
@@ -279,9 +277,9 @@ num_trials = 2;
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
 # cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
 # cc_algs = ['OCC']
-cc_algs = ['QUECC', "NO_WAIT"]
+# cc_algs = ['QUECC', "NO_WAIT"]
 # cc_algs = ['LADS']
-# cc_algs = ['HSTORE']
+cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -292,7 +290,7 @@ cc_algs = ['QUECC', "NO_WAIT"]
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
 # wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
-wthreads = [4,8,16]
+wthreads = [8,16,20,24,30]
 # wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
@@ -308,7 +306,8 @@ pt_perc = [0.5]
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
 # et_sync = ['IMMEDIATE', 'AFTER_BATCH_COMP']
-strict = [True, False]
+# strict = [True, False]
+strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 zipftheta = [0.0]
 # zipftheta = [0.9]
@@ -324,13 +323,22 @@ seq_no = 0
 
 #read ifconfig.txt
 node_list = []
+
+is_azure = True
+
+with open('/quecc/deneva_project/secrets.json') as data_file:    
+    secrets = json.load(data_file)
+
 ifconfpath = DENEVA_DIR_PREFIX + "ifconfig.txt"
 ifconffile = open(ifconfpath, 'r')
 for line in ifconffile:
     node_list.append(line.strip())
 
 odirname = str(time.strftime('%Y-%m-%d-%I-%M-%S-%p'))
-outdir = '/home/ubuntu/results/' + odirname
+if is_azure:
+    outdir = '/home/qadahtm/results/' + odirname
+else:
+    outdir = '/home/ubuntu/results/' + odirname
 exec_cmd('mkdir {}'.format(outdir), env)
 print("Output Directory: {}".format(outdir))
 stime = time.time()
@@ -341,10 +349,11 @@ exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.txt'), env)
 exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
 exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
 
-is_azure = False
-
-# if is_azure:
-#     exec_cmd('az login', env)
+if is_azure:
+    print("Enter password for Azure:")
+    exec_cmd('az login -u {}'.format(secrets['azlogin']), env)
+    exec_cmd('az account set -s {}'.format(secrets['azsub_id']), env)
+    exec_cmd('az account list', env)
 
 for ncc_alg in cc_algs:
     for wthd in wthreads:
@@ -401,9 +410,9 @@ for ncc_alg in cc_algs:
                                             nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
                                         else:
                                             nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
-                                    # run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                                    print('Dry run: {}, {}, {}, t{}, {}'
-                                        .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                    # print('Dry run: {}, {}, {}, t{}, {}'
+                                        # .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
                                     seq_no = seq_no + 1
                                 cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
                                 cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
@@ -415,6 +424,6 @@ subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=el
 print(subject)
 send_email(subject, '')
 if is_azure:
-    exec_cmd('az vm deallocate -g quecc -n quecc', env)
+    exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
 else:
     exec_cmd('sudo shutdown -h now', env)

@@ -100,11 +100,13 @@ int main(int argc, char* argv[])
   fflush(stdout);
 	glob_manager.init();
   printf("Done\n");
+#if !SINGLE_NODE
   printf("Initializing transport manager... ");
   fflush(stdout);
 	tport_man.init();
   printf("Done\n");
   fflush(stdout);
+#endif
   printf("Initializing simulation... ");
   fflush(stdout);
   simulation = new SimManager;
