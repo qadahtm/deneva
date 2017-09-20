@@ -326,8 +326,8 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
         qry_pool.get(thd_id, query);
     }
     INC_STATS(get_thd_id(), mtx[16], get_sys_clock() - prof_starttime);
-    //query->init();
-    //reset();
+    query->init();
+//    reset();
     sem_init(&rsp_mutex, 0, 1);
     return_id = UINT64_MAX;
 
@@ -607,6 +607,17 @@ void TxnManager::commit_stats() {
     INC_STATS(ctid, txn_cnt, 1);
 //    INC_STATS(ctid, local_txn_commit_cnt, 1);
     INC_STATS(ctid, txn_run_time, timespan_long);
+//    if(STRICT_PPT && PART_PER_TXN == 1) {
+//        if (query->partitions_touched.size() != PART_PER_TXN){
+//            for (uint64_t i =0; i <query->partitions_touched.size(); ++i){
+//                DEBUG_Q("WT_%ld: touched partition : %ld\n",get_thd_id(), query->partitions_touched[i]);
+//            }
+//
+//        }
+//        M_ASSERT_V(query->partitions_touched.size() == PART_PER_TXN,
+//                   "query->partitions_touched.size() = %ld\n",
+//                   query->partitions_touched.size());
+//    }
     if (query->partitions_touched.size() > 1) {
         INC_STATS(ctid, multi_part_txn_cnt, 1);
         INC_STATS(ctid, multi_part_txn_run_time, timespan_long);

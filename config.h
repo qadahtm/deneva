@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 15
+#define THREAD_CNT 19
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -113,14 +113,14 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
 // all transactions acquire tuples according to the primary key order.
 #define KEY_ORDER         false
 // transaction roll back changes after abort
-#define ROLL_BACK         true
+#define ROLL_BACK         false
 // per-row lock/ts management or central lock/ts management
 #define CENTRAL_MAN         false
 #define BUCKET_CNT          31
@@ -289,7 +289,7 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN 1//PART_CNT
+#define PART_PER_TXN PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
@@ -336,7 +336,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 100.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16
@@ -392,7 +392,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

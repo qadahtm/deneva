@@ -26,11 +26,15 @@
 #if WORKLOAD == TPCC
 BaseQuery * TPCCQueryGenerator::create_query(Workload * h_wl,uint64_t home_partition_id) {
   double x = (double)(rand() % 100) / 100.0;
-	if (x < g_perc_payment)
-		return gen_payment(home_partition_id);
-	else 
-		return gen_new_order(home_partition_id);
+    BaseQuery * res;
+	if (x < g_perc_payment){
+        res = gen_payment(home_partition_id);
+    }
+	else{
+        res = gen_new_order(home_partition_id);
+    }
 
+    return res;
 }
 
 void TPCCQuery::init(uint64_t thd_id, Workload * h_wl) {
@@ -241,30 +245,13 @@ BaseQuery * TPCCQueryGenerator::gen_new_order(uint64_t home_partition) {
         item->ol_quantity = URand(1, 10);
 //        double r_rem = (double)(rand() % 100000) / 100000;
 //        if (r_rem > 0.01 || r_mpr > g_mpr || g_num_wh == 1) {
-        if (r_mpr > g_mpr || g_num_wh == 1) {
+        if (r_mpr >= g_mpr || g_num_wh == 1) {
             // home warehouse
             item->ol_supply_w_id = query->w_id;
         } else {
             if(partitions_accessed.size() < part_limit) {
-
-                if (STRICT_PPT){
-                    // Need to make sure that we are adding a new partition towards the limit
-                    int osize = partitions_accessed.size();
-                    item->ol_supply_w_id = URand(1, g_num_wh);
-                    partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
-                    while (osize == (int) partitions_accessed.size()){
-                        item->ol_supply_w_id = URand(1, g_num_wh);
-                        partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
-                    }
-
-                }
-                else{
-                    item->ol_supply_w_id = URand(1, g_num_wh);
-                    partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
-                }
-
-
-
+                item->ol_supply_w_id = URand(1, g_num_wh);
+                partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
             } else {
                 // select warehouse from among those already selected
                 while( partitions_accessed.count(wh_to_part(item->ol_supply_w_id = URand(1, g_num_wh))) == 0) {}

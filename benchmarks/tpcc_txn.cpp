@@ -998,9 +998,8 @@ RC TPCCTxnManager::run_hstore_txn() {
     uint64_t ol_cnt = tpcc_query->ol_cnt;
     uint64_t o_entry_d = tpcc_query->o_entry_d;
 
-//    uint64_t part_id_c_w = wh_to_part(c_w_id);
-    query->partitions_touched.add_unique(wh_to_part(w_id));
-    query->partitions_touched.add_unique(wh_to_part(c_w_id));
+    uint64_t part_id_w = wh_to_part(w_id);
+    uint64_t part_id_c_w = wh_to_part(c_w_id);
 //    bool w_loc = GET_NODE_ID(part_id_w) == g_node_id;
     //bool c_w_loc = GET_NODE_ID(part_id_c_w) == g_node_id;
 
@@ -1013,7 +1012,8 @@ RC TPCCTxnManager::run_hstore_txn() {
             rc = run_payment_3(w_id, d_id, d_w_id, h_amount, row);
             rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
             rc = run_payment_5( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
-
+            query->partitions_touched.add_unique(part_id_w);
+            query->partitions_touched.add_unique(part_id_c_w);
             rc = Commit;
             break;
         case TPCC_NEW_ORDER:
@@ -1025,6 +1025,8 @@ RC TPCCTxnManager::run_hstore_txn() {
             tpcc_query->o_id = *(int64_t *) row->get_value(D_NEXT_O_ID);
             rc = new_order_5( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
 
+            query->partitions_touched.add_unique(wh_to_part(w_id));
+
             for(uint64_t i = 0; i < tpcc_query->ol_cnt; i++) {
 
                 uint64_t ol_number = i;
@@ -1032,7 +1034,8 @@ RC TPCCTxnManager::run_hstore_txn() {
                 uint64_t ol_supply_w_id = tpcc_query->items[ol_number]->ol_supply_w_id;
                 uint64_t ol_quantity = tpcc_query->items[ol_number]->ol_quantity;
                 uint64_t ol_amount = tpcc_query->ol_amount;
-//                uint64_t part_id_ol_supply_w = wh_to_part(ol_supply_w_id);
+                uint64_t part_id_ol_supply_w = wh_to_part(ol_supply_w_id);
+                query->partitions_touched.add_unique(part_id_ol_supply_w);
 //                bool ol_supply_w_loc = GET_NODE_ID(part_id_ol_supply_w) == g_node_id;
 //                if(ol_supply_w_loc) {
                     rc = new_order_6(ol_i_id, row);
@@ -1216,15 +1219,14 @@ RC TPCCTxnManager::run_tpcc_phase5() {
 	uint64_t part_id_w = wh_to_part(w_id);
 	uint64_t part_id_c_w = wh_to_part(c_w_id);
 
-    query->partitions_touched.add_unique(part_id_w);
-    query->partitions_touched.add_unique(part_id_c_w);
-
+#if !SINGLE_NODE
   bool w_loc = GET_NODE_ID(part_id_w) == g_node_id;
   bool c_w_loc = GET_NODE_ID(part_id_c_w) == g_node_id;
-
+#endif
 
 	switch (tpcc_query->txn_type) {
 		case TPCC_PAYMENT :
+#if !SINGLE_NODE
       if(w_loc) {
         rc = run_payment_0(w_id, d_id, d_w_id, h_amount, row);
         rc = run_payment_1(w_id, d_id, d_w_id, h_amount, row);
@@ -1235,12 +1237,29 @@ RC TPCCTxnManager::run_tpcc_phase5() {
         rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row); 
         rc = run_payment_5( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row); 
       }
+#else
+        rc = run_payment_0(w_id, d_id, d_w_id, h_amount, row);
+        rc = run_payment_1(w_id, d_id, d_w_id, h_amount, row);
+        rc = run_payment_2(w_id, d_id, d_w_id, h_amount, row);
+        rc = run_payment_3(w_id, d_id, d_w_id, h_amount, row);
+
+        rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
+        rc = run_payment_5( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
+
+        query->partitions_touched.add_unique(part_id_w);
+        query->partitions_touched.add_unique(part_id_c_w);
+
+#endif
       break;
 		case TPCC_NEW_ORDER :
+#if !SINGLE_NODE
       if(w_loc) {
         //rc = new_order_4( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row); 
         rc = new_order_5( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row); 
       }
+#else
+            rc = new_order_5( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+#endif
         for(uint64_t i = 0; i < tpcc_query->ol_cnt; i++) {
 
           uint64_t ol_number = i;
@@ -1249,11 +1268,18 @@ RC TPCCTxnManager::run_tpcc_phase5() {
           uint64_t ol_quantity = tpcc_query->items[ol_number]->ol_quantity;
           uint64_t ol_amount = tpcc_query->ol_amount;
           uint64_t part_id_ol_supply_w = wh_to_part(ol_supply_w_id);
+#if !SINGLE_NODE
           bool ol_supply_w_loc = GET_NODE_ID(part_id_ol_supply_w) == g_node_id;
           if(ol_supply_w_loc) {
             rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row); 
             rc = new_order_9( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, ol_amount, o_id, row); 
           }
+#else
+            query->partitions_touched.add_unique(part_id_w);
+            query->partitions_touched.add_unique(part_id_ol_supply_w);
+            rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
+            rc = new_order_9( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, ol_amount, o_id, row);
+#endif
         }
         break;
     default: assert(false);

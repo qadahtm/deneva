@@ -1355,6 +1355,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
 
         txn_man->txn_stats.starttime = get_sys_clock();
         txn_man->txn_stats.restart_starttime = txn_man->txn_stats.starttime;
+        // this should make a copy of the query object to the txn_man
         msg->copy_to_txn(txn_man);
         DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
               txn_man->txn_stats.starttime);
@@ -1391,6 +1392,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
 
 #if CC_ALG == HSTORE
     if (txn_man->query->partitions.size() > 1){
+        assert(txn_man->query->partitions_touched.size() == 0);
         rc = part_lock_man.lock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
         if (rc == RCOK){
             // Execute transaction

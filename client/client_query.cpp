@@ -126,8 +126,6 @@ Client_query_queue::initQueriesParallel() {
 #else
             BaseQuery * query = gen->create_query(_wl,g_node_id);
 #endif
-            // Assum YCSB workload for now
-
             uint64_t qslot;
 #if WORKLOAD == YCSB
             YCSBQuery * ycsb_query = (YCSBQuery*)query;

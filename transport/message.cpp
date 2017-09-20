@@ -494,7 +494,7 @@ void TPCCClientQueryMessage::copy_to_txn(TxnManager * txn) {
   TPCCQuery* tpcc_query = (TPCCQuery*)(txn->query);
 
   txn->client_id = return_node_id;
-
+    txn->query->partitions_touched.clear();
 
   tpcc_query->txn_type = (TPCCTxnType)txn_type;
   if(tpcc_query->txn_type == TPCC_PAYMENT)
