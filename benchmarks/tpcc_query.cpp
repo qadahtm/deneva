@@ -180,8 +180,7 @@ BaseQuery * TPCCQueryGenerator::gen_payment(uint64_t home_partition) {
 		query->c_w_id = query->w_id;
 	} else {	
 		// remote warehouse
-        M_ASSERT_V(false, "x = %f, g_mpr = %f\n",x, g_mpr);
-		query->c_d_id = URand(1, g_dist_per_wh);
+        query->c_d_id = URand(1, g_dist_per_wh);
 		if(g_num_wh > 1) {
 			while((query->c_w_id = URand(1, g_num_wh)) == query->w_id) {}
 			if (wh_to_part(query->w_id) != wh_to_part(query->c_w_id)) {

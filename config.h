@@ -113,7 +113,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG CALVIN
+#define CC_ALG HSTORE
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -336,7 +336,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 1.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16
