@@ -138,6 +138,7 @@ public:
   uint64_t size() const {return count;}
   bool is_full() { return count == capacity;}
   bool is_empty() { return count == 0;}
+    bool isInitilized() {return capacity > 0;}
 private:
   T * items;
   uint64_t capacity;

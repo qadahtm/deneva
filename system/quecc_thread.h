@@ -57,6 +57,10 @@ struct transaction_context {
     uint64_t  ol_number;
 //    uint64_t ol_amount;
 #endif
+
+#if ROLL_BACK
+    Array<Access*> accesses;
+#endif
 };
 
 enum tpcc_txn_frag_t{

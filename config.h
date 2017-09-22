@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 19
+#define THREAD_CNT 4
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -113,14 +113,14 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG HSTORE
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
 // all transactions acquire tuples according to the primary key order.
 #define KEY_ORDER         false
 // transaction roll back changes after abort
-#define ROLL_BACK         false
+#define ROLL_BACK         true
 // per-row lock/ts management or central lock/ts management
 #define CENTRAL_MAN         false
 #define BUCKET_CNT          31
@@ -210,6 +210,8 @@
 // Controls execution queue split behavior.
 #define EXECQ_CAP_FACTOR 30
 #define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
+
+#define ROW_ACCESS_TRACKING true
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100

@@ -1262,7 +1262,7 @@ RC PlannerThread::run_fixed_mode() {
 
 RC PlannerThread::run_normal_mode() {
     tsetup();
-
+    printf("Running PlannerThread %ld\n", _thd_id);
     _wl->get_txn_man(my_txn_man);
     my_txn_man->init(_thd_id, _wl);
     my_txn_man->register_thread(this);
@@ -1919,6 +1919,17 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     tctx->txn_id = planner_txn_id;
     tctx->txn_state = TXN_INITIALIZED;
     tctx->completion_cnt.store(0);
+
+#if ROLL_BACK
+    if (tctx->accesses.isInitilized()){
+        // need to clear on commit phase
+        tctx->accesses.clear();
+    }
+    else{
+        tctx->accesses.init(MAX_ROW_PER_TXN);
+    }
+#endif
+
 #if !SERVER_GENERATE_QUERIES
     tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
 #endif

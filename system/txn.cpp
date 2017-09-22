@@ -648,6 +648,7 @@ void TxnManager::commit_stats() {
 
 void TxnManager::register_thread(Thread *h_thd) {
     this->h_thd = h_thd;
+    this->_thd_id = h_thd->_thd_id;
 #if CC_ALG == HSTORE || CC_ALG == HSTORE_SPEC
     this->active_part = GET_PART_ID_FROM_IDX(get_thd_id());
 #endif
@@ -835,6 +836,41 @@ RC TxnManager::get_lock(row_t *row, access_t type) {
     return rc;
 }
 
+void TxnManager::row_access_backup(Array<Access*> *accesses, access_t type, row_t * row, uint64_t ctid){
+#if ROW_ACCESS_TRACKING
+    Access *access;
+    access_pool.get(ctid, access);
+
+#if ROLL_BACK
+    if (type == WR) {
+    uint64_t part_id = row->get_part_id();
+    DEBUG_M("TxnManager::get_row row_t alloc\n")
+    row_pool.get(ctid,access->orig_data);
+    access->orig_data->init(row->get_table(), part_id, 0);
+    access->orig_data->copy(row);
+    assert(access->orig_data->get_schema() == row->get_schema());
+
+    // ARIES-style physiological logging
+//#if LOGGING
+//    //LogRecord * record = logger.createRecord(LRT_UPDATE,L_UPDATE,get_txn_id(),part_id,row->get_table()->get_table_id(),row->get_primary_key());
+//    LogRecord * record = logger.createRecord(get_txn_id(),L_UPDATE,row->get_table()->get_table_id(),row->get_primary_key());
+//    if(g_repl_cnt > 0) {
+//      msg_queue.enqueue(get_thd_id(),Message::create_message(record,LOG_MSG),g_node_id + g_node_cnt + g_client_node_cnt);
+//    }
+//    logger.enqueueRecord(record);
+//#endif
+
+    }
+#endif
+    access->thd_id = ctid;
+    access->type = type;
+    access->orig_row = row;
+    access->data = row;
+
+    accesses->add(access);
+#endif
+}
+
 RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     uint64_t starttime = get_sys_clock();
     uint64_t timespan;
@@ -890,7 +926,7 @@ RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     //LogRecord * record = logger.createRecord(LRT_UPDATE,L_UPDATE,get_txn_id(),part_id,row->get_table()->get_table_id(),row->get_primary_key());
     LogRecord * record = logger.createRecord(get_txn_id(),L_UPDATE,row->get_table()->get_table_id(),row->get_primary_key());
     if(g_repl_cnt > 0) {
-      msg_queue.enqueue(get_thd_id(),Message::create_message(record,LOG_MSG),g_node_id + g_node_cnt + g_client_node_cnt); 
+      msg_queue.enqueue(get_thd_id(),Message::create_message(record,LOG_MSG),g_node_id + g_node_cnt + g_client_node_cnt);
     }
     logger.enqueueRecord(record);
 #endif

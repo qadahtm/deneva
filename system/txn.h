@@ -50,6 +50,7 @@ public:
 	row_t * 	orig_row;
 	row_t * 	data;
 	row_t * 	orig_data;
+    uint64_t    thd_id;
 	void cleanup();
 
 #if CC_ALG == TICTOC
@@ -154,6 +155,7 @@ public:
     void reset_query();
     void release();
     Thread * h_thd;
+    uint64_t _thd_id;
     Workload * h_wl;
 
     virtual RC      run_txn() = 0;
@@ -179,6 +181,8 @@ public:
     bool            is_done();
     void            commit_stats();
     bool            is_multi_part();
+
+    void     row_access_backup(Array<Access*> *accesses, access_t type, row_t * row, uint64_t ctid);
 
     void            set_timestamp(ts_t timestamp);
     ts_t            get_timestamp();

@@ -890,6 +890,9 @@ RC WorkerThread::run_normal_mode() {
                     volatile bool canCommit = true;
                     //loop over all transactions in the priority group
                     for (uint64_t j = 0; j < planner_batch_size; j++){
+#if ROW_ACCESS_TRACKING
+                        volatile bool cascading_abort = true;
+#endif
                         if (txn_ctxs[j].txn_state != READY_TO_ABORT){
 #if BUILD_TXN_DEPS
                             // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
@@ -913,9 +916,12 @@ RC WorkerThread::run_normal_mode() {
                                                (uint64_t)txn_ctxs
                                     );
                                     if (txn_ctxs[d_txn_ctx_idx].txn_state == READY_TO_ABORT){
-                                        // abort
+                                        // abort due to dependencies on an aborted txn
             //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
                                         canCommit = false;
+#if ROW_ACCESS_TRACKING
+                                        cascading_abort = true;
+#endif
                                     }
                                 }
                             }
@@ -940,8 +946,56 @@ RC WorkerThread::run_normal_mode() {
                                 msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[j].return_node_id);
 #endif
                                 commit_cnt++;
+#if ROW_ACCESS_TRACKING
+                                // releaase accesses
+                                for (uint64_t k = 0; k < txn_ctxs[j].accesses.size(); k++) {
+                                    uint64_t ctid = txn_ctxs[j].accesses[k]->thd_id;
+                                    Access * access = txn_ctxs[j].accesses[k];
+#if ROLL_BACK
+                                    row_pool.put(ctid, access->orig_data);
+#endif
+                                    access_pool.put(ctid, access);
+                                }
+#endif
+                            }
+#if ROW_ACCESS_TRACKING
+                            else{
+                                // need to do cascading abort
+
+                                for (uint64_t k = 0; k < txn_ctxs[j].accesses.size(); k++) {
+                                    uint64_t ctid = txn_ctxs[j].accesses[k]->thd_id;
+                                    Access * access = txn_ctxs[j].accesses[k];
+
+#if ROLL_BACK
+                                    if (access->type == WR && !cascading_abort){
+                                        // restore only the first
+                                        access->data->copy(access->orig_data);
+                                    }
+                                    row_pool.put(ctid, access->orig_data);
+#endif
+                                    access_pool.put(ctid, access);
+                                }
+                            }
+#endif
+                        }
+#if ROW_ACCESS_TRACKING
+                        else {
+                            // transaction should be aborted due to integrity constraints
+                            for (uint64_t k = 0; k < txn_ctxs[j].accesses.size(); k++) {
+                                uint64_t ctid = txn_ctxs[j].accesses[k]->thd_id;
+                                Access * access = txn_ctxs[j].accesses[k];
+
+#if ROLL_BACK
+                                if (access->type == WR && !cascading_abort){
+                                    // restore only the first
+                                    access->data->copy(access->orig_data);
+                                }
+                                row_pool.put(ctid, access->orig_data);
+#endif
+                                access_pool.put(ctid, access);
                             }
                         }
+#endif
                     }
 
                     INC_STATS(_thd_id, txn_cnt, commit_cnt);

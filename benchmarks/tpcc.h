@@ -169,6 +169,9 @@ public:
         double w_ytd;
         row_t * r_wh_local = entry->row;
         r_wh_local->get_value(W_YTD, w_ytd);
+
+        row_access_backup(&entry->txn_ctx->accesses, WR, r_wh_local, _thd_id);
+
         if (g_wh_update) {
             r_wh_local->set_value(W_YTD, w_ytd + entry->txn_ctx->h_amount);
         }
@@ -199,6 +202,9 @@ public:
 
         double d_ytd;
         r_dist_local->get_value(D_YTD, d_ytd);
+
+        row_access_backup(&entry->txn_ctx->accesses, WR, r_dist_local, _thd_id);
+
         r_dist_local->set_value(D_YTD, d_ytd + entry->txn_ctx->h_amount);
 
         return RCOK;
@@ -251,6 +257,8 @@ public:
         double c_balance;
         double c_ytd_payment;
         double c_payment_cnt;
+
+        row_access_backup(&entry->txn_ctx->accesses, WR, r_cust_local, _thd_id);
 
         r_cust_local->get_value(C_BALANCE, c_balance);
         r_cust_local->set_value(C_BALANCE, c_balance - entry->txn_ctx->h_amount);
@@ -369,8 +377,12 @@ public:
         //double * d_tax;
         int64_t * o_id;
         //d_tax = (double *) entry->row->get_value(D_TAX);
+
         o_id = (int64_t *) entry->row->get_value(D_NEXT_O_ID);
         (*o_id) ++;
+
+        row_access_backup(&entry->txn_ctx->accesses, WR, entry->row, _thd_id);
+
         entry->row->set_value(D_NEXT_O_ID, *o_id);
         int64_t e = 0;
         int64_t d = *o_id;
@@ -504,6 +516,9 @@ public:
         UInt64 s_quantity;
         int64_t s_remote_cnt;
         s_quantity = *(int64_t *)r_stock_local->get_value(S_QUANTITY);
+
+        row_access_backup(&entry->txn_ctx->accesses, WR, r_stock_local, _thd_id);
+
 #if !TPCC_SMALL
         int64_t s_ytd;
         int64_t s_order_cnt;
