@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 4
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -173,7 +173,8 @@
 #define PLAN_THREAD_CNT PART_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
-// batch size must be divisible by thread_cnt and partition cnt
+// batch size must be divisible by thread_cnt and partition cnt for YCSB
+// batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6
 #define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3
 #define BATCH_MAP_LENGTH 8//16//100//300//1024 // width of map is PLAN_THREAD_CNT
@@ -208,7 +209,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 30
+#define EXECQ_CAP_FACTOR 26
 #define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
@@ -338,7 +339,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 1.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

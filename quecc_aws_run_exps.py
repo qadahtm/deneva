@@ -33,7 +33,8 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
     nwthd_cnt = wthd_cnt - pt_cnt
 
     if nwthd_cnt == 0:
-        nwthd_cnt = wthd_cnt
+        # need to account for the Abort thread
+        nwthd_cnt = wthd_cnt -1 
     print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}, PPT={}, STRICT_PPT={}'
         .format(ncc_alg, nwthd_cnt, theta, pt_cnt, nwthd_cnt, ets, pa,strict))
 
@@ -276,10 +277,12 @@ num_trials = 2;
 # cc_algs = ['QUECC','HSTORE']
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
 # cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
-# cc_algs = ['OCC']
+# cc_algs = ['HSTORE']
 # cc_algs = ['QUECC', "NO_WAIT"]
-# cc_algs = ['LADS']
-cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC']
+# # cc_algs = ['LADS']
+# cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC']
+cc_algs = ['QUECC', 'HSTORE', 'SILO']
+# cc_algs = ['QUECC']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -290,7 +293,7 @@ cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'N
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
 # wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
-wthreads = [8,16,20,24,30]
+wthreads = [4,8,12,16,20,24,30]
 # wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
@@ -412,7 +415,7 @@ for ncc_alg in cc_algs:
                                             nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
                                     run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
                                     # print('Dry run: {}, {}, {}, t{}, {}'
-                                        # .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                    #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
                                     seq_no = seq_no + 1
                                 cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
                                 cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))

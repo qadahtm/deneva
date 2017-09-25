@@ -413,6 +413,13 @@ public:
         // insert by allocating memory here
         RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
+        uint64_t prof_time = get_sys_clock();
+        // may get stuck here when simulation is done
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) return Abort;
+        } // spin here until order id for this txn is set
+        INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+
         r_order->set_value(O_C_ID, entry->txn_ctx->c_id);
         r_order->set_value(O_D_ID, entry->txn_ctx->d_id);
         r_order->set_value(O_W_ID, entry->txn_ctx->w_id);
@@ -420,11 +427,6 @@ public:
         r_order->set_value(O_OL_CNT, entry->txn_ctx->ol_cnt);
         int64_t all_local = (entry->txn_ctx->remote? 0 : 1);
         r_order->set_value(O_ALL_LOCAL, all_local);
-
-        // may get stuck here when simulation is done
-        while (entry->txn_ctx->o_id.load() == 0){
-            if (simulation->is_done()) break;
-        } // spin here until order id for this txn is set
         r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
 
 //        _wl->index_insert(_wl->i_order, orderPrimaryKey(entry->w_id,entry->d_id,entry->txn_ctx->o_id), r_order, wh_to_part(entry->w_id));
@@ -444,14 +446,16 @@ public:
     inline RC run_neworder_insert_no(exec_queue_entry * entry){
         row_t * r_no;
 
+        // Wait for o_id to become available
+        uint64_t prof_time = get_sys_clock();
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) return Abort;
+        } // spin here until order id for this txn is set
+        INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
         RC rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
         r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
         r_no->set_value(NO_W_ID, entry->txn_ctx->w_id);
-
-        while (entry->txn_ctx->o_id.load() == 0){
-            if (simulation->is_done()) break;
-        } // spin here until order id for this txn is set
         r_no->set_value(NO_O_ID, entry->txn_ctx->o_id.load());
 
         //TQ: do we need to have an index for NewOrder table??
@@ -569,6 +573,13 @@ public:
 				:ol_quantity, :ol_amount, :ol_dist_info);
 		+====================================================*/
         row_t * r_ol;
+        uint64_t prof_time = get_sys_clock();
+        // Wait for o_id to become available
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) return Abort;
+        } // spin here until order id for this txn is set
+        INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+
         _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->txn_ctx->ol_supply_w_id), entry->rid);
 
         r_ol->set_value(OL_D_ID, &entry->txn_ctx->d_id);
@@ -584,9 +595,6 @@ public:
 //        total += ol_amount;
         r_ol->set_value(OL_AMOUNT, ol_amount);
 #endif
-        while (entry->txn_ctx->o_id.load() == 0){
-            if (simulation->is_done()) break;
-        } // spin here until order id for this txn is set
         r_ol->set_value(OL_O_ID, entry->txn_ctx->o_id.load());
 
         return RCOK;

@@ -56,11 +56,14 @@ public:
     uint64_t get_next_txn_id();
     bool is_cc_new_timestamp();
 
+    inline void wt_release_accesses(transaction_context * context, bool cascading_abort, bool rollback);
+
 private:
     uint64_t _thd_txn_id;
     ts_t        _curr_ts;
     ts_t        get_next_ts();
     TxnManager * txn_man;
+
 
 };
 

@@ -1384,8 +1384,9 @@ RC PlannerThread::run_normal_mode() {
         switch (msg->get_rtype()) {
             case CL_QRY: {
 
-                process_client_msg(msg, txn_ctxs);
-
+                if (!simulation->is_done()){
+                    process_client_msg(msg, txn_ctxs);
+                }
                 break;
             }
             default:
@@ -1884,6 +1885,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 //                DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
         }
 
+
         // include idle time from spinning above
         if (idle_starttime != 0){
             INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
@@ -1892,7 +1894,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
         planner_pg = &work_queue.batch_pg_map[slot_num][_planner_id];
 //        DEBUG_Q("PL_%ld: Starting to work on planner_pg @%ld with batch_id = %ld, with slot_num =%ld\n",
 //                _planner_id, (uint64_t) planner_pg, batch_id, slot_num);
-        memset(planner_pg,0,sizeof(priority_group));
+//        memset(planner_pg,0,sizeof(priority_group)); // no need to zero out this
         // maybe we don't need this if we are going to overwrite all fields
 //    memset(&planner_pg->txn_ctxs,0,BATCH_SIZE/PLAN_THREAD_CNT);
         txn_ctxs = planner_pg->txn_ctxs;
@@ -1923,9 +1925,11 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 #if ROLL_BACK
     if (tctx->accesses.isInitilized()){
         // need to clear on commit phase
+//        DEBUG_Q("reusing tctx accesses\n");
         tctx->accesses.clear();
     }
     else{
+//        DEBUG_Q("initializing tctx accesses\n");
         tctx->accesses.init(MAX_ROW_PER_TXN);
     }
 #endif
@@ -2503,6 +2507,7 @@ void QueCCPool::txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t
     if (!txn_ctxs_free_list[planner_id]->pop(txn_ctxs)){
 //        DEBUG_Q("Allocating txn_ctxs\n");
         txn_ctxs = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context)*planner_batch_size);
+        // FIXME: intialize accesses when this is used
 #if DEBUG_QUECC
         txn_ctxs_alloc_cnts[planner_id].fetch_add(1);
     }

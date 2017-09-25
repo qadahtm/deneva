@@ -700,7 +700,7 @@ RC WorkerThread::run_normal_mode() {
 
                 //TODO(tq): check if this transaction is already aborted
 
-                // Use txnManager to execute transaction frament
+                // Use txnManager to execute transaction fragment
 #if QUECC_DB_ACCESS
                 rc = my_txn_man->run_quecc_txn(&exec_qe);
                 assert(rc == RCOK);
@@ -712,70 +712,6 @@ RC WorkerThread::run_normal_mode() {
 //                    comp_cnt = exec_qe.txn_ctx->completion_cnt.fetch_add(1);
 //                    INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
 //                    INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
-//                }
-
-
-                // TQ: we are committing now, which is done one by one the threads only
-                // this allows lower latency for transactions.
-                // Since there is no logging this is okay
-                // TODO(tq): consider committing as a batch with logging enabled
-                // Execution thrad that will execute the last operation will commit
-
-//                if (comp_cnt == (REQ_PER_QUERY-1)) {
-//#if CT_ENABLED
-//                    INC_STATS(_thd_id, exec_txn_cnts[_thd_id], 1);
-//                    exec_qe.txn_ctx->txn_state = TXN_READY_TO_COMMIT;
-//#else
-
-//                    quecc_commit_starttime = get_sys_clock();
-//                  DEBUG_Q("Commting txn %ld, with e_thread %ld\n", exec_qe.txn_id, get_thd_id());
-//                  DEBUG_Q("txn_man->return_id = %ld , exec_qe.return_node_id = %ld, g_node_id= %d\n",
-//                          txn_man->return_id, exec_qe.return_node_id, g_node_id);
-
-//                    DEBUG_Q("thread_%ld: Committing with txn(%ld,%ld,%ld)\n", _thd_id, wbatch_id, exec_qe.txn_id,
-//                            exec_qe.req_id);
-
-                    // We are ready to commit, now we need to check if we need to abort.
-
-                    // Committing
-                    // Sending response to client a
-//                    quecc_prof_time = get_sys_clock();
-//#if !SERVER_GENERATE_QUERIES
-//                    Message * rsp_msg = Message::create_message(CL_RSP);
-//                    rsp_msg->txn_id = exec_qe.txn_id;
-//                    rsp_msg->batch_id = wbatch_id; // using batch_id from local, we can also use the one in the context
-//                    ((ClientResponseMessage *) rsp_msg)->client_startts = exec_qe.txn_ctx->client_startts;
-////                    ((ClientResponseMessage *) rsp_msg)->batch_id = wbatch_id;
-//                    rsp_msg->lat_work_queue_time = 0;
-//                    rsp_msg->lat_msg_queue_time = 0;
-//                    rsp_msg->lat_cc_block_time = 0;
-//                    rsp_msg->lat_cc_time = 0;
-//                    rsp_msg->lat_process_time = 0;
-//                    rsp_msg->lat_network_time = 0;
-//                    rsp_msg->lat_other_time = 0;
-//
-//                    msg_queue.enqueue(get_thd_id(), rsp_msg, exec_qe.return_node_id);
-//                    INC_STATS(_thd_id, exec_resp_msg_create_time[_thd_id], get_sys_clock()-quecc_prof_time);
-//#endif
-
-//                    INC_STATS(get_thd_id(), txn_cnt, 1);
-
-                    //TODO(tq): how to handle txn_contexts in this case
-                    // Free memory
-                    // Free txn context
-//                    DEBUG_Q("ET_%ld : commtting txn_id = %ld with comp_cnt %ld\n", _thd_id, exec_qe.txn_ctx->txn_id, comp_cnt);
-
-//                    quecc_mem_free_startts = get_sys_clock();
-//                    mem_allocator.free(exec_qe.txn_ctx, sizeof(transaction_context));
-//                    while(!work_queue.txn_ctx_free_list[exec_qe.planner_id]->push(exec_qe.txn_ctx)){};
-//                    INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
-                    // we always commit
-//                    INC_STATS(_thd_id, exec_txn_commit_time[_thd_id], get_sys_clock()-quecc_commit_starttime);
-                    //TODO(tq): how to handle logic-induced aborts
-//#endif
-//                }
-//                else if (comp_cnt == 0){
-//                    exec_qe.txn_ctx->txn_state = TXN_STARTED;
 //                }
 
             }
@@ -865,12 +801,18 @@ RC WorkerThread::run_normal_mode() {
 #else
             if (_thd_id == 0){
                 // Thread 0 acts as commit thread
+                assert(idle_starttime == 0);
+                idle_starttime = get_sys_clock();
                 while (!simulation->is_done() && (work_queue.batch_map_comp_cnts[batch_slot].load() != g_thread_cnt)){
                     // SPINN Here untill all ETs are done
 //                    DEBUG_Q("ET_%ld: waiting for other ETs to be done, wbatch_id = %ld at slot = %ld, val = %d, thd_cnt = %d"
 //                                    "\n",
 //                            _thd_id,  wbatch_id, batch_slot,work_queue.batch_map_comp_cnts[batch_slot].load(), g_thread_cnt);
                 }
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+                idle_starttime =0;
+                // TODO(tq): collect stats for committing
+
 //                DEBUG_Q("ET_%ld: All ETs are done for, wbatch_id = %ld at slot = %ld"
 //                                "\n",
 //                        _thd_id,  wbatch_id, batch_slot);
@@ -946,56 +888,17 @@ RC WorkerThread::run_normal_mode() {
                                 msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[j].return_node_id);
 #endif
                                 commit_cnt++;
-#if ROW_ACCESS_TRACKING
-                                // releaase accesses
-                                for (uint64_t k = 0; k < txn_ctxs[j].accesses.size(); k++) {
-                                    uint64_t ctid = txn_ctxs[j].accesses[k]->thd_id;
-                                    Access * access = txn_ctxs[j].accesses[k];
-#if ROLL_BACK
-                                    row_pool.put(ctid, access->orig_data);
-#endif
-                                    access_pool.put(ctid, access);
-                                }
-#endif
+                                wt_release_accesses(&txn_ctxs[j], cascading_abort, false);
                             }
-#if ROW_ACCESS_TRACKING
                             else{
                                 // need to do cascading abort
-
-                                for (uint64_t k = 0; k < txn_ctxs[j].accesses.size(); k++) {
-                                    uint64_t ctid = txn_ctxs[j].accesses[k]->thd_id;
-                                    Access * access = txn_ctxs[j].accesses[k];
-
-#if ROLL_BACK
-                                    if (access->type == WR && !cascading_abort){
-                                        // restore only the first
-                                        access->data->copy(access->orig_data);
-                                    }
-                                    row_pool.put(ctid, access->orig_data);
-#endif
-                                    access_pool.put(ctid, access);
-                                }
+                                wt_release_accesses(&txn_ctxs[j], cascading_abort, true);
                             }
-#endif
                         }
-#if ROW_ACCESS_TRACKING
                         else {
                             // transaction should be aborted due to integrity constraints
-                            for (uint64_t k = 0; k < txn_ctxs[j].accesses.size(); k++) {
-                                uint64_t ctid = txn_ctxs[j].accesses[k]->thd_id;
-                                Access * access = txn_ctxs[j].accesses[k];
-
-#if ROLL_BACK
-                                if (access->type == WR && !cascading_abort){
-                                    // restore only the first
-                                    access->data->copy(access->orig_data);
-                                }
-                                row_pool.put(ctid, access->orig_data);
-#endif
-                                access_pool.put(ctid, access);
-                            }
+                            wt_release_accesses(&txn_ctxs[j], cascading_abort, true);
                         }
-#endif
                     }
 
                     INC_STATS(_thd_id, txn_cnt, commit_cnt);
@@ -1015,9 +918,12 @@ RC WorkerThread::run_normal_mode() {
                 INC_STATS(_thd_id, txn_cnt, g_batch_size);
             }
             else {
+                idle_starttime = get_sys_clock();
                 while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot].load() != 0){
                     // SPINN Here untill all ETs are done
                 }
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+                idle_starttime =0;
             }
 #endif //if CT_ENABLED
             //TODO(tq) fix stat collection for idle time to include the spinning below
@@ -1564,6 +1470,27 @@ ts_t WorkerThread::get_next_ts() {
         _curr_ts = glob_manager.get_ts(get_thd_id());
         return _curr_ts;
     }
+}
+
+inline void WorkerThread::wt_release_accesses(transaction_context * context, bool cascading_abort, bool rollback) {
+#if ROW_ACCESS_TRACKING
+    // releaase accesses
+
+    for (uint64_t k = 0; k < context->accesses.size(); k++) {
+        uint64_t ctid = context->accesses[k]->thd_id;
+        Access * access = context->accesses[k];
+#if ROLL_BACK
+        if (rollback && access->type == WR && !cascading_abort){
+            // restore only the first
+            access->data->copy(access->orig_data);
+        }
+        row_pool.put(ctid, access->orig_data);
+#endif
+        access_pool.put(ctid, access);
+    }
+    context->accesses.clear();
+    assert(context->accesses.size() == 0);
+#endif
 }
 
 

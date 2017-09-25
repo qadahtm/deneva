@@ -291,7 +291,9 @@ void AccessPool::get(uint64_t thd_id, Access *& item) {
 }
 
 void AccessPool::put(uint64_t thd_id, Access * item) {
-  pool[thd_id]->push(item);
+  if(!pool[thd_id]->push(item)){
+    assert(false);
+  }
   /*
   int tries = 0;
   while(!pool->push(item) && tries++ < TRY_LIMIT) { }
