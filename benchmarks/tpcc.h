@@ -348,11 +348,13 @@ public:
         assert(entry != NULL);
         assert(entry->row != NULL);
         uint64_t c_discount;
-        //char * c_last;
-        //char * c_credit;
         entry->row->get_value(C_DISCOUNT, c_discount);
-        //c_last = entry->row->get_value(C_LAST);
-        //c_credit = entry->row->get_value(C_CREDIT);
+#if SIM_FULL_ROW
+        char * c_last UNUSED = NULL;
+        char * c_credit UNUSED = NULL;
+        c_last = entry->row->get_value(C_LAST);
+        c_credit = entry->row->get_value(C_CREDIT);
+#endif
         return RCOK;
     };
 
@@ -374,9 +376,12 @@ public:
     inline RC run_neworder_update_d(exec_queue_entry * entry){
         assert(entry != NULL);
         assert(entry->row != NULL);
-        //double * d_tax;
         int64_t * o_id;
-        //d_tax = (double *) entry->row->get_value(D_TAX);
+
+#if SIM_FULL_ROW
+        double * d_tax UNUSED;
+        d_tax = (double *) entry->row->get_value(D_TAX);
+#endif
 
         o_id = (int64_t *) entry->row->get_value(D_NEXT_O_ID);
         (*o_id) ++;
@@ -395,7 +400,6 @@ public:
     };
 
     inline RC plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry){
-//        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
         uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
         entry->rid = row_id;
         entry->txn_ctx->w_id = w_id;
@@ -411,12 +415,18 @@ public:
     };
     inline RC run_neworder_insert_o(exec_queue_entry * entry){
         row_t * r_order;
+#if ENABLE_EQ_SWITCH
+        if (entry->txn_ctx->o_id.load() == 0){
+            return WAIT;
+        }
+#else
+        // Wait for o_id to become available
         uint64_t prof_time = get_sys_clock();
-        // may get stuck here when simulation is done
         while (entry->txn_ctx->o_id.load() == 0){
             if (simulation->is_done()) return Abort;
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+#endif
 
         // insert by allocating memory here
         RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
@@ -435,7 +445,6 @@ public:
     };
 
     inline RC plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
-//        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
         uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 
         entry->txn_ctx->w_id = w_id;
@@ -447,13 +456,19 @@ public:
     };
     inline RC run_neworder_insert_no(exec_queue_entry * entry){
         row_t * r_no;
-
+#if ENABLE_EQ_SWITCH
+        if (entry->txn_ctx->o_id.load() == 0){
+            return WAIT;
+        }
+#else
         // Wait for o_id to become available
         uint64_t prof_time = get_sys_clock();
         while (entry->txn_ctx->o_id.load() == 0){
             if (simulation->is_done()) return Abort;
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+#endif
+
         RC rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
         r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
@@ -484,13 +499,14 @@ public:
         assert(entry != NULL);
         assert(entry->row != NULL);
         int64_t i_price;
-        //char * i_name;
-        //char * i_data;
-        //TODO(tq): unify method of attribute access
         entry->row->get_value(I_PRICE, i_price);
 
-        //i_name = entry->row->get_value(I_NAME);
-        //i_data = entry->row->get_value(I_DATA);
+#if SIM_FULL_ROW
+        char * i_name UNUSED = NULL;
+        char * i_data UNUSED = NULL;
+        i_name = entry->row->get_value(I_NAME);
+        i_data = entry->row->get_value(I_DATA);
+#endif
         return RCOK;
     };
 
@@ -575,13 +591,18 @@ public:
 				:ol_quantity, :ol_amount, :ol_dist_info);
 		+====================================================*/
         row_t * r_ol;
-        uint64_t prof_time = get_sys_clock();
+#if ENABLE_EQ_SWITCH
+        if (entry->txn_ctx->o_id.load() == 0){
+            return WAIT;
+        }
+#else
         // Wait for o_id to become available
+        uint64_t prof_time = get_sys_clock();
         while (entry->txn_ctx->o_id.load() == 0){
             if (simulation->is_done()) return Abort;
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
-
+#endif
         _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->txn_ctx->ol_supply_w_id), entry->rid);
 
         r_ol->set_value(OL_D_ID, &entry->txn_ctx->d_id);

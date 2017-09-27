@@ -678,16 +678,16 @@ inline RC TPCCTxnManager::run_payment_5(uint64_t w_id, uint64_t d_id,uint64_t c_
 	r_cust_local->set_value(C_YTD_PAYMENT, c_ytd_payment + h_amount);
 	r_cust_local->get_value(C_PAYMENT_CNT, c_payment_cnt);
 	r_cust_local->set_value(C_PAYMENT_CNT, c_payment_cnt + 1);
-
-	//char * c_credit = r_cust_local->get_value(C_CREDIT);
-
+#if SIM_FULL_ROW
+	char * c_credit UNUSED = r_cust_local->get_value(C_CREDIT);
+#endif
 	/*=============================================================================+
 	  EXEC SQL INSERT INTO
 	  history (h_c_d_id, h_c_w_id, h_c_id, h_d_id, h_w_id, h_date, h_amount, h_data)
 	  VALUES (:c_d_id, :c_w_id, :c_id, :d_id, :w_id, :datetime, :h_amount, :h_data);
 	  +=============================================================================*/
 	row_t * r_hist;
-	uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+	uint64_t row_id = rid_man.next_rid(wh_to_part(c_w_id));
 	// Which partition should we be inserting into?
 	_wl->t_history->get_new_row(r_hist, wh_to_part(c_w_id), row_id);
 	r_hist->set_value(H_C_ID, c_id);
@@ -745,12 +745,15 @@ inline RC TPCCTxnManager::new_order_2(uint64_t w_id, uint64_t d_id, uint64_t c_i
 
 inline RC TPCCTxnManager::new_order_3(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, uint64_t * o_id, row_t * r_cust_local) {
   assert(r_cust_local != NULL);
-	uint64_t c_discount;
-	//char * c_last;
-	//char * c_credit;
-	r_cust_local->get_value(C_DISCOUNT, c_discount);
-	//c_last = r_cust_local->get_value(C_LAST);
-	//c_credit = r_cust_local->get_value(C_CREDIT);
+	uint64_t c_discount UNUSED;
+    r_cust_local->get_value(C_DISCOUNT, c_discount);
+
+#if SIM_FULL_ROW
+	char * c_last UNUSED = NULL;
+	char * c_credit UNUSED = NULL;
+	c_last = r_cust_local->get_value(C_LAST);
+	c_credit = r_cust_local->get_value(C_CREDIT);
+#endif
   return RCOK;
 }
  	
@@ -774,9 +777,11 @@ inline RC TPCCTxnManager::new_order_4(uint64_t w_id, uint64_t d_id, uint64_t c_i
 
 inline RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, uint64_t * o_id, row_t * r_dist_local) {
   assert(r_dist_local != NULL);
-	//double d_tax;
-	//int64_t o_id;
-	//d_tax = *(double *) r_dist_local->get_value(D_TAX);
+    //int64_t o_id;
+#if SIM_FULL_ROW
+	double d_tax UNUSED = 0;
+	d_tax = *(double *) r_dist_local->get_value(D_TAX);
+#endif
 	*o_id = *(int64_t *) r_dist_local->get_value(D_NEXT_O_ID);
 	(*o_id) ++;
 	r_dist_local->set_value(D_NEXT_O_ID, *o_id);
@@ -838,14 +843,14 @@ inline RC TPCCTxnManager::new_order_6(uint64_t ol_i_id, row_t *& r_item_local) {
 inline RC TPCCTxnManager::new_order_7(uint64_t ol_i_id, row_t * r_item_local) {
   assert(r_item_local != NULL);
 		int64_t i_price;
-		//char * i_name;
-		//char * i_data;
-		
-		r_item_local->get_value(I_PRICE, i_price);
-		//i_name = r_item_local->get_value(I_NAME);
-		//i_data = r_item_local->get_value(I_DATA);
+        r_item_local->get_value(I_PRICE, i_price);
 
-
+#if SIM_FULL_ROW
+		char * i_name UNUSED = NULL;
+		char * i_data UNUSED = NULL;
+		i_name = r_item_local->get_value(I_NAME);
+		i_data = r_item_local->get_value(I_DATA);
+#endif
 	return RCOK;
 }
 
@@ -878,6 +883,7 @@ inline RC TPCCTxnManager::new_order_8(uint64_t w_id,uint64_t  d_id,bool remote, 
 }
 		
 inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, uint64_t ol_amount, uint64_t  o_id, row_t * r_stock_local) {
+    //TODO(tq): compute ol_amount proparly
   assert(r_stock_local != NULL);
 		// XXX s_dist_xx are not retrieved.
 		UInt64 s_quantity;

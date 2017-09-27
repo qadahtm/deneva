@@ -113,7 +113,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG SILO
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -213,6 +213,7 @@
 #define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
+#define ENABLE_EQ_SWITCH false
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
