@@ -41,8 +41,13 @@ SimManager * simulation;
 Manager glob_manager;
 Query_queue query_queue;
 Client_query_queue client_query_queue;
+#if CC_ALG == OCC
 OptCC occ_man;
+#endif
+#if CC_ALG == MAAT
 Maat maat_man;
+TimeTable time_table;
+#endif
 Transport tport_man;
 TxnManPool txn_man_pool;
 TxnPool txn_pool;
@@ -58,7 +63,7 @@ MessageQueue msg_queue;
 Client_txn client_man;
 Sequencer seq_man;
 Logger logger;
-TimeTable time_table;
+
 RIDMgr rid_man;
 // for Hstore
 //#if CC_ALG == HSTORE

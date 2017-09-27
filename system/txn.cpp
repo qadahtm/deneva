@@ -666,9 +666,10 @@ Workload *TxnManager::get_wl() {
     return h_wl;
 }
 
-inline uint64_t TxnManager::get_thd_id() {
+uint64_t TxnManager::get_thd_id() {
     if (h_thd)
-        return h_thd->get_thd_id();
+//        return h_thd->get_thd_id();
+        return _thd_id;
     else
         return 0;
 }
@@ -1038,15 +1039,16 @@ RC TxnManager::validate() {
     }
     RC rc = RCOK;
     uint64_t starttime = get_sys_clock();
-    if (CC_ALG == OCC && rc == RCOK)
-        rc = occ_man.validate(this);
-    if (CC_ALG == MAAT && rc == RCOK) {
-        rc = maat_man.validate(this);
-        // Note: home node must be last to validate
-        if (IS_LOCAL(get_txn_id()) && rc == RCOK) {
-            rc = maat_man.find_bound(this);
-        }
+#if CC_ALG == OCC
+    rc = occ_man.validate(this);
+#endif
+#if CC_ALG == MAAT
+    rc = maat_man.validate(this);
+    // Note: home node must be last to validate
+    if (IS_LOCAL(get_txn_id()) && rc == RCOK) {
+        rc = maat_man.find_bound(this);
     }
+#endif
 
 
     INC_STATS(get_thd_id(), txn_validate_time, get_sys_clock() - starttime);

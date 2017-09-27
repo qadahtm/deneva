@@ -22,6 +22,7 @@
 #include "helper.h"
 #include "maat.h"
 
+#if CC_ALG == MAAT
 void Row_maat::init(row_t * row) {
 	_row = row;
 
@@ -318,4 +319,4 @@ Row_maat::write(row_t * data) {
 	_row->copy(data);
 }
 
-
+#endif // if CC_ALG == MAAT

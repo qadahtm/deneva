@@ -24,12 +24,10 @@ void Inflight_entry::init() {
 
 int32_t Inflight_entry::inc_inflight() {
 //    return ATOM_ADD_FETCH(num_inflight_txns, 1);
-    int32_t result;
+    int32_t result = -1;
     sem_wait(&mutex);
     if (num_inflight_txns < g_inflight_max) {
         result = ++num_inflight_txns;
-    } else {
-        result = -1;
     }
     sem_post(&mutex);
     return result;
@@ -37,7 +35,7 @@ int32_t Inflight_entry::inc_inflight() {
 
 int32_t Inflight_entry::dec_inflight() {
 //    return ATOM_SUB_FETCH(num_inflight_txns, 1);
-    int32_t result;
+    int32_t result =0;
     sem_wait(&mutex);
     if(num_inflight_txns > 0) {
       result = --num_inflight_txns;

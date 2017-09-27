@@ -22,7 +22,7 @@
 
 
 class TxnManager;
-
+#if CC_ALG == MAAT
 enum MAATState { MAAT_RUNNING=0,MAAT_VALIDATED,MAAT_COMMITTED,MAAT_ABORTED};
 
 class Maat {
@@ -86,3 +86,4 @@ private:
 };
 
 #endif
+#endif // #if CC_ALG == MAAT

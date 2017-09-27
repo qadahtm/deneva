@@ -1243,7 +1243,7 @@ RC PlannerThread::run_fixed_mode() {
 
     // free all assignment entries
     while(!assign_entry_free_list->empty()){
-        assign_entry * a_entry_tmp;
+        assign_entry * a_entry_tmp = NULL;
         assign_entry_free_list->pop(a_entry_tmp);
         mem_allocator.free(a_entry_tmp, sizeof(assign_entry));
     }

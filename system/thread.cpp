@@ -56,7 +56,7 @@ void Thread::init(uint64_t thd_id, uint64_t node_id, Workload * workload) {
 	rdm.init(_thd_id);
 }
 
-inline uint64_t Thread::get_thd_id() { return _thd_id; }
+uint64_t Thread::get_thd_id() { return _thd_id; }
 uint64_t Thread::get_node_id() { return _node_id; }
 
 void Thread::tsetup() {
