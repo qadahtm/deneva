@@ -224,7 +224,7 @@ BaseQuery * TPCCQueryGenerator::gen_new_order(uint64_t home_partition) {
     //rbk = URand(1, 100) == 1 ? true : false;
     query->rbk = false;
     query->ol_cnt = URand(5, g_max_items_per_txn);
-    query->o_entry_d = 2013;
+    query->o_entry_d = 2017;
 
     partitions_accessed.insert(wh_to_part(query->w_id));
 

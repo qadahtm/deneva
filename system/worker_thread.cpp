@@ -304,7 +304,13 @@ RC WorkerThread::run_fixed_mode() {
                     // Use txnManager to execute transaction frament
 #if QUECC_DB_ACCESS
                     rc = my_txn_man->run_quecc_txn(&exec_qe);
-                    assert(rc == RCOK);
+                    if (!simulation->is_done()){
+                        assert(rc == RCOK);
+                    }
+                    else{
+                        break;
+                    }
+
 #endif
 //#if COMMIT_BEHAVIOR == IMMEDIATE
 //                    uint64_t comp_cnt;
@@ -703,7 +709,12 @@ RC WorkerThread::run_normal_mode() {
                 // Use txnManager to execute transaction fragment
 #if QUECC_DB_ACCESS
                 rc = my_txn_man->run_quecc_txn(&exec_qe);
-                assert(rc == RCOK);
+                if (!simulation->is_done()){
+                    assert(rc == RCOK);
+                }
+                else {
+                    break;
+                }
 #endif
 
 //                uint64_t comp_cnt;
@@ -833,7 +844,7 @@ RC WorkerThread::run_normal_mode() {
                     //loop over all transactions in the priority group
                     for (uint64_t j = 0; j < planner_batch_size; j++){
 #if ROW_ACCESS_TRACKING
-                        volatile bool cascading_abort = true;
+                        volatile bool cascading_abort = false;
 #endif
                         if (txn_ctxs[j].txn_state != READY_TO_ABORT){
 #if BUILD_TXN_DEPS
@@ -920,7 +931,7 @@ RC WorkerThread::run_normal_mode() {
             else {
                 idle_starttime = get_sys_clock();
                 while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot].load() != 0){
-                    // SPINN Here untill all ETs are done
+                    // SPINN Here untill all ETs are done and batch is committed
                 }
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
                 idle_starttime =0;
@@ -1477,8 +1488,10 @@ inline void WorkerThread::wt_release_accesses(transaction_context * context, boo
     // releaase accesses
 
     for (uint64_t k = 0; k < context->accesses.size(); k++) {
+        M_ASSERT_V(context->accesses[k], "Zero pointer for access \n");
         uint64_t ctid = context->accesses[k]->thd_id;
         Access * access = context->accesses[k];
+
 #if ROLL_BACK
         if (rollback && access->type == WR && !cascading_abort){
             // restore only the first

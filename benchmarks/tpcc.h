@@ -170,7 +170,7 @@ public:
         row_t * r_wh_local = entry->row;
         r_wh_local->get_value(W_YTD, w_ytd);
 
-        row_access_backup(&entry->txn_ctx->accesses, WR, r_wh_local, _thd_id);
+        row_access_backup(entry->txn_ctx, WR, r_wh_local, _thd_id);
 
         if (g_wh_update) {
             r_wh_local->set_value(W_YTD, w_ytd + entry->txn_ctx->h_amount);
@@ -203,7 +203,7 @@ public:
         double d_ytd;
         r_dist_local->get_value(D_YTD, d_ytd);
 
-        row_access_backup(&entry->txn_ctx->accesses, WR, r_dist_local, _thd_id);
+        row_access_backup(entry->txn_ctx, WR, r_dist_local, _thd_id);
 
         r_dist_local->set_value(D_YTD, d_ytd + entry->txn_ctx->h_amount);
 
@@ -258,7 +258,7 @@ public:
         double c_ytd_payment;
         double c_payment_cnt;
 
-        row_access_backup(&entry->txn_ctx->accesses, WR, r_cust_local, _thd_id);
+        row_access_backup(entry->txn_ctx, WR, r_cust_local, _thd_id);
 
         r_cust_local->get_value(C_BALANCE, c_balance);
         r_cust_local->set_value(C_BALANCE, c_balance - entry->txn_ctx->h_amount);
@@ -381,7 +381,7 @@ public:
         o_id = (int64_t *) entry->row->get_value(D_NEXT_O_ID);
         (*o_id) ++;
 
-        row_access_backup(&entry->txn_ctx->accesses, WR, entry->row, _thd_id);
+        row_access_backup(entry->txn_ctx, WR, entry->row, _thd_id);
 
         entry->row->set_value(D_NEXT_O_ID, *o_id);
         int64_t e = 0;
@@ -395,8 +395,9 @@ public:
     };
 
     inline RC plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry){
-        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
-                entry->rid = row_id;
+//        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+        entry->rid = row_id;
         entry->txn_ctx->w_id = w_id;
         entry->txn_ctx->d_id = d_id;
         entry->txn_ctx->c_id = c_id;
@@ -410,15 +411,15 @@ public:
     };
     inline RC run_neworder_insert_o(exec_queue_entry * entry){
         row_t * r_order;
-        // insert by allocating memory here
-        RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
-
         uint64_t prof_time = get_sys_clock();
         // may get stuck here when simulation is done
         while (entry->txn_ctx->o_id.load() == 0){
             if (simulation->is_done()) return Abort;
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+
+        // insert by allocating memory here
+        RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
         r_order->set_value(O_C_ID, entry->txn_ctx->c_id);
         r_order->set_value(O_D_ID, entry->txn_ctx->d_id);
@@ -434,7 +435,8 @@ public:
     };
 
     inline RC plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
-        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+//        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 
         entry->txn_ctx->w_id = w_id;
         entry->txn_ctx->d_id = d_id;
@@ -521,7 +523,7 @@ public:
         int64_t s_remote_cnt;
         s_quantity = *(int64_t *)r_stock_local->get_value(S_QUANTITY);
 
-        row_access_backup(&entry->txn_ctx->accesses, WR, r_stock_local, _thd_id);
+        row_access_backup(entry->txn_ctx, WR, r_stock_local, _thd_id);
 
 #if !TPCC_SMALL
         int64_t s_ytd;

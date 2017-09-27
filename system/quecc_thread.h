@@ -9,6 +9,7 @@
 #include "thread.h"
 #include "message.h"
 #include "array.h"
+#include "spinlock.h"
 #include <boost/heap/priority_queue.hpp>
 //TQ: we will use standard lib version for now. We can use optimized implementation later
 #include <unordered_map>
@@ -59,6 +60,7 @@ struct transaction_context {
 #endif
 
 #if ROLL_BACK
+    spinlock * access_lock = NULL;
     Array<Access*> accesses;
 #endif
 };

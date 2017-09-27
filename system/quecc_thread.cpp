@@ -1940,10 +1940,14 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 //                tctx->batch_id = batch_id;
 
     // create execution entry, for now it will contain only one request
+    // we need to reset the mutable values of tctx
     entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
-//                    entry->batch_id = batch_id;
-//                    assert(tctx->batch_id == batch_id);
+    tctx->o_id.store(0);
+    // initialize access_lock if it is not intinialized
+    if (tctx->access_lock == NULL){
+        tctx->access_lock = new spinlock();
+    }
 #if !SERVER_GENERATE_QUERIES
     assert(msg->return_node_id != g_node_id);
         entry->return_node_id = msg->return_node_id;

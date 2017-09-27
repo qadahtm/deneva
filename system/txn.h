@@ -182,7 +182,7 @@ public:
     void            commit_stats();
     bool            is_multi_part();
 
-    void     row_access_backup(Array<Access*> *accesses, access_t type, row_t * row, uint64_t ctid);
+    void     row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid);
 
     void            set_timestamp(ts_t timestamp);
     ts_t            get_timestamp();

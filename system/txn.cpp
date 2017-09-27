@@ -836,11 +836,11 @@ RC TxnManager::get_lock(row_t *row, access_t type) {
     return rc;
 }
 
-void TxnManager::row_access_backup(Array<Access*> *accesses, access_t type, row_t * row, uint64_t ctid){
+void TxnManager::row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid){
 #if ROW_ACCESS_TRACKING
     Access *access;
     access_pool.get(ctid, access);
-
+    M_ASSERT_V(access, "got invalid access object\n");
 #if ROLL_BACK
     if (type == WR) {
     uint64_t part_id = row->get_part_id();
@@ -866,8 +866,10 @@ void TxnManager::row_access_backup(Array<Access*> *accesses, access_t type, row_
     access->type = type;
     access->orig_row = row;
     access->data = row;
-
-    accesses->add(access);
+    // Need to protect accesses and synchronize updates to it.
+    context->access_lock->lock();
+    context->accesses.add(access);
+    context->access_lock->unlock();
 #endif
 }
 
