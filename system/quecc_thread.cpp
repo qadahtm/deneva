@@ -2246,57 +2246,78 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
             M_ASSERT_V(false, "Execeded max split tries\n");
         }
 
-//        if (exec_qs_ranges->is_full()){
-//            // merge zero queues
-//            volatile int  msi =-1;
-//            volatile int  mei =-1;
-//
-//            assert(exec_qs_ranges->size() == exec_queues->size());
-//            for (uint64_t i =0; i < exec_qs_ranges->size(); i++){
-//                if (msi <0 && exec_queues->get(i)->size() == 0){
-//                    msi = i;
+        if (exec_qs_ranges->is_full()){
+            // merge zero queues
+
+            assert(exec_qs_ranges->size() == exec_queues->size());
+            exec_qs_ranges_tmp->clear();
+            exec_queues_tmp->clear();
+
+            for (uint64_t i =0; i < exec_qs_ranges->size(); i++){
+                // add non-empty ranges and skip empty ones except for last range
+                if (exec_queues->get(i)->size() != 0 || i == exec_qs_ranges->size()-1){
+                    exec_qs_ranges_tmp->add(exec_qs_ranges->get(i));
+                    exec_queues_tmp->add(exec_queues->get(i));
+                }
+            }
+
+//            if(exec_qs_ranges_tmp->size() == exec_qs_ranges->size()){
+//                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//                    DEBUG_Q("PL_%ld: zero-based merging old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+//                }
+//                for (uint64_t i =0; i < exec_queues->size(); ++i){
+//                    DEBUG_Q("PL_%ld: zero-based merging old exec_queues[%lu] size = %lu\n", _planner_id, i, exec_queues->get(i)->size());
 //                }
 //
-//                if (msi > 0 && exec_queues->get(i)->size() == 0) {
-//                    mei = i;
+//                for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+//                    DEBUG_Q("PL_%ld: zero-based merging new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
 //                }
 //
-//                if (msi > 0 && mei > 0){
-//                    if (i ==  exec_qs_ranges->size()-1){
-//                        // end loop
-//                        // do last merge
-//                        DEBUG_Q("PL_%ld: Doing last zero-based merging from msi=%d to mse=%d, new range = %lu to %lu\n",
-//                                _planner_id, msi, mei, exec_qs_ranges->get(msi), exec_qs_ranges->get(mei));
-//                        M_ASSERT_V(false, "Last zero-based merging is not supported\n");
-//                    }
-//                    else{
-//                        if (msi < mei && exec_queues->get(mei+1)->size() > 0){
-//                            // do middle merge
-//                            DEBUG_Q("PL_%ld: Doing middle zero-based merging from msi=%d to mse=%d, new range = %lu to %lu\n",
-//                                    _planner_id, msi, mei, exec_qs_ranges->get(msi), exec_qs_ranges->get(mei));
-//                            msi = -1;
-//                            mei = -1;
-//                        }
-//
-//                    }
+//                for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                  DEBUG_Q("PL_%ld: zero-based merging new exec_queues[%lu] size = %lu\n", _planner_id, i, exec_queues_tmp->get(i)->size());
 //                }
 //
+                M_ASSERT_V(exec_qs_ranges_tmp->size() != exec_qs_ranges->size(), "PL_%ld: there is no zero range\n", _planner_id);
 //            }
-//        }
+
+//        // print EQ PARITIONING contents
+            uint64_t total_old = 0;
+            uint64_t total_new = 0;
+
+            for (uint64_t i =0; i < exec_queues->size(); ++i){
+                total_old += exec_queues->get(i)->size();
+            }
+
+            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+                total_new += exec_queues_tmp->get(i)->size();
+            }
+            M_ASSERT_V(total_old ==  total_new, "PL_%ld: totals mismatch, totals_old = %lu, totals_new = %lu \n",_planner_id, total_old, total_new);
+
+            // Swap data structures
+            exec_queues_tmp_tmp = exec_queues;
+            exec_qs_ranges_tmp_tmp = exec_qs_ranges;
+
+            exec_queues = exec_queues_tmp;
+            exec_qs_ranges = exec_qs_ranges_tmp;
+
+            exec_queues_tmp = exec_queues_tmp_tmp;
+            exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
 
 
+            // recyvle zero-sized EQs
+            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+                Array<exec_queue_entry> *exec_q = exec_queues_tmp->get(i);
+                if (exec_q->size() == 0){
+                    quecc_pool.exec_queue_release(exec_q,_planner_id,eq_idx_rand->operator()(plan_rng));
+//                    exec_q->clear();
+//                    quecc_pool.exec_queue_release(exec_q,_planner_id,0);
+                }
+            }
 
-        //        // print PARITIONING contents
-//        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-//            DEBUG_Q("PL_%ld: old exec_qs_ranges[%ld] = %ld\n", _planner_id, i, exec_qs_ranges->get(i));
-//        }
-//
-//        for (uint64_t i =0; i < exec_queues->size(); ++i){
-//            DEBUG_Q("PL_%ld: old exec_queues[%ld] size = %ld\n", _planner_id, i, exec_queues->get(i)->size());
-//        }
+        }
+
 
         // we need to split
-//                            uint64_t mrange_size;
         uint64_t c_range_start;
         uint64_t c_range_end;
 
@@ -2325,7 +2346,8 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
         // compute new ranges
         exec_qs_ranges_tmp->clear();
         exec_queues_tmp->clear();
-
+        M_ASSERT_V(exec_queues->size() == exec_qs_ranges->size(), "PL_%ld: Size mismatch : EQS(%lu) Ranges (%lu)\n",
+                   _planner_id, exec_queues->size(), exec_qs_ranges->size());
         for (uint64_t r=0; r < exec_qs_ranges->size(); ++r){
             if (r == idx){
                 // insert split
@@ -2387,23 +2409,23 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
         idx = get_split(key, exec_qs_ranges);
         mrange = exec_queues->get(idx);
 
-        //        // print contents
-        for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
-            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
-        }
-
-        for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-            DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu\n",
-                    _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i));
-        }
-
-        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-            DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-        }
-        for (uint64_t i =0; i < exec_queues->size(); ++i){
-            DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu\n",
-                    _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i));
-        }
+        //        // print contents after split
+//        for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+//            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+//        }
+//
+//        for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//            DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu\n",
+//                    _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i));
+//        }
+//
+//        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//            DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+//        }
+//        for (uint64_t i =0; i < exec_queues->size(); ++i){
+//            DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu\n",
+//                    _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i));
+//        }
     }
     INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
 #else

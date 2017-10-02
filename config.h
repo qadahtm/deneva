@@ -210,7 +210,7 @@
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
 #define EXECQ_CAP_FACTOR 5
-#define EXEC_QS_MAX_SIZE 16//PLAN_THREAD_CNT*THREAD_CNT*4
+#define EXEC_QS_MAX_SIZE 32//PLAN_THREAD_CNT*THREAD_CNT*4
 
 #define ROW_ACCESS_TRACKING true
 #define ENABLE_EQ_SWITCH false
@@ -318,7 +318,7 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH PART_CNT
+#define NUM_WH 24//PART_CNT
 // % of transactions that access multiple partitions
 #define MPR 0.0 // used for TPCC
 #define MPIR 0.01
@@ -397,7 +397,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

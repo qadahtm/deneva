@@ -223,8 +223,7 @@ void TPCCWorkload::init_tab_item(int id) {
     for (UInt32 i = id + 1; i <= g_max_items; i += g_init_parallelism) {
         row_t *row;
         uint64_t row_id = rid_man.next_rid((uint64_t)id);
-
-#if DEBUG_QUECC
+#if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
             DEBUG_Q("gen item. RID=%lu\n",row_id);
@@ -333,7 +332,7 @@ void TPCCWorkload::init_tab_stock(int id, uint64_t wid) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t)id);
         uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
-#if DEBUG_QUECC
+#if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
             DEBUG_Q("gen stock. RID=%lu, wid = %ld\n",row_id, wid);
@@ -382,7 +381,7 @@ void TPCCWorkload::init_tab_cust(int id, uint64_t did, uint64_t wid) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t)id);
         uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
-#if DEBUG_QUECC
+#if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
             DEBUG_Q("gen cust. RID=%lu, wid = %ld\n",row_id, wid);
@@ -457,7 +456,7 @@ void TPCCWorkload::init_tab_hist(uint64_t c_id, uint64_t d_id, uint64_t w_id) {
     row_t *row;
 //    uint64_t row_id = rid_man.next_rid(w_id);
     uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
-#if DEBUG_QUECC
+#if DEBUG_WLOAD
     double x = (double)(rand() % 10000) / 10000;
     if (x < SAMPLING_FACTOR){
         DEBUG_Q("gen hist. RID=%lu, wid = %ld\n",row_id, w_id);
@@ -486,7 +485,7 @@ void TPCCWorkload::init_tab_order(int id, uint64_t did, uint64_t wid) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t) id);
         uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
-#if DEBUG_QUECC
+#if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
             DEBUG_Q("gen order. RID=%lu, wid = %ld\n",row_id, wid);
