@@ -269,8 +269,7 @@ public:
         return RCOK;
     };
     inline RC plan_payment_insert_h(uint64_t w_id, uint64_t d_id,uint64_t c_id,uint64_t c_w_id, uint64_t c_d_id, double h_amount, exec_queue_entry *& entry){
-
-        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 
         entry->rid = row_id;
         entry->txn_ctx->w_id = w_id;
@@ -416,6 +415,7 @@ public:
     inline RC run_neworder_insert_o(exec_queue_entry * entry){
         row_t * r_order;
 #if ENABLE_EQ_SWITCH
+
         if (entry->txn_ctx->o_id.load() == 0){
             return WAIT;
         }

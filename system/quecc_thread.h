@@ -220,7 +220,8 @@ public:
 #elif WORKLOAD == TPCC
     // 9223372036854775807 = 2^63
     // FIXME(tq): Use a parameter to determine the maximum database size
-    uint64_t bucket_size = (9223372036854775807) / g_thread_cnt;
+//    uint64_t bucket_size = (9223372036854775807) / g_thread_cnt;
+    uint64_t bucket_size = UINT64_MAX/NUM_WH;
 #else
     uint64_t bucket_size = 0;
 #endif

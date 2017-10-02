@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 2
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -177,7 +177,7 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6
 #define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3
-#define BATCH_MAP_LENGTH 8//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -209,11 +209,12 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 30
-#define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
+#define EXECQ_CAP_FACTOR 5
+#define EXEC_QS_MAX_SIZE 16//PLAN_THREAD_CNT*THREAD_CNT*4
 
 #define ROW_ACCESS_TRACKING true
 #define ENABLE_EQ_SWITCH false
+#define SAMPLING_FACTOR 0.001
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
@@ -319,7 +320,7 @@
 #define WH_UPDATE         true
 #define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
-#define MPR 1.0 // used for TPCC
+#define MPR 0.0 // used for TPCC
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -396,7 +397,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

@@ -792,7 +792,8 @@ inline RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_i
 		VALUES (:o_id, :d_id, :w_id, :c_id, :datetime, :o_ol_cnt, :o_all_local);
 	+========================================================================================*/
 	row_t * r_order;
-	uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+//	uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+    uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
     _wl->t_order->get_new_row(r_order, wh_to_part(w_id), row_id);
 	r_order->set_value(O_ID, *o_id);
 	r_order->set_value(O_C_ID, c_id);
@@ -923,7 +924,8 @@ inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, 
 				:ol_quantity, :ol_amount, :ol_dist_info);
 		+====================================================*/
 		row_t * r_ol;
-		uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+//		uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 		_wl->t_orderline->get_new_row(r_ol, wh_to_part(ol_supply_w_id), row_id);
 		r_ol->set_value(OL_O_ID, &o_id);
 		r_ol->set_value(OL_D_ID, &d_id);
