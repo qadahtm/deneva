@@ -366,7 +366,7 @@ uint32_t PlannerThread::get_split(uint64_t key, uint32_t range_cnt, uint64_t ran
 
 uint32_t PlannerThread::get_split(uint64_t key, Array<uint64_t> * ranges) {
     for (uint64_t i = 0; i < ranges->size(); i++){
-        if (key < ranges->get(i)){
+        if (key <= ranges->get(i)){
             return i;
         }
     }
@@ -2077,7 +2077,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     TPCCTxnManager * tpcc_txn_man = (TPCCTxnManager *)my_txn_man;
     row_t * r_local;
     Array<exec_queue_entry> *mrange;
-    uint64_t idx;
+//    uint64_t idx;
     uint64_t rid;
 
     switch (tpcc_msg->txn_type) {
@@ -2086,8 +2086,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // index look up for warehouse record
             tpcc_txn_man->payment_lookup_w(tpcc_msg->w_id, r_local);
             rid = r_local->get_row_id();
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             et_id = eq_idx_rand->operator()(plan_rng);
             // check range for warehouse and split if needed
             checkMRange(mrange, rid, et_id);
@@ -2099,8 +2099,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // plan read/update district record
             tpcc_txn_man->payment_lookup_d(tpcc_msg->w_id,tpcc_msg->d_id,tpcc_msg->d_w_id,r_local);
             rid = r_local->get_row_id();
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             checkMRange(mrange, rid, et_id);
             tpcc_txn_man->plan_payment_update_d(tpcc_msg->h_amount, r_local,entry);
             mrange->add(*entry);
@@ -2110,8 +2110,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
                                            tpcc_msg->by_last_name, r_local);
 
             rid = r_local->get_row_id();
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             checkMRange(mrange, rid, et_id);
             tpcc_txn_man->plan_payment_update_c(tpcc_msg->h_amount, r_local, entry);
             mrange->add(*entry);
@@ -2119,8 +2119,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // plan insert into history
             tpcc_txn_man->plan_payment_insert_h(tpcc_msg->w_id, tpcc_msg->d_id, tpcc_msg->c_id, tpcc_msg->c_w_id, tpcc_msg->d_w_id, tpcc_msg->h_amount, entry);
             rid = entry->rid;
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             checkMRange(mrange, rid, et_id);
             mrange->add(*entry);
 
@@ -2129,8 +2129,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // plan read on warehouse record
             tpcc_txn_man->neworder_lookup_w(tpcc_msg->w_id,r_local);
             rid = r_local->get_row_id();
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             et_id = eq_idx_rand->operator()(plan_rng);
             // check range for warehouse and split if needed
             checkMRange(mrange, rid, et_id);
@@ -2140,8 +2140,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // plan read on cust. record
             tpcc_txn_man->neworder_lookup_c(tpcc_msg->w_id,tpcc_msg->d_id,tpcc_msg->c_id, r_local);
             rid = r_local->get_row_id();
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             et_id = eq_idx_rand->operator()(plan_rng);
             checkMRange(mrange, rid, et_id);
             tpcc_txn_man->plan_neworder_read_c(r_local, entry);
@@ -2151,8 +2151,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             //plan update on district table
             tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
             rid = r_local->get_row_id();
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             et_id = eq_idx_rand->operator()(plan_rng);
             checkMRange(mrange, rid, et_id);
             tpcc_txn_man->plan_neworder_update_d(r_local,entry);
@@ -2161,8 +2161,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // plan insert into orders
             tpcc_txn_man->plan_neworder_insert_o(tpcc_msg->w_id, tpcc_msg->d_id,tpcc_msg->c_id,tpcc_msg->remote,tpcc_msg->ol_cnt,tpcc_msg->o_entry_d,entry);
             rid = entry->rid;
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             et_id = eq_idx_rand->operator()(plan_rng);
             checkMRange(mrange, rid, et_id);
             mrange->add(*entry);
@@ -2170,8 +2170,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             // plan insert into new order
             tpcc_txn_man->plan_neworder_insert_no(tpcc_msg->w_id,tpcc_msg->d_id, tpcc_msg->c_id, entry);
             rid = entry->rid;
-            idx = get_split(rid, exec_qs_ranges);
-            mrange = exec_queues->get(idx);
+//            idx = get_split(rid, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
             et_id = eq_idx_rand->operator()(plan_rng);
             checkMRange(mrange, rid, et_id);
             mrange->add(*entry);
@@ -2186,8 +2186,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
                 // plan read an item from items
                 tpcc_txn_man->neworder_lookup_i(ol_i_id,r_local);
                 rid = r_local->get_row_id();
-                idx = get_split(rid, exec_qs_ranges);
-                mrange = exec_queues->get(idx);
+//                idx = get_split(rid, exec_qs_ranges);
+//                mrange = exec_queues->get(idx);
                 et_id = eq_idx_rand->operator()(plan_rng);
                 checkMRange(mrange, rid, et_id);
                 tpcc_txn_man->plan_neworder_read_i(r_local,entry);
@@ -2196,8 +2196,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
                 // plan update to a item's stock record
                 tpcc_txn_man->neworder_lookup_s(ol_i_id,ol_supply_w_id,r_local);
                 rid = r_local->get_row_id();
-                idx = get_split(rid, exec_qs_ranges);
-                mrange = exec_queues->get(idx);
+//                idx = get_split(rid, exec_qs_ranges);
+//                mrange = exec_queues->get(idx);
                 et_id = eq_idx_rand->operator()(plan_rng);
                 checkMRange(mrange, rid, et_id);
                 tpcc_txn_man->plan_neworder_update_s(ol_quantity, tpcc_msg->remote, r_local,entry);
@@ -2206,8 +2206,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
                 // plan insert into order_line
                 tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, r_local, entry);
                 rid = entry->rid;
-                idx = get_split(rid, exec_qs_ranges);
-                mrange = exec_queues->get(idx);
+//                idx = get_split(rid, exec_qs_ranges);
+//                mrange = exec_queues->get(idx);
                 et_id = eq_idx_rand->operator()(plan_rng);
                 checkMRange(mrange, rid, et_id);
                 mrange->add(*entry);
@@ -2233,12 +2233,18 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 
 }
 
-inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id){
+inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
     prof_starttime = get_sys_clock();
     int max_tries = 64;
     int trial =0;
+
+    uint64_t c_range_start;
+    uint64_t c_range_end;
+    uint64_t idx = get_split(key, exec_qs_ranges);
+    uint64_t nidx;
+    mrange = exec_queues->get(idx);
 
     while (mrange->is_full()){
         trial++;
@@ -2246,99 +2252,95 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
             M_ASSERT_V(false, "Execeded max split tries\n");
         }
 
-        if (exec_qs_ranges->is_full()){
-            // merge zero queues
-
-            assert(exec_qs_ranges->size() == exec_queues->size());
-            exec_qs_ranges_tmp->clear();
-            exec_queues_tmp->clear();
-
-            for (uint64_t i =0; i < exec_qs_ranges->size(); i++){
-                // add non-empty ranges and skip empty ones except for last range
-                if (exec_queues->get(i)->size() != 0 || i == exec_qs_ranges->size()-1){
-                    exec_qs_ranges_tmp->add(exec_qs_ranges->get(i));
-                    exec_queues_tmp->add(exec_queues->get(i));
-                }
-            }
-
-//            if(exec_qs_ranges_tmp->size() == exec_qs_ranges->size()){
-//                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-//                    DEBUG_Q("PL_%ld: zero-based merging old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-//                }
-//                for (uint64_t i =0; i < exec_queues->size(); ++i){
-//                    DEBUG_Q("PL_%ld: zero-based merging old exec_queues[%lu] size = %lu\n", _planner_id, i, exec_queues->get(i)->size());
-//                }
+//        if (exec_qs_ranges->is_full()){
+//            // merge zero queues
+//            DEBUG_Q("PL_%ld: Going to collapse empty EQs\n", _planner_id);
 //
-//                for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
-//                    DEBUG_Q("PL_%ld: zero-based merging new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+//            assert(exec_qs_ranges->size() == exec_queues->size());
+//            exec_qs_ranges_tmp->clear();
+//            exec_queues_tmp->clear();
+//            // collapse empty EQs into one
+//            for (uint64_t i =0; i < exec_qs_ranges->size(); i++){
+//                // add non-empty ranges
+//                if (exec_queues->get(i)->size() != 0){
+//                    exec_qs_ranges_tmp->add(exec_qs_ranges->get(i));
+//                    exec_queues_tmp->add(exec_queues->get(i));
 //                }
-//
-//                for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-//                  DEBUG_Q("PL_%ld: zero-based merging new exec_queues[%lu] size = %lu\n", _planner_id, i, exec_queues_tmp->get(i)->size());
+//                else{
+//                    // add empty EQs if it is the last one or if the next one is non-empty
+//                    if (i == exec_qs_ranges->size()-1){
+//                        exec_qs_ranges_tmp->add(exec_qs_ranges->get(i));
+//                        exec_queues_tmp->add(exec_queues->get(i));
+//                    }
+//                    else if (exec_queues->get(i+1)->size() != 0){
+//                        exec_qs_ranges_tmp->add(exec_qs_ranges->get(i));
+//                        exec_queues_tmp->add(exec_queues->get(i));
+//                    }
 //                }
-//
-                M_ASSERT_V(exec_qs_ranges_tmp->size() != exec_qs_ranges->size(), "PL_%ld: there is no zero range\n", _planner_id);
 //            }
-
-//        // print EQ PARITIONING contents
-            uint64_t total_old = 0;
-            uint64_t total_new = 0;
-
-            for (uint64_t i =0; i < exec_queues->size(); ++i){
-                total_old += exec_queues->get(i)->size();
-            }
-
-            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-                total_new += exec_queues_tmp->get(i)->size();
-            }
-            M_ASSERT_V(total_old ==  total_new, "PL_%ld: totals mismatch, totals_old = %lu, totals_new = %lu \n",_planner_id, total_old, total_new);
-
-            // Swap data structures
-            exec_queues_tmp_tmp = exec_queues;
-            exec_qs_ranges_tmp_tmp = exec_qs_ranges;
-
-            exec_queues = exec_queues_tmp;
-            exec_qs_ranges = exec_qs_ranges_tmp;
-
-            exec_queues_tmp = exec_queues_tmp_tmp;
-            exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
-
-
-            // recyvle zero-sized EQs
-            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-                Array<exec_queue_entry> *exec_q = exec_queues_tmp->get(i);
-                if (exec_q->size() == 0){
-                    quecc_pool.exec_queue_release(exec_q,_planner_id,eq_idx_rand->operator()(plan_rng));
-//                    exec_q->clear();
-//                    quecc_pool.exec_queue_release(exec_q,_planner_id,0);
-                }
-            }
-
-        }
+//
+//
+//            // print EQ PARITIONING contents
+//            uint64_t total_old = 0;
+//            uint64_t total_new = 0;
+//
+//            for (uint64_t i =0; i < exec_queues->size(); ++i){
+//                total_old += exec_queues->get(i)->size();
+//            }
+//
+//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                total_new += exec_queues_tmp->get(i)->size();
+//            }
+//            M_ASSERT_V(total_old ==  total_new, "PL_%ld: totals mismatch, totals_old = %lu, totals_new = %lu \n",_planner_id, total_old, total_new);
+//
+//            // Swap data structures
+//            exec_queues_tmp_tmp = exec_queues;
+//            exec_qs_ranges_tmp_tmp = exec_qs_ranges;
+//
+//            exec_queues = exec_queues_tmp;
+//            exec_qs_ranges = exec_qs_ranges_tmp;
+//
+//            exec_queues_tmp = exec_queues_tmp_tmp;
+//            exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
+//
+////            print_eqs_ranges_after_swap();
+////            assert(false);
+//
+//            // recycle zero-sized EQs
+//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                Array<exec_queue_entry> *exec_q = exec_queues_tmp->get(i);
+//                if (exec_q->size() == 0){
+//                    quecc_pool.exec_queue_release(exec_q,_planner_id,eq_idx_rand->operator()(plan_rng));
+//                }
+//            }
+//
+//            // update mrange
+//            idx = get_split(key, exec_qs_ranges);
+//            mrange = exec_queues->get(idx);
+//            continue;
+//        }
 
 
         // we need to split
-        uint64_t c_range_start;
-        uint64_t c_range_end;
 
-        uint64_t idx = get_split(key, exec_qs_ranges);
+//        M_ASSERT_V(idx == pidx, "idx mismatch after removal of empty queues; idx=%ld , pidx=%ld\n", idx, pidx);
+//        idx = get_split(key, exec_qs_ranges);
+//        mrange = exec_queues->get(idx);
 
         if (idx == 0){
             c_range_start = 0;
-            c_range_end = exec_qs_ranges->get(idx);
         }
         else{
-            c_range_start = exec_qs_ranges->get(idx-1);;
-            c_range_end = exec_qs_ranges->get(idx);
+            c_range_start = exec_qs_ranges->get(idx-1);
         }
-
+        c_range_end = exec_qs_ranges->get(idx);
 
         uint64_t split_point = (c_range_end-c_range_start)/2;
 
-        DEBUG_Q("Planner_%ld : Eagerly we need to split, key = %lu, current size = %ld,"
-                        " batch_id = %ld, c_range_start = %lu, c_range_end = %lu, split_point = %lu"
-                        "\n",
-                _planner_id, key, mrange->size(), batch_id, c_range_start, c_range_end, split_point);
+//        DEBUG_Q("Planner_%ld : Eagerly we need to split mrange ptr = %lu, key = %lu, current size = %ld,"
+//                        " batch_id = %ld, c_range_start = %lu, c_range_end = %lu, split_point = %lu, trial=%d"
+//                        "\n",
+//                _planner_id, (uint64_t) mrange, key, mrange->size(), batch_id, c_range_start, c_range_end, split_point, trial);
 
         M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!\n, range_size = %ld",
                    _planner_id, c_range_end-c_range_start);
@@ -2357,24 +2359,25 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
                 exec_qs_ranges_tmp->add(split_point+c_range_start);
 
                 // add two new and empty exec_queues
-                Array<exec_queue_entry> * nexec_q;
-                Array<exec_queue_entry> * oexec_q;
+                Array<exec_queue_entry> * nexec_q = NULL;
+                Array<exec_queue_entry> * oexec_q = NULL;
                 quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, et_id);
+//                M_ASSERT_V(oexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
+//                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
                 quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, et_id);
+//                M_ASSERT_V(nexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
+//                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
+//                assert(oexec_q->size() == 0);
+//                assert(nexec_q->size() == 0);
                 exec_queues_tmp->add(oexec_q);
                 exec_queues_tmp->add(nexec_q);
+
             }
             else{
                 exec_queues_tmp->add(exec_queues->get(r));
             }
             exec_qs_ranges_tmp->add(exec_qs_ranges->get(r));
         }
-
-        DEBUG_Q("Planner_%ld : New ranges size = %lu, old ranges size = %lu"
-                        "\n",
-                _planner_id, exec_qs_ranges_tmp->size(), exec_qs_ranges->size());
-
-        uint64_t nidx;
 
         // use new ranges to split current execq
         for (uint64_t r =0; r < mrange->size(); ++r){
@@ -2383,10 +2386,10 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
             ycsb_request *ycsb_req_tmp = (ycsb_request *) mrange->get(r).req_buffer;
             nidx = get_split(ycsb_req_tmp->key, exec_qs_ranges_tmp);
 #else
-        //TODO(tq): implement split for TPCC
-        nidx = get_split(mrange->get(r).rid, exec_qs_ranges_tmp);;
+            nidx = get_split(mrange->get(r).rid, exec_qs_ranges_tmp);
 #endif
-            M_ASSERT_V(nidx == idx || nidx == (idx+1), "nidx=%ld, idx = %ld \n", nidx, idx);
+            // all entries must fall into one of the splits
+            M_ASSERT_V(nidx == idx || nidx == (idx+1), "nidx=%ld, idx = %ld\n", nidx, idx);
 
             exec_queues_tmp->get(nidx)->add(mrange->get(r));
         }
@@ -2405,32 +2408,59 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *&mrange, uint64_
 //                        "\n",
 //                _planner_id, exec_qs_ranges->size(), exec_qs_ranges_tmp->size());
 
+        // release current mrange
+        quecc_pool.exec_queue_release(mrange,_planner_id,0);
+//        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
+
         // use the new ranges to assign the new execution entry
         idx = get_split(key, exec_qs_ranges);
         mrange = exec_queues->get(idx);
 
-        //        // print contents after split
-//        for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
-//            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
-//        }
-//
-//        for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-//            DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu\n",
-//                    _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i));
-//        }
-//
-//        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-//            DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-//        }
-//        for (uint64_t i =0; i < exec_queues->size(); ++i){
-//            DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu\n",
-//                    _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i));
-//        }
+//        print_eqs_ranges_after_swap();
+
     }
     INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
 #else
     M_ASSERT(false, "LAZY_SPLIT not supported in TPCC")
 #endif
+}
+
+void PlannerThread::print_eqs_ranges_after_swap() const {//        // print contents after split
+    for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+        DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+    }
+
+    for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+        DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+                _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+    }
+
+    for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+        DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+    }
+    for (uint64_t i =0; i < exec_queues->size(); ++i){
+        DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+                _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+    }
+}
+
+void PlannerThread::print_eqs_ranges_before_swap() const {//        // print contents after split
+    for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+        DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+    }
+
+    for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+        DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+                _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+    }
+
+    for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+        DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+    }
+    for (uint64_t i =0; i < exec_queues->size(); ++i){
+        DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+                _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+    }
 }
 
 // QueCCPool methods implementation
@@ -2532,6 +2562,7 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
 
 void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
     exec_q->clear();
+//    DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
     while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
 #if DEBUG_QUECC
     exec_q_rel_cnts[et_id].fetch_add(1);

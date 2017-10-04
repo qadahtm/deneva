@@ -210,10 +210,10 @@
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
 #define EXECQ_CAP_FACTOR 5
-#define EXEC_QS_MAX_SIZE 32//PLAN_THREAD_CNT*THREAD_CNT*4
+#define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
-#define ENABLE_EQ_SWITCH false
+#define ENABLE_EQ_SWITCH true
 #define SAMPLING_FACTOR 0.001
 
 // used for building histogram for planning

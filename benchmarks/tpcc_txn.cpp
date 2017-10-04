@@ -809,7 +809,7 @@ inline RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_i
         VALUES (:o_id, :d_id, :w_id);
     +=======================================================*/
 	row_t * r_no;
-    row_id = rid_man.next_rid(this->h_thd->_thd_id);
+    row_id = rid_man.next_rid(wh_to_part(w_id));
 	_wl->t_neworder->get_new_row(r_no, wh_to_part(w_id), row_id);
 	r_no->set_value(NO_O_ID, *o_id);
 	r_no->set_value(NO_D_ID, d_id);

@@ -301,6 +301,9 @@ private:
             new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
 
 #endif
+
+    void print_eqs_ranges_after_swap() const;
+    void print_eqs_ranges_before_swap() const;
 };
 
 #if CT_ENABLED

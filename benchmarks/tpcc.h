@@ -569,7 +569,7 @@ public:
 
     inline RC plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, row_t *& r_ol_local, exec_queue_entry * entry){
 
-        uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
+        uint64_t row_id = rid_man.next_rid(wh_to_part(ol_supply_w_id));
 
         entry->rid = row_id;
         entry->txn_ctx->ol_supply_w_id = ol_supply_w_id;
