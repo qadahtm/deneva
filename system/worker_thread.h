@@ -65,6 +65,8 @@ private:
     TxnManager * txn_man;
 
 
+    void move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts, Array<exec_queue_entry> *&exec_q,
+                         uint64_t &w_exec_q_index) const;
 };
 
 #endif

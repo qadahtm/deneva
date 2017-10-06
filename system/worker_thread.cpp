@@ -14,6 +14,7 @@
    limitations under the License.
 */
 
+#include <tpcc_helper.h>
 #include "global.h"
 #include "manager.h"
 #include "thread.h"
@@ -616,11 +617,20 @@ RC WorkerThread::run_normal_mode() {
     _wl->get_txn_man(my_txn_man);
     my_txn_man->init(_thd_id, _wl);
     my_txn_man->register_thread(this);
-#endif
-//    bool batch_done = false;
+
     uint64_t * eq_comp_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_exec_qs_max_size);
-    bool * eq_comp_status = (bool *) mem_allocator.alloc(sizeof(bool)*g_exec_qs_max_size);
-    uint64_t batch_part_eq_cnt = 0;
+//    bool * eq_comp_status = (bool *) mem_allocator.alloc(sizeof(bool)*g_exec_qs_max_size);
+    volatile uint64_t batch_part_eq_cnt = 0;
+
+    exec_queue_entry exec_qe UNUSED;
+
+    volatile bool batch_partition_done = false;
+    uint64_t w_exec_q_index = 0;
+
+    double et_idle_time = 0;
+    volatile bool eq_switch = false;
+
+#endif
 
     while (!simulation->is_done()) {
         txn_man = NULL;
@@ -641,132 +651,176 @@ RC WorkerThread::run_normal_mode() {
             if (idle_starttime == 0){
                 idle_starttime = get_sys_clock();
             }
-//            DEBUG_Q("ET_%ld: Got nothing from planning layer, wbatch_id = %ld,"
+//            SAMPLED_DEBUG_Q("ET_%ld: Got nothing from planning layer, wbatch_id = %ld,"
 //                            "\n",
 //                    _thd_id,  wbatch_id);
             continue;
         }
 
+        // collect some stats
+        quecc_batch_part_proc_starttime = get_sys_clock();
+        if(idle_starttime > 0) {
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+
+            et_idle_time += get_sys_clock()-idle_starttime;
+
+            idle_starttime = 0;
+        }
+        if (wplanner_id == 0 && quecc_batch_proc_starttime == 0){
+            quecc_batch_proc_starttime = get_sys_clock();
+        }
+
 //        M_ASSERT_V(batch_part->batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
 //                " wbatch_id=%ld, batch_part_batch_id = %ld\n",
 //                   batch_slot,_thd_id, wplanner_id, wbatch_id, batch_part->batch_id);
+//        double x = (double)(rand() % 1000000) / 1000000;
+//        if (x < SAMPLING_FACTOR){
 
-        bool batch_partition_done = false;
-        uint64_t w_exec_q_index = 0;
-        bool started = false;
+//        int eq_cnt UNUSED = 0;
+//        if (batch_part->single_q){
+//            eq_cnt = 1;
+//        }
+//        else{
+//            eq_cnt = batch_part->exec_qs->size();
+//        }
+//
+//        DEBUG_Q("ET_%ld: Got a PG %ld, wbatch_id = %ld, with %d EQs"
+//                        "\n",
+//                _thd_id, wplanner_id, wbatch_id, eq_cnt);
+//        for (int y=0; y < eq_cnt; ++y){
+//            if (!batch_part->single_q){
+//                DEBUG_Q("ET_%ld: --- EQ[%d], size = %ld\n", _thd_id, y,
+//                        batch_part->exec_qs->get(y)->size());
+//            }
+//        }
 
+
+//        }
+
+
+        batch_partition_done = false;
+
+//        DEBUG_Q("ET_%ld: going to work on PG %ld\n",_thd_id, wplanner_id);
+
+        memset(eq_comp_cnts,0, sizeof(uint64_t)*g_exec_qs_max_size);
+//                memset(eq_comp_status,0, sizeof(bool)*g_exec_qs_max_size);
+
+
+        //select an execution queue to work on.
+        if (batch_part->single_q){
+            exec_q = batch_part->exec_q;
+            batch_part_eq_cnt =1;
+        }
+        else {
+            desired8 = WORKING;
+            expected8 = AVAILABLE;
+            if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected8, desired8)){
+                // we need to fail here because we should be the first one
+                M_ASSERT_V(false, "ET_%ld : Could not reserve exec_q at %ld, status = %d, wbatch_id = %lu\n",
+                           _thd_id, w_exec_q_index, batch_part->exec_qs_status[w_exec_q_index].load(), wbatch_id);
+            }
+            exec_q = batch_part->exec_qs->get(w_exec_q_index);
+            batch_part_eq_cnt = batch_part->exec_qs->size();
+        }
 
         while (!batch_partition_done && !simulation->is_done()){
-
-            if (!started){
-                memset(eq_comp_cnts,0, sizeof(uint64_t)*g_exec_qs_max_size);
-                memset(eq_comp_status,0, sizeof(bool)*g_exec_qs_max_size);
-                //select an execution queue to work on.
-                if (batch_part->single_q){
-                    exec_q = batch_part->exec_q;
-                    batch_part_eq_cnt =1;
-                    w_exec_q_index = 0;
-                }
-                else {
-                    desired8 = WORKING;
-                    expected8 = AVAILABLE;
-                    if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected8, desired8)){
-                        // we need to fail here because we should be the first one
-                        M_ASSERT_V(false, "ET_%ld : Could not reserve exec_q at %ld, status = %d, wbatch_id = %lu\n",
-                                   _thd_id, w_exec_q_index, batch_part->exec_qs_status[w_exec_q_index].load(), wbatch_id);
-                    }
-                    exec_q = batch_part->exec_qs->get(w_exec_q_index);
-                    batch_part_eq_cnt = batch_part->exec_qs->size();
-                }
-
-                started = true;
-            }
-
-
-            // process exec_q
-
-            // collect some stats
-//            quecc_batch_part_proc_starttime = get_sys_clock();
-//            if(idle_starttime > 0) {
-//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-//                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-//                idle_starttime = 0;
-//            }
-//            if (wplanner_id == 0 && quecc_batch_proc_starttime == 0){
-//                quecc_batch_proc_starttime = get_sys_clock();
-//            }
-
-
 //            DEBUG_Q("ET_%ld: Got a pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,"
 //                            "batch partition exec_q size = %ld entries, single queue = %d, sub_queues_cnt = %ld"
 //                            "\n",
 //                    _thd_id, batch_slot,_thd_id, wplanner_id, ((uint64_t) exec_q), wbatch_id,
 //                    exec_q->size(), batch_part->single_q, batch_part->sub_exec_qs_cnt);
 
-//            DEBUG_Q("Processing batch partition from planner[%ld]\n", wplanner_id);
-//            uint64_t qsize __attribute__ ((unused));
-//            qsize = exec_q->size();
-
 #if ENABLE_EQ_SWITCH
-            exec_queue_entry exec_qe UNUSED;
 
-            if (!batch_part->single_q){
-                if (exec_q->size() > 0 && eq_comp_status[w_exec_q_index] == false){
+//            if (URand(0, g_thread_cnt -1)){
+//                DEBUG_Q("ET_%ld: going to work on EQ[%ld], completed %ld out of %ld\n" ,_thd_id, w_exec_q_index, eq_comp_cnts[w_exec_q_index], exec_q->size());
+//            }
+
+            if(idle_starttime > 0) {
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+
+                et_idle_time += get_sys_clock()-idle_starttime;
+
+                idle_starttime = 0;
+            }
+
+
+            // Select an entry from selected exec_q
+            if (exec_q->size() > 0){
+                if (exec_q->size() > eq_comp_cnts[w_exec_q_index]){
                     exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
-                    rc = my_txn_man->run_quecc_txn(&exec_qe);
-                    if (rc == RCOK){
-                        eq_comp_cnts[w_exec_q_index]++;
-                        if (exec_q->size() == eq_comp_cnts[w_exec_q_index]){
-                            if (eq_comp_status[w_exec_q_index] == false){
-                                eq_comp_status[w_exec_q_index] = true;
-                                batch_part_eq_cnt--;
-                            }
-                        }
-                    }
-                    else {
-                        assert(rc == WAIT);
-                        // choose another EQ to process
-                        if (!batch_part->single_q){
-                            w_exec_q_index = (w_exec_q_index+1) % batch_part->exec_qs->size();
-                            exec_q = batch_part->exec_qs->get(w_exec_q_index);
-                            while (eq_comp_cnts[w_exec_q_index] == exec_q->size()){
-                                w_exec_q_index = (w_exec_q_index+1) % batch_part->exec_qs->size();
-                                exec_q = batch_part->exec_qs->get(w_exec_q_index);
-                            }
-                        }
-                    }
-                }
-                else{
-                    // empty queue
-                    // mark as completed if not already marked
-                    if (eq_comp_status[w_exec_q_index] == false){
-                        eq_comp_status[w_exec_q_index] = true;
-                        batch_part_eq_cnt--;
-                    }
                 }
             }
             else{
-                if (exec_q->size() > 0){
-                    exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
-                    rc = my_txn_man->run_quecc_txn(&exec_qe);
-                    if (rc == RCOK){
-                        eq_comp_cnts[w_exec_q_index]++;
-                        if (exec_q->size() == eq_comp_cnts[w_exec_q_index]){
-                            batch_part_eq_cnt--;
-                        }
-                    }
-                    else {
-                        assert(rc == WAIT);
-                        // start collecting stats for waiting
-                    }
-                }
-                else{
-                    batch_part_eq_cnt--;
-                }
+                batch_part_eq_cnt--;
+                eq_switch = true;
+                goto eq_done;
             }
+            // execute selected entry
+//            DEBUG_Q("ET_%ld: Processing an entry, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
+//                            _thd_id, wbatch_id, exec_qe.txn_id, wplanner_id);
+            rc = my_txn_man->run_quecc_txn(&exec_qe);
+
+            while (rc == RCOK){
+//                DEBUG_Q("ET_%ld: Processed an entry successfully, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
+//                _thd_id, wbatch_id, exec_qe.txn_id, wplanner_id);
+                eq_comp_cnts[w_exec_q_index]++;
+
+                if (exec_q->size() == eq_comp_cnts[w_exec_q_index]){
+                    batch_part_eq_cnt--;
+
+//                DEBUG_Q("ET_%ld: completed full EQ for batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
+//                                " completed %ld out of %ld"
+//                                " et_idle_time = %f\n",
+//                        _thd_id,wbatch_id, eq_cnt, wplanner_id,
+//                        eq_comp_cnts[w_exec_q_index], exec_q->size(),
+//                        et_idle_time/BILLION
+//                );
+                    eq_switch = true;
+                    break;
+                }
+
+                exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
+                rc = my_txn_man->run_quecc_txn(&exec_qe);
+            }
+
+
+            if (rc == WAIT){
+//                assert(rc == WAIT);
+                if (exec_qe.type == TPCC_NEWORDER_UPDATE_D){
+                    assert(false);
+                }
+
+//                DEBUG_Q("ET_%ld: waiting on batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
+//                                    " completed %ld out of %ld"
+//                                    " exec_idle_time = %f,  waiting for txn_id = %ld\n",
+//                                _thd_id,wbatch_id, eq_cnt, wplanner_id,
+//                                eq_comp_cnts[w_exec_q_index], exec_q->size(),
+//                                et_idle_time/BILLION, exec_qe.txn_id
+//                );
+
+                eq_switch = true;
+            }
+eq_done:
+            if (!batch_part->single_q && eq_switch){
+//                uint64_t p_w_exec_q_index = w_exec_q_index;
+
+                move_to_next_eq(batch_part, eq_comp_cnts, exec_q, w_exec_q_index);
+//                if (p_w_exec_q_index != w_exec_q_index){
+//                    DEBUG_Q("ET_%ld: switching EQ[%ld] to EQ[%ld]\n", _thd_id, p_w_exec_q_index, w_exec_q_index);
+//                }
+            }
+
+            if (rc == WAIT && idle_starttime == 0){
+                idle_starttime = get_sys_clock();
+            }
+            eq_switch = false;
+
 #else
             for (uint64_t i = 0; i < exec_q->size(); ++i) {
-                exec_queue_entry exec_qe __attribute__ ((unused)) = exec_q->get(i);
+//                exec_queue_entry exec_qe __attribute__ ((unused)) = exec_q->get(i);
                 // Asserts are commented out
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
 //                M_ASSERT_V(exec_qe.txn_id == exec_qe.txn_ctx->txn_id,
@@ -809,38 +863,17 @@ RC WorkerThread::run_normal_mode() {
 
             batch_part_eq_cnt--;
 #endif
-
+            M_ASSERT_V(batch_part_eq_cnt >= 0, "ET_%ld: completed eq cont for batch_id = %ld is %ld\n", _thd_id, wbatch_id, batch_part_eq_cnt);
             if (batch_part_eq_cnt == 0){
+//                DEBUG_Q("ET_%ld: PG %ld is done yet, remaining EQ cnt = %ld out of %d!!\n",
+//                _thd_id, wplanner_id, batch_part_eq_cnt, eq_cnt);
+
+                w_exec_q_index = 0;
                 batch_partition_done = true;
-
             }
-            else{
-                if (!batch_part->single_q){
-                    // move to the next exec_q withing same batch partition
-                    w_exec_q_index = (w_exec_q_index+1) % batch_part->exec_qs->size();
-                    exec_q = batch_part->exec_qs->get(w_exec_q_index);
-                }
-            }
-
-//            if (!batch_part->single_q){
-//                // set the status of this processed EQ to complete
-////                desired8 = COMPLETED;
-////                expected8 = WORKING;
-////                if (!batch_part->exec_qs_status[w_exec_q_index].compare_exchange_strong(expected8, desired8)){
-////                    // we need to fail here because we should be the only one who can do this
-////                    M_ASSERT_V(false, "ET_%ld : Could not set exec_q at %ld to COMPLETED\n", _thd_id, w_exec_q_index);
-////                }
-//
-//                // move the next exec_q withing same batch partition
-//                w_exec_q_index++;
-//
-//                // check if we are done with all exec_qs within the same batch_partition
-//                if (w_exec_q_index == batch_part->sub_exec_qs_cnt){
-//                    batch_partition_done = true;
-//                }
-//            }
 //            else{
-//                batch_partition_done = true;
+//                DEBUG_Q("ET_%ld: PG %ld is not done yet, remaining EQ cnt = %ld out of %d!!\n",
+//                                _thd_id, wplanner_id, batch_part_eq_cnt, eq_cnt);
 //            }
         }
 
@@ -849,8 +882,7 @@ RC WorkerThread::run_normal_mode() {
             continue;
         }
 
-
-        started = false;
+//        DEBUG_Q("ET_%ld: PG %ld is done moving to th next PG\n",_thd_id, wplanner_id);
 
         // reset batch_map_slot to zero after processing it
         // reset map slot to 0 to allow planners to use the slot
@@ -903,13 +935,14 @@ RC WorkerThread::run_normal_mode() {
             }
 
 #else
+//            DEBUG_Q("ET_%ld: completed all PGs !!!!\n", _thd_id);
             if (_thd_id == 0){
                 // Thread 0 acts as commit thread
 //                assert(idle_starttime == 0);
                 idle_starttime = get_sys_clock();
                 while (!simulation->is_done() && (work_queue.batch_map_comp_cnts[batch_slot].load() != g_thread_cnt)){
                     // SPINN Here untill all ETs are done
-//                    DEBUG_Q("ET_%ld: waiting for other ETs to be done, wbatch_id = %ld at slot = %ld, val = %d, thd_cnt = %d"
+//                    SAMPLED_DEBUG_Q("ET_%ld: waiting for other ETs to be done, wbatch_id = %ld at slot = %ld, val = %d, thd_cnt = %d"
 //                                    "\n",
 //                            _thd_id,  wbatch_id, batch_slot,work_queue.batch_map_comp_cnts[batch_slot].load(), g_thread_cnt);
                 }
@@ -1003,6 +1036,8 @@ RC WorkerThread::run_normal_mode() {
                             // transaction should be aborted due to integrity constraints
                             wt_release_accesses(&txn_ctxs[j], cascading_abort, true);
                         }
+
+                        txn_ctxs[j].o_id.store(-1);
                     }
 
                     INC_STATS(_thd_id, txn_cnt, commit_cnt);
@@ -1023,6 +1058,7 @@ RC WorkerThread::run_normal_mode() {
             }
             else {
                 idle_starttime = get_sys_clock();
+//                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
                 while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot].load() != 0){
                     // SPINN Here untill all ETs are done and batch is committed
                 }
@@ -1200,6 +1236,26 @@ RC WorkerThread::run_normal_mode() {
     printf("FINISH WT %ld:%ld\n", _node_id, _thd_id);
     fflush(stdout);
     return FINISH;
+}
+
+void WorkerThread::move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts,
+                                   Array<exec_queue_entry> *&exec_q, uint64_t &w_exec_q_index) const {
+    for (uint64_t i =0; i < batch_part->exec_qs->size(); ++i){
+        if (i != w_exec_q_index && batch_part->exec_qs->get(i)->size() > eq_comp_cnts[i]){
+            w_exec_q_index = i;
+            exec_q = batch_part->exec_qs->get(i);
+            return;
+        }
+    }
+    // could not switch the same
+    return;
+
+//    w_exec_q_index = (w_exec_q_index + 1) % batch_part->exec_qs->size();
+//    exec_q = batch_part->exec_qs->get(w_exec_q_index);
+//    while (eq_comp_cnts[w_exec_q_index] == exec_q->size()){
+//        w_exec_q_index = (w_exec_q_index+1) % batch_part->exec_qs->size();
+//        exec_q = batch_part->exec_qs->get(w_exec_q_index);
+//    }
 }
 
 RC WorkerThread::process_rfin(Message *msg) {

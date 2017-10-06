@@ -1326,7 +1326,8 @@ RC PlannerThread::run_normal_mode() {
 #if WORKLOAD == TPCC
     for (uint64_t i = 0; i < g_num_wh; i++) {
         Array<exec_queue_entry> * exec_q;
-        quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i);
+
+        quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i % g_thread_cnt);
         exec_queues->add(exec_q);
     }
 #else
@@ -1458,22 +1459,31 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 
         for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
             assign_entry *a_tmp;
-            if (i < g_thread_cnt){
+            Array<exec_queue_entry> *exec_q = exec_queues->get(i);
 
+            if (i < g_thread_cnt){
                 assign_entry_get_or_create(a_tmp, assign_entry_free_list);
 
                 assign_entry_init(a_tmp, _planner_id);
                 a_tmp->exec_thd_id = i;
-                assign_entry_add(a_tmp, exec_queues->get(i));
+                assign_entry_add(a_tmp, exec_q);
                 assignment.push((uint64_t) a_tmp);
             }
             else {
-                a_tmp = (assign_entry *) assignment.top();
-                assign_entry_add(a_tmp, exec_queues->get(i));
-                assignment.pop();
-                assignment.push((uint64_t) a_tmp);
+                if (exec_q->size() > 0){
+                    a_tmp = (assign_entry *) assignment.top();
+//                    DEBUG_Q("PT_%ld: adding excess EQs to ET_%ld\n", _planner_id, a_tmp->exec_thd_id);
+                    assign_entry_add(a_tmp, exec_q);
+                    assignment.pop();
+                    assignment.push((uint64_t) a_tmp);
+                }
+                else{
+                    quecc_pool.exec_queue_release(exec_q,_planner_id, URand(0, g_thread_cnt-1));
+                }
             }
         }
+//        M_ASSERT_V(assignment.size() == g_thread_cnt, "PL_%ld: size mismatch of assignments to threads, assignment size = %ld, thread-cnt = %d\n",
+//                   _planner_id, assignment.size(), g_thread_cnt);
         INC_STATS(_thd_id, plan_merge_time[_planner_id], get_sys_clock()-prof_starttime);
 #else // LAZY SPLIT
         #if BATCHING_MODE != SIZE_BASED
@@ -1797,7 +1807,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
             while(bcond) {
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
-                    DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
+                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
                 }
             }
             // include idle time from spinning above
@@ -1816,6 +1826,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
             while(!work_queue.batch_map[slot_num][_planner_id][i].compare_exchange_strong(expected, desired)){
                 // this should not happen after spinning but can happen if simulation is done
 //                    M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
+                SAMPLED_DEBUG_Q("PT_%ld: for batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id)
             }
 
 #endif
@@ -1904,7 +1915,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
             }
-//                DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
+//                SAMPLED_DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
         }
 
 
@@ -1965,7 +1976,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     // we need to reset the mutable values of tctx
     entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
-    tctx->o_id.store(0);
+    tctx->o_id.store(-1);
     // initialize access_lock if it is not intinialized
     if (tctx->access_lock == NULL){
         tctx->access_lock = new spinlock();
@@ -2542,7 +2553,6 @@ void QueCCPool::free_all() {
 }
 
 void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
-    // we will use single list for now.
     if (!exec_queue_free_list[et_id][planner_id]->pop(exec_q)){
         exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
         exec_q->init(exec_queue_capacity);
@@ -2551,7 +2561,8 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
 #endif
 //        DEBUG_Q("Allocating exec_q\n");
     }
-    else {
+    else{
+        M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
         exec_q->clear();
 #if DEBUG_QUECC
         exec_q_reuse_cnts[et_id].fetch_add(1);
@@ -2561,6 +2572,7 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
 }
 
 void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
+    M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
     exec_q->clear();
 //    DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
     while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};

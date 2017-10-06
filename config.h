@@ -6,12 +6,12 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT QUECC_ET_CNT
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT THREAD_CNT//NODE_CNT
+#define PART_CNT 16//NODE_CNT
 
 // TQ: since we have 20 cores per node on halstead
 // With a single node used for client requests, 
@@ -170,13 +170,14 @@
 
 // [QUECC]
 // Planner thread cnt should be equal to part_cnt
-#define PLAN_THREAD_CNT PART_CNT
+#define QUECC_ET_CNT    14
+#define PLAN_THREAD_CNT 2//PART_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6
-#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3
+#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
@@ -209,12 +210,12 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 5
-#define EXEC_QS_MAX_SIZE PLAN_THREAD_CNT*THREAD_CNT*2
+#define EXECQ_CAP_FACTOR 2
+#define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
 #define ENABLE_EQ_SWITCH true
-#define SAMPLING_FACTOR 0.001
+#define SAMPLING_FACTOR 0.000001
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
@@ -318,7 +319,7 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH 24//PART_CNT
+#define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
 #define MPR 0.0 // used for TPCC
 #define MPIR 0.01

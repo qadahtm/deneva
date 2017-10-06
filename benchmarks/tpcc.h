@@ -388,11 +388,11 @@ public:
         row_access_backup(entry->txn_ctx, WR, entry->row, _thd_id);
 
         entry->row->set_value(D_NEXT_O_ID, *o_id);
-        int64_t e = 0;
+        int64_t e = -1;
         int64_t d = *o_id;
 
         if(!entry->txn_ctx->o_id.compare_exchange_strong(e,d)){
-            M_ASSERT_V(false, "we should have 0 but found %ld\n", entry->txn_ctx->o_id.load());
+            M_ASSERT_V(false, "we should have -1 but found %ld\n", entry->txn_ctx->o_id.load());
         }
 
         return RCOK;
@@ -416,7 +416,8 @@ public:
         row_t * r_order;
 #if ENABLE_EQ_SWITCH
 
-        if (entry->txn_ctx->o_id.load() == 0){
+        if (entry->txn_ctx->o_id.load() == -1){
+//            SAMPLED_DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
             return WAIT;
         }
 #else
@@ -457,7 +458,8 @@ public:
     inline RC run_neworder_insert_no(exec_queue_entry * entry){
         row_t * r_no;
 #if ENABLE_EQ_SWITCH
-        if (entry->txn_ctx->o_id.load() == 0){
+        if (entry->txn_ctx->o_id.load() == -1){
+//            SAMPLED_DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
             return WAIT;
         }
 #else
@@ -592,7 +594,8 @@ public:
 		+====================================================*/
         row_t * r_ol;
 #if ENABLE_EQ_SWITCH
-        if (entry->txn_ctx->o_id.load() == 0){
+        if (entry->txn_ctx->o_id.load() == -1){
+//            SAMPLED_DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
             return WAIT;
         }
 #else

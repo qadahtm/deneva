@@ -59,6 +59,11 @@
     fflush(stdout); \
   }
 
+#define SAMPLED_DEBUG_Q(...) \
+	if (((double)(rand() % 1000000) / 1000000) < SAMPLING_FACTOR){ \
+		DEBUG_Q(__VA_ARGS__); \
+	}
+
 #define DEBUG_WL(...) \
   if(DEBUG_WLOAD) { \
     fprintf(stdout,__VA_ARGS__); \

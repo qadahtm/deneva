@@ -280,9 +280,10 @@ num_trials = 2;
 # cc_algs = ['HSTORE']
 # cc_algs = ['QUECC', "NO_WAIT"]
 # # cc_algs = ['LADS']
-cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC']
+# cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC']
 # cc_algs = ['QUECC', 'HSTORE', 'SILO']
 # cc_algs = ['QUECC']
+cc_algs = ['QUECC','TIMESTAMP']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
