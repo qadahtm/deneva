@@ -295,7 +295,10 @@ private:
     Array<Array<exec_queue_entry> *> * exec_queues_tmp;
     Array<Array<exec_queue_entry> *> * exec_queues_tmp_tmp;
 #endif
+#if MERGE_STRATEGY == BALANCE_EQ_SIZE
     assign_ptr_min_heap_t assignment;
+#elif MERGE_STRATEGY == RR
+#endif
     uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
     boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
             new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);

@@ -263,29 +263,30 @@ void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
     INC_STATS(thd_id,plan_txn_cnts[planner_id],1);
 }
 // need a mapping between thread ids and planner ids
-Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
+Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
   assert(ISSERVER);
   Message * msg = NULL;
 
   uint64_t prof_starttime = 0;
-//    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, planner_id);
+//    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, home_partition);
   prof_starttime = get_sys_clock();
 #if SERVER_GENERATE_QUERIES
   if(ISSERVER) {
 #if INIT_QUERY_MSGS
-    msg = client_query_queue.get_next_query(planner_id, thd_id);
+    msg = client_query_queue.get_next_query(home_partition, thd_id);
 #else
     BaseQuery * m_query = NULL;
-    m_query = client_query_queue.get_next_query(planner_id,thd_id);
+    m_query = client_query_queue.get_next_query(home_partition,thd_id);
     assert(m_query);
     if(m_query) {
+//      DEBUG_Q("thread %ld, home partition = %ld, creating client query message\n", thd_id, home_partition);
       msg = Message::create_message((BaseQuery*)m_query,CL_QRY);
     }
 #endif
   }
 #else
     work_queue_entry * entry = NULL;
-    bool valid = plan_queue[planner_id]->pop(entry);
+    bool valid = plan_queue[home_partition]->pop(entry);
     if(valid) {
     msg = entry->msg;
     assert(msg);
@@ -294,11 +295,11 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t planner_id) {
 //    DEBUG_M("PlanQueue::dequeue work_queue_entry free\n");
     prof_starttime = get_sys_clock();
     mem_allocator.free(entry,sizeof(work_queue_entry));
-    INC_STATS(thd_id, plan_queue_deq_free_mem_time[planner_id], get_sys_clock()-prof_starttime);
+    INC_STATS(thd_id, plan_queue_deq_free_mem_time[home_partition], get_sys_clock()-prof_starttime);
   }
 #endif
 
-  INC_STATS(thd_id, plan_queue_deq_pop_time[planner_id], get_sys_clock()-prof_starttime);
+  INC_STATS(thd_id, plan_queue_deq_pop_time[home_partition], get_sys_clock()-prof_starttime);
 
   return msg;
 

@@ -11,7 +11,7 @@
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT 16//NODE_CNT
+#define PART_CNT 32//NODE_CNT
 
 // TQ: since we have 20 cores per node on halstead
 // With a single node used for client requests, 
@@ -170,8 +170,8 @@
 
 // [QUECC]
 // Planner thread cnt should be equal to part_cnt
-#define QUECC_ET_CNT    14
-#define PLAN_THREAD_CNT 2//PART_CNT
+#define QUECC_ET_CNT    8
+#define PLAN_THREAD_CNT 8//PART_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
@@ -202,6 +202,7 @@
 #define MERGE_STRATEGY BALANCE_EQ_SIZE
 #define BALANCE_EQ_SIZE 1
 #define GREEDY_RANGE_LOCALITY 2
+#define RR  3
 
 #define QUECC_DB_ACCESS true
 
@@ -210,7 +211,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 2
+#define EXECQ_CAP_FACTOR 30
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
@@ -321,7 +322,7 @@
 #define WH_UPDATE         true
 #define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
-#define MPR 0.0 // used for TPCC
+#define MPR 1.0 // used for TPCC
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -398,7 +399,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

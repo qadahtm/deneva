@@ -35,13 +35,9 @@ Client_query_queue::init(Workload * h_wl) {
 #if SERVER_GENERATE_QUERIES
     if(ISCLIENT)
         return;
-//    size = g_thread_cnt;
     size = g_part_cnt;
 #else
     size = g_servers_per_client;
-#endif
-#if CC_ALG == QUECC
-//    size = g_plan_thread_cnt;
 #endif
     query_cnt = new uint64_t * [size];
     for (UInt32 id = 0; id < size; id++) {
@@ -109,13 +105,8 @@ Client_query_queue::initQueriesParallel() {
     PPSQueryGenerator * gen = new PPSQueryGenerator;
 #endif
 #if SERVER_GENERATE_QUERIES
-//    UInt32 thd_cnt = g_thread_cnt;
     UInt32 thd_cnt = g_part_cnt;
 
-//#if CC_ALG == QUECC
-//    DEBUG_WL("QueCC server-side generation ...\n")
-//    thd_cnt = g_plan_thread_cnt;
-//#endif
 #if WORKLOAD == YCSB
     M_ASSERT_V(g_thread_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
 #endif

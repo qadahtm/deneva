@@ -85,7 +85,7 @@ public:
     // TQ: QUECC
     uint64_t get_random_planner_id(uint64_t thd_id);
     void plan_enqueue(uint64_t thd_id, Message * msg);
-    Message * plan_dequeue(uint64_t thd_id, uint64_t planner_id);
+    Message * plan_dequeue(uint64_t thd_id, uint64_t home_partition);
 
     // QueCC batch slot map
 // Layout of the batch map is imporatant to avoid potential tharshing

@@ -677,24 +677,27 @@ RC WorkerThread::run_normal_mode() {
 //        double x = (double)(rand() % 1000000) / 1000000;
 //        if (x < SAMPLING_FACTOR){
 
-//        int eq_cnt UNUSED = 0;
-//        if (batch_part->single_q){
-//            eq_cnt = 1;
-//        }
-//        else{
-//            eq_cnt = batch_part->exec_qs->size();
-//        }
-//
-//        DEBUG_Q("ET_%ld: Got a PG %ld, wbatch_id = %ld, with %d EQs"
-//                        "\n",
-//                _thd_id, wplanner_id, wbatch_id, eq_cnt);
-//        for (int y=0; y < eq_cnt; ++y){
-//            if (!batch_part->single_q){
-//                DEBUG_Q("ET_%ld: --- EQ[%d], size = %ld\n", _thd_id, y,
-//                        batch_part->exec_qs->get(y)->size());
-//            }
-//        }
-
+#if DEBUG_QUECC
+        int eq_cnt UNUSED = 0;
+        if (batch_part->single_q){
+            eq_cnt = 1;
+            DEBUG_Q("ET_%ld: Got a PG %ld, wbatch_id = %ld, with %d EQs of size = %ld"
+                            "\n",
+                    _thd_id, wplanner_id, wbatch_id, eq_cnt, batch_part->exec_q->size());
+        }
+        else{
+            eq_cnt = batch_part->exec_qs->size();
+            DEBUG_Q("ET_%ld: Got a PG %ld, wbatch_id = %ld, with %d EQs"
+                            "\n",
+                    _thd_id, wplanner_id, wbatch_id, eq_cnt);
+            for (int y=0; y < eq_cnt; ++y){
+                if (!batch_part->single_q){
+                    DEBUG_Q("ET_%ld: --- EQ[%d], size = %ld\n", _thd_id, y,
+                            batch_part->exec_qs->get(y)->size());
+                }
+            }
+        }
+#endif
 
 //        }
 
