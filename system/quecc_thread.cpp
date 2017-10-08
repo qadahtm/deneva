@@ -440,9 +440,7 @@ RC PlannerThread::run_fixed_mode() {
 
 #endif
 
-#if MERGE_STRATEGY == BALANCE_EQ_SIZE
     assign_ptr_min_heap_t assignment;
-#endif
     uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
     boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
             new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
@@ -1363,11 +1361,11 @@ RC PlannerThread::run_normal_mode() {
 
     uint64_t query_cnt = 0;
 
-    M_ASSERT_V(g_part_cnt >= g_plan_thread_cnt && (g_part_cnt % g_plan_thread_cnt) == 0,
-               "PT_%ld: Number of paritions must be geq to number of planners and must be divided equally."
+    M_ASSERT_V(g_part_cnt >= g_plan_thread_cnt,
+               "PT_%ld: Number of paritions must be geq to number of planners."
                        " g_part_cnt = %d, g_plan_thread_cnt = %d\n", _planner_id, g_part_cnt, g_plan_thread_cnt);
 
-    uint64_t parts_per_planner = g_part_cnt / g_plan_thread_cnt;
+//    uint64_t parts_per_planner = g_part_cnt / g_plan_thread_cnt;
     uint64_t next_part = 0;
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
@@ -1379,7 +1377,8 @@ RC PlannerThread::run_normal_mode() {
         // for now just dequeue and print notification
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
         prof_starttime = get_sys_clock();
-        next_part = (_planner_id * parts_per_planner) + (query_cnt % parts_per_planner);
+        next_part = (_planner_id + (g_plan_thread_cnt * query_cnt)) % g_part_cnt;
+
         query_cnt++;
 //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
         msg = work_queue.plan_dequeue(_thd_id, next_part);
@@ -1470,49 +1469,47 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 
 #if SPLIT_STRATEGY == EAGER_SPLIT
         // we just need compute assignment since all EQs satisfy the limit splitting is done message is processed
+        Array<Array<exec_queue_entry> *> *exec_qs_tmp UNUSED = NULL;
+        Array<exec_queue_entry> *exec_q_tmp = NULL;
+        assign_entry *a_tmp UNUSED = NULL;
         for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-            assign_entry *a_tmp;
-            Array<exec_queue_entry> *exec_q = exec_queues->get(i);
-
-
+            exec_q_tmp = exec_queues->get(i);
             if (i < g_thread_cnt){
-                assign_entry_get_or_create(a_tmp, assign_entry_free_list);
 #if MERGE_STRATEGY == BALANCE_EQ_SIZE
+                assign_entry_get_or_create(a_tmp, assign_entry_free_list);
                 assign_entry_init(a_tmp, _planner_id);
                 a_tmp->exec_thd_id = i;
-                assign_entry_add(a_tmp, exec_q);
+                assign_entry_add(a_tmp, exec_q_tmp);
                 assignment.push((uint64_t) a_tmp);
 
 #elif MERGE_STRATEGY == RR
-                assign_entry_add(a_tmp, exec_q);
-                f_assign[i] = (uint64_t) a_tmp->exec_qs;
+                quecc_pool.exec_qs_get_or_create(exec_qs_tmp, _planner_id);
+                exec_qs_tmp->add(exec_q_tmp);
+                f_assign[i] = (uint64_t) exec_qs_tmp;
 #else
                 M_ASSERT_V("Selected merge strategy is not supported\n");
 #endif
             }
             else {
-
-
-                if (exec_q->size() > 0){
+                if (exec_q_tmp->size() > 0){
 
 #if MERGE_STRATEGY == BALANCE_EQ_SIZE
                     // Try to assign balanced workload to each
                     a_tmp = (assign_entry *) assignment.top();
-                    assign_entry_add(a_tmp, exec_q);
+                    assign_entry_add(a_tmp, exec_q_tmp);
                     assignment.pop();
                     assignment.push((uint64_t) a_tmp);
 
 #elif MERGE_STRATEGY == RR
-                    ((Array<Array<exec_queue_entry> *> *) f_assign[i % g_thread_cnt])->add(exec_q);
+                    ((Array<Array<exec_queue_entry> *> *) f_assign[i % g_thread_cnt])->add(exec_q_tmp);
 
 #else
-                M_ASSERT_V("Selected merge strategy is not supported\n");
+                M_ASSERT_V(false,"Selected merge strategy is not supported\n");
 #endif
-
 //                    DEBUG_Q("PT_%ld: adding excess EQs to ET_%ld\n", _planner_id, a_tmp->exec_thd_id);
                 }
                 else{
-                    quecc_pool.exec_queue_release(exec_q,_planner_id, URand(0, g_thread_cnt-1));
+                    quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, URand(0, g_thread_cnt-1));
                 }
             }
         }
@@ -1769,7 +1766,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
         }
         M_ASSERT_V(assignment.size() == 0, "PT_%ld: We have not used all assignments in the final assignments", _planner_id);
 #elif MERGE_STRATEGY == RR
-        // nothing to do altread assigned
+        // nothing to do altready assigned
 #else
                 M_ASSERT_V("Selected merge strategy is not supported\n");
 #endif
@@ -1986,7 +1983,6 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 //                prof_starttime = get_sys_clock();
 
     // Reset tctx memblock for reuse
-//                memset(tctx, 0, sizeof(transaction_context));
     transaction_context *tctx = &txn_ctxs[batch_cnt-1];
 
 //                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
@@ -2286,7 +2282,6 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
-    prof_starttime = get_sys_clock();
     int max_tries = 64;
     int trial =0;
 
@@ -2294,6 +2289,8 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
     uint64_t c_range_end;
     uint64_t idx = get_split(key, exec_qs_ranges);
     uint64_t nidx;
+
+    prof_starttime = get_sys_clock();
     mrange = exec_queues->get(idx);
 
     while (mrange->is_full()){

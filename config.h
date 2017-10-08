@@ -6,12 +6,16 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT QUECC_ET_CNT
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT 32//NODE_CNT
+// PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
+//
+#define PART_CNT THREAD_CNT// For QueCC
+//#define PART_CNT THREAD_CNT // For others because of the abort thread
+
 
 // TQ: since we have 20 cores per node on halstead
 // With a single node used for client requests, 
@@ -113,7 +117,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG HSTORE
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -170,15 +174,15 @@
 
 // [QUECC]
 // Planner thread cnt should be equal to part_cnt
-#define QUECC_ET_CNT    8
-#define PLAN_THREAD_CNT 8//PART_CNT
+#define PLAN_THREAD_CNT PART_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
-//#define BATCH_SIZE 5*56*6*3*6
-#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_SIZE 5*56*6*3*6 // ~30K
+//#define BATCH_SIZE 100000
+//#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
+#define BATCH_MAP_LENGTH 4//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -199,7 +203,7 @@
 // In lazy splot, we perform the splitting when we are have buffered enough operations for a batch
 #define LAZY_SPLIT  2
 
-#define MERGE_STRATEGY BALANCE_EQ_SIZE
+#define MERGE_STRATEGY RR
 #define BALANCE_EQ_SIZE 1
 #define GREEDY_RANGE_LOCALITY 2
 #define RR  3
@@ -211,7 +215,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 30
+#define EXECQ_CAP_FACTOR 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
@@ -322,7 +326,7 @@
 #define WH_UPDATE         true
 #define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
-#define MPR 1.0 // used for TPCC
+#define MPR 0.10 // used for TPCC
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -343,7 +347,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 0.5 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16
@@ -399,7 +403,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

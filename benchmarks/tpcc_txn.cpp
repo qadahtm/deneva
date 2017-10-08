@@ -941,9 +941,11 @@ inline RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, 
 
 	return RCOK;
 }
+
 #if CC_ALG == QUECC
 RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
+#if QUECC_DB_ACCESS
     switch (exec_qe->type){
         case TPCC_PAYMENT_UPDATE_W:
             rc = run_payment_update_w(exec_qe);
@@ -984,6 +986,7 @@ RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
         default:
             assert(false);
     }
+#endif
     return rc;
 }
 #endif

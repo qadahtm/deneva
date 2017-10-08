@@ -623,6 +623,7 @@ RC WorkerThread::run_normal_mode() {
     volatile uint64_t batch_part_eq_cnt = 0;
 
     exec_queue_entry exec_qe UNUSED;
+    exec_queue_entry * exec_qe_ptr UNUSED;
 
     volatile bool batch_partition_done = false;
     uint64_t w_exec_q_index = 0;
@@ -753,7 +754,8 @@ RC WorkerThread::run_normal_mode() {
             // Select an entry from selected exec_q
             if (exec_q->size() > 0){
                 if (exec_q->size() > eq_comp_cnts[w_exec_q_index]){
-                    exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
+                    exec_qe_ptr = exec_q->get_ptr(eq_comp_cnts[w_exec_q_index]);
+//                    exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
                 }
             }
             else{
@@ -764,7 +766,8 @@ RC WorkerThread::run_normal_mode() {
             // execute selected entry
 //            DEBUG_Q("ET_%ld: Processing an entry, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
 //                            _thd_id, wbatch_id, exec_qe.txn_id, wplanner_id);
-            rc = my_txn_man->run_quecc_txn(&exec_qe);
+//            rc = my_txn_man->run_quecc_txn(&exec_qe);
+            rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
 
             while (rc == RCOK){
 //                DEBUG_Q("ET_%ld: Processed an entry successfully, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
@@ -785,16 +788,17 @@ RC WorkerThread::run_normal_mode() {
                     break;
                 }
 
-                exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
-                rc = my_txn_man->run_quecc_txn(&exec_qe);
+//                exec_qe = exec_q->get(eq_comp_cnts[w_exec_q_index]);
+//                rc = my_txn_man->run_quecc_txn(&exec_qe);
+
+                exec_qe_ptr = exec_q->get_ptr(eq_comp_cnts[w_exec_q_index]);
+                rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
+
             }
 
 
             if (rc == WAIT){
-//                assert(rc == WAIT);
-                if (exec_qe.type == TPCC_NEWORDER_UPDATE_D){
-                    assert(false);
-                }
+                assert(rc == WAIT);
 
 //                DEBUG_Q("ET_%ld: waiting on batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
 //                                    " completed %ld out of %ld"
@@ -971,10 +975,9 @@ eq_done:
                     transaction_context * txn_ctxs = planner_pg->txn_ctxs;
                     volatile bool canCommit = true;
                     //loop over all transactions in the priority group
+                    volatile bool cascading_abort = false;
+
                     for (uint64_t j = 0; j < planner_batch_size; j++){
-#if ROW_ACCESS_TRACKING
-                        volatile bool cascading_abort = false;
-#endif
                         if (txn_ctxs[j].txn_state != READY_TO_ABORT){
 #if BUILD_TXN_DEPS
                             // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions

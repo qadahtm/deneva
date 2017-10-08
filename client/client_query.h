@@ -17,6 +17,7 @@
 #ifndef _CLIENT_QUERY_H_
 #define _CLIENT_QUERY_H_
 
+#include <spinlock.h>
 #include "global.h"
 #include "helper.h"
 #include "query.h"
@@ -46,6 +47,7 @@ public:
 	uint64_t size;
 private:
 	Workload * _wl;
+	spinlock * qlock;
 #if INIT_QUERY_MSGS
 	std::vector<std::vector<Message*>> queries_msgs;
 #else

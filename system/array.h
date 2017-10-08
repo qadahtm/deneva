@@ -100,7 +100,8 @@ public:
   }
 
     T* get_ptr(uint64_t idx) {
-        assert(idx < count);
+//        assert(idx < count);
+        M_ASSERT_V(idx < count, "idx < count failed, count = %ld, idx = %ld\n", count, idx);
         return &(items[idx]);
     }
 

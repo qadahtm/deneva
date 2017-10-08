@@ -61,6 +61,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
         etsync_m =    re.search('#define COMMIT_BEHAVIOR\s+(IMMEDIATE|AFTER_BATCH_COMP|AFTER_PG_COMP)',line.strip())
         if etsync_m:
             nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
+        pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
+        if pc_m:
+            nline = '#define PART_CNT {}\n'.format(nwthd_cnt)
+
         pa_m =    re.search('#define PART_PER_TXN\s+(\d+|THREAD_CNT|PART_CNT)',line.strip())
         if pa_m:
             nline = '#define PART_PER_TXN {}\n'.format(pa)
@@ -280,10 +284,10 @@ num_trials = 2;
 # cc_algs = ['HSTORE']
 # cc_algs = ['QUECC', "NO_WAIT"]
 # # cc_algs = ['LADS']
-# cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC']
+cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT']
 # cc_algs = ['QUECC', 'HSTORE', 'SILO']
 # cc_algs = ['QUECC']
-cc_algs = ['QUECC','TIMESTAMP']
+# cc_algs = ['QUECC','TIMESTAMP']
 # wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
 #8 data points
 # wthreads = [20,40] # for m4.16xlarge all
@@ -294,7 +298,7 @@ cc_algs = ['QUECC','TIMESTAMP']
 # wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
 # wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
-wthreads = [4,8,12,16,20,24,30]
+wthreads = [8,12,16,20,24,30]
 # wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
