@@ -107,9 +107,9 @@ Client_query_queue::initQueriesParallel() {
 #if SERVER_GENERATE_QUERIES
     UInt32 thd_cnt = g_part_cnt;
 
-#if WORKLOAD == YCSB
-    M_ASSERT_V(g_thread_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
-#endif
+//#if WORKLOAD == YCSB
+//    M_ASSERT_V(g_thread_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
+//#endif
     for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
         DEBUG_Q("Server-side generation for part %d ... ", thread_id);
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {

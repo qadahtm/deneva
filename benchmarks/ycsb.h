@@ -37,6 +37,10 @@ enum YCSBRemTxnType {
     YCSB_RDONE
 };
 
+inline uint64_t RAND(uint64_t max) {
+    return rand() % max;
+}
+
 class YCSBWorkload : public Workload {
 public :
     RC init();

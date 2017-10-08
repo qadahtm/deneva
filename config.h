@@ -13,7 +13,7 @@
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 //
-#define PART_CNT THREAD_CNT// For QueCC
+#define PART_CNT (PLAN_THREAD_CNT+THREAD_CNT-1)// For QueCC
 //#define PART_CNT THREAD_CNT // For others because of the abort thread
 
 
@@ -48,8 +48,8 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-//#define WORKLOAD YCSB
-#define WORKLOAD TPCC
+#define WORKLOAD YCSB
+//#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -117,7 +117,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG HSTORE
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -174,7 +174,7 @@
 
 // [QUECC]
 // Planner thread cnt should be equal to part_cnt
-#define PLAN_THREAD_CNT PART_CNT
+#define PLAN_THREAD_CNT 8
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
@@ -182,7 +182,7 @@
 #define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 4//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -215,7 +215,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 10
+#define EXECQ_CAP_FACTOR 4
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true

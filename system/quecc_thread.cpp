@@ -25,6 +25,7 @@
 #include "quecc_thread.h"
 //TQ: we will use standard lib version for now. We can use optimized implementation later
 #include <unordered_map>
+#include <ycsb.h>
 #include <tpcc.h>
 #include <tpcc_helper.h>
 #include "index_hash.h"
@@ -1509,7 +1510,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 //                    DEBUG_Q("PT_%ld: adding excess EQs to ET_%ld\n", _planner_id, a_tmp->exec_thd_id);
                 }
                 else{
-                    quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, URand(0, g_thread_cnt-1));
+                    quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, RAND(g_thread_cnt));
                 }
             }
         }
@@ -2011,7 +2012,9 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     // we need to reset the mutable values of tctx
     entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
+#if WORKLOAD == TPCC
     tctx->o_id.store(-1);
+#endif
     // initialize access_lock if it is not intinialized
     if (tctx->access_lock == NULL){
         tctx->access_lock = new spinlock();

@@ -1043,7 +1043,10 @@ eq_done:
                             wt_release_accesses(&txn_ctxs[j], cascading_abort, true);
                         }
 
+#if WORKLOAD == TPCC
+                        //TODO(tq): refactor this to benchmark implementation
                         txn_ctxs[j].o_id.store(-1);
+#endif
                     }
 
                     INC_STATS(_thd_id, txn_cnt, commit_cnt);
