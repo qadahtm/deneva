@@ -18,6 +18,7 @@
 #include<mutex>
 #include<chrono>
 #include<time.h>
+#include <spinlock.h>
 
 namespace gdgcc {
 
@@ -165,7 +166,8 @@ in the structure of TupleActionLinkedList
         Action *_head;
         Action *_curpos;
 
-        Spinlock lock = new Spinlock();
+//        Spinlock lock = new Spinlock();
+        spinlock * lock = new spinlock();
 
     public:
         ActionQueue();
@@ -452,9 +454,12 @@ save the environment information(hardware information)
         ActiveTupleList *_activeTupleList;
         TupleActionLinkedList** _actionlist_hashmap;
     public:
-        ActionDependencyGraph();
-        ActionDependencyGraph(ConfigInfo* configinfo);
+        UInt32 _id;
 
+        ActionDependencyGraph(UInt32 id);
+        ActionDependencyGraph(ConfigInfo* configinfo, UInt32 id);
+
+        void init();
         void clear();
 
         ConfigInfo* getConfigInfo();
@@ -487,17 +492,23 @@ save the environment information(hardware information)
         std::mutex*                 construction_lock_mutex;
         std::mutex*                 execution_mutex;
         std::mutex*                 execution_lock_mutex;
+
+        spinlock *                  construction_slock;
+        spinlock *                  execution_slock;
+
         std::condition_variable*    construction_cv;
         std::condition_variable*    execution_cv;
         bool* execution_continue;
-        atomic_bool batch_ready;
+//        atomic_bool batch_ready;
         atomic_bool const_phase;
+        atomic_bool const_wakeup;
+        atomic_bool exec_wakeup;
 
         struct timespec t1;
         struct timespec t2;
 
-        uint32_t     c_finish_cnt;
-        uint32_t     e_finish_cnt;
+        atomic<uint32_t>     c_finish_cnt;
+        atomic<uint32_t>     e_finish_cnt;
 
         ConfigInfo*                 configinfo;
 
@@ -505,9 +516,9 @@ save the environment information(hardware information)
         SyncWorker(ConfigInfo* configinfo);
         ~SyncWorker();
 
-        void    constructor_wait();
+        void constructor_wait(int cid);
         void    executor_wait(int eid,int dgraph_cnt, ActionDependencyGraph**  dgraphs);
-        void    executor_wait_begin();  //first time to start executor
+        void executor_wait_begin(int eid);  //first time to start executor
     };
 
 

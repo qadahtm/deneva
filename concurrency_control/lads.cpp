@@ -275,7 +275,7 @@ implementation of ActionQueue
     }
 
     void ActionQueue::setHead(Action *action) {
-        lock.lock();
+        lock->lock();
         if (_head == nullptr){
             _head = action;
         }
@@ -291,7 +291,7 @@ implementation of ActionQueue
 //            this->_head = action;
 //            action->next = nullptr;
 //        }
-        lock.unlock();
+        lock->unlock();
     }
 
     Action *ActionQueue::getCurpos() {
@@ -299,26 +299,48 @@ implementation of ActionQueue
     }
 
     bool ActionQueue::pushback(Action *action) {
-        lock.lock();
-        if(this->_head == nullptr && this->_curpos == nullptr) {
-            this->_head = action;
-            this->_curpos = action;
-        }else{
-            assert(this->_head != nullptr);
+        lock->lock();
+        if (_head == nullptr){
+            assert(this->_curpos == nullptr);
+            _head = action;
+            _curpos = action;
+        }
+        else{
+            assert(_head != nullptr && _curpos != nullptr);
             action->addIndegree(1);// add temporal dependency
-            this->_curpos->next = action;
-            this->_curpos = action;
+            if (_curpos != nullptr){
+                _curpos->next = action;
+                _curpos = action;
+            }
+//            else{
+//
+//            }
 
         }
-        lock.unlock();
+
+//        if(this->_head == nullptr && this->_curpos == nullptr) {
+//            this->_head = action;
+//            this->_curpos = action;
+//        }else{
+//            assert(this->_head != nullptr);
+//            action->addIndegree(1);// add temporal dependency
+//            this->_curpos->next = action;
+//            this->_curpos = action;
+//
+//        }
+        lock->unlock();
         return true;
     }
 
     Action *ActionQueue::fetch() {
-        if (this->_head == nullptr)
+        lock->lock();
+        if (this->_head == nullptr){
+            lock->unlock();
             return nullptr;
+        }
         Action *ret = this->_head;
         this->_head = this->_head->next;
+        lock->unlock();
         return ret;
     }
 
@@ -617,16 +639,22 @@ implementation of Action
 
     /**************** Start of ActionDependencyGraph.cpp ************************/
 
-    ActionDependencyGraph::ActionDependencyGraph()
+    ActionDependencyGraph::ActionDependencyGraph(UInt32 id)
     {
         this->_configinfo = nullptr;
         this->_activeTupleList = nullptr;
         this->_actionlist_hashmap= nullptr;
+        _id = id;
     }
 
-    ActionDependencyGraph::ActionDependencyGraph(ConfigInfo* configinfo)
+    ActionDependencyGraph::ActionDependencyGraph(ConfigInfo* configinfo, UInt32 id)
     {
         this->_configinfo = configinfo;
+        this->_activeTupleList = nullptr;
+        this->_actionlist_hashmap= nullptr;
+        _id = id;
+    }
+    void ActionDependencyGraph::init() {
         this->_activeTupleList = new ActiveTupleList(configinfo);
         this->_actionlist_hashmap = new TupleActionLinkedList*[configinfo->Conf_DATASIZE];
         for(uint32_t i=0; i<configinfo->Conf_DATASIZE; i++) {
@@ -705,11 +733,13 @@ implementation of Action
         this->execution_lock_mutex      = nullptr;
         this->construction_cv           = nullptr;
         this->execution_cv              = nullptr;
-        this->c_finish_cnt              = 0;
-        this->e_finish_cnt              = 0;
+        this->c_finish_cnt.store(0);
+        this->e_finish_cnt.store(0);
         this->configinfo                = nullptr;
         this->execution_continue        = new bool;
         *(this->execution_continue)     = true;
+
+        this->const_phase.store(true);
     }
 
     SyncWorker::SyncWorker(ConfigInfo* configinfo)
@@ -719,14 +749,19 @@ implementation of Action
         this->construction_lock_mutex   = new std::mutex();
         this->execution_mutex           = new std::mutex();
         this->execution_lock_mutex      = new std::mutex();
+        this->execution_slock = new spinlock();
+        this->construction_slock = new spinlock();
+
         this->construction_cv           = new std::condition_variable();
         this->execution_cv              = new std::condition_variable();
-        this->c_finish_cnt              = 0;
-        this->e_finish_cnt              = 0;
+        this->c_finish_cnt.store(0);
+        this->e_finish_cnt.store(0);
         this->execution_continue        = new bool;
         *(this->execution_continue)     = true;
-        this->batch_ready = false;
-        this->const_phase = true;
+
+        this->const_phase.store(true);
+        const_wakeup.store(true);
+        exec_wakeup.store(false);
     }
 
 /*
@@ -735,63 +770,188 @@ implementation of Action
  * Instead, it will wait until all the constructors finish the construction.
  * Then all constructors enter the execution phase at the same time.
  * */
-    void SyncWorker::constructor_wait()
+    void SyncWorker::constructor_wait(int cid)
     {
         std::unique_lock<std::mutex> lck(*construction_mutex);
+        bool e = false;
+        bool d = true;
+        uint32_t e_cnt = 0;
+        uint32_t d_cnt = 0;
+
         //critical section that maintains states in contructor
-        construction_lock_mutex->lock();
-        c_finish_cnt++;
+//        construction_lock_mutex->lock();
+        construction_slock->lock();
+        assert(const_phase.load() == true);
+
+        c_finish_cnt.fetch_add(1);
+        DEBUG_Q("CT_%d: incremented c_finish_cnt = %d\n", cid, c_finish_cnt.load());
         //if all constructors finished their works, notify_all executors to work
-        if( c_finish_cnt == configinfo->worker_thread_cnt) {
-            DEBUG_Q("All ConstTs are done, c_finish_cnt = %d\n", c_finish_cnt);
-            c_finish_cnt = 0;
+        if( c_finish_cnt.load() == configinfo->worker_thread_cnt) {
+            DEBUG_Q("CT_%d: All Constts are done, c_finish_cnt = %d\n", cid, c_finish_cnt.load());
+            e_cnt = configinfo->worker_thread_cnt;
+            d_cnt = 0;
+            if (!c_finish_cnt.compare_exchange_strong(e_cnt,d_cnt)){
+                M_ASSERT_V(false, "CT_%d: not expected, found c_finish_cnt = %d\n", cid, c_finish_cnt.load());
+            }
 
-            const_phase.store(false);
-            batch_ready.store(true);
+            e = true;
+            d = false;
+            if (!const_phase.compare_exchange_strong(e,d)){
+                M_ASSERT_V(false, "CT_%d: not expected const_phase = %d\n", cid, const_phase.load());
+            }
 
+            e = false;
+            d = true;
+            if (!exec_wakeup.compare_exchange_strong(e,d)){
+                M_ASSERT_V(false, "CT_%d: not expected exec_wakeup = %d\n", cid, exec_wakeup.load());
+            }
+
+            M_ASSERT_V(exec_wakeup.load(), "CT_%d: not expected value of exec_wakeup = %d\n", cid, exec_wakeup.load());
+
+            DEBUG_Q("CT_%d: Notifying all executors!\n", cid);
             execution_cv->notify_all();
         }
-        construction_lock_mutex->unlock();
+        else if (c_finish_cnt == 1){
+            // first constructor to finish
+            e = true;
+            d = false;
+            if (!const_wakeup.compare_exchange_strong(e,d)){
+                M_ASSERT_V(false, "CT_%d: not expected const_wakeup = %d\n", cid, const_wakeup.load());
+            }
+        }
+//        construction_lock_mutex->unlock();
+        construction_slock->unlock();
         //wait executor to wake it up
+        DEBUG_Q("CT_%d: Constructor done my part, going to sleep, const_wakeup = %d\n",
+                cid, const_wakeup.load());
+
+//        M_ASSERT_V(const_wakeup.load() == false, "CT_%d: const_wakeup = %d is expected to be false\n",
+//                   cid, const_wakeup.load());
+
         construction_cv->wait(lck);
+        while(!const_wakeup.load()){
+            DEBUG_Q("CT_%d: woke up in while loop, going back to sleep, const_wakeup = %d\n",
+                    cid, const_wakeup.load());
+            construction_cv->wait(lck);
+        }
+//        while(!sync_worker->const_wakeup.load()){
+//            SAMPLED_DEBUG_Q("CT_%d: spinng as I am not allowed to wake up\n", cid);
+//        } // spin here if we should not wake up
+
+//        M_ASSERT_V(const_phase.load() && const_wakeup.load(),
+//               "CT_%d: const_phase = %d\n",
+//               cid,
+//               const_phase.load()
+//        );
+
+        DEBUG_Q("CT_%d: Constructor woke up, const_phase = %d, const_wakeup =%d\n",
+                cid, const_phase.load(), const_wakeup.load());
     }
 
 
     void SyncWorker::executor_wait(int eid, int dgraph_cnt, ActionDependencyGraph**  dgraphs)
     {
         std::unique_lock<std::mutex> lck(*execution_mutex);
+        bool e = false;
+        bool d = true;
+        uint32_t e_cnt = 0;
+        uint32_t d_cnt = 0;
         //critical section that maintains states in executor
-        execution_lock_mutex->lock();
-        e_finish_cnt++;
+//        execution_lock_mutex->lock();
+
+        execution_slock->lock();
+        assert(const_phase.load() == false);
+
+        e_finish_cnt.fetch_add(1);
+        DEBUG_Q("ET_%d: incremented e_finish_cnt = %d\n", eid, e_finish_cnt.load());
         //if all executors finish their work, notify all constructors to work
-        if(e_finish_cnt == configinfo->worker_thread_cnt) {
-            DEBUG_Q("All ETs are done, e_finish_cnt=%d\n", e_finish_cnt);
-            e_finish_cnt = 0;
+        if(e_finish_cnt.load() == configinfo->worker_thread_cnt) {
+            DEBUG_Q("ET_%d: All ETs are done, e_finish_cnt=%d\n", eid, e_finish_cnt.load());
+            e_cnt = configinfo->worker_thread_cnt;
+            d_cnt = 0;
+            if (!e_finish_cnt.compare_exchange_strong(e_cnt, d_cnt)){
+                M_ASSERT_V(false, "ET_%d: not expected e_finish_cnt = %d\n", eid, e_finish_cnt.load());
+            }
+
             for(int i=0; i<dgraph_cnt; i++) {
                 // last ET to finish will increment and clear
                 INC_STATS(eid, txn_cnt, g_batch_size); // should we increment by batch size here
                 dgraphs[i]->clear();
             }
-            const_phase.store(true);
-            batch_ready.store(false);
+            e = false;
+            d = true;
+            if (!const_phase.compare_exchange_strong(e,d)){
+                M_ASSERT_V(false, "ET_%d: not expected const_phase = %d\n", eid, const_phase.load());
+            }
+            M_ASSERT_V(const_phase.load(), "ET_%d: not expected value of const_phase = %d\n", eid, const_phase.load());
+
+            e = false;
+            d = true;
+            if (!const_wakeup.compare_exchange_strong(e,d)){
+                M_ASSERT_V(false, "ET_%d: not expected const_wakeup = %d\n", eid, const_wakeup.load());
+            }
+            M_ASSERT_V(const_wakeup.load(), "ET_%d: not expected value of const_wakeup = %d\n", eid, const_wakeup.load());
+
+            DEBUG_Q("ET_%d: Notifying all constructors!\n", eid);
             construction_cv->notify_all();
         }
-        execution_lock_mutex->unlock();
+        else if (e_finish_cnt.load() == 1){
+            // first one to finish from executors
+            // set exec_wakeup to false to prepare for sleeping
+            e = true;
+            d = false;
+            if (!exec_wakeup.compare_exchange_strong(e,d)){
+                M_ASSERT_V(false, "ET_%d: not expected exec_wakeup = %d\n", eid, exec_wakeup.load());
+            }
+        }
+
+//        execution_lock_mutex->unlock();
+        execution_slock->unlock();
 
 
         //wait contructor to wait it up
         // TQ: no need to wait here
+        DEBUG_Q("ET_%d: Executor done my part, going to sleep, exec_wakeup = %d\n", eid, exec_wakeup.load());
+//        M_ASSERT_V(exec_wakeup.load() == false, "ET_%d: exec_wakeup = %d is expected to be false\n", eid, exec_wakeup.load())
+//        execution_cv->wait(lck, []()-> bool {return sync_worker->exec_wakeup.load();});
         execution_cv->wait(lck);
+        while(!exec_wakeup.load()){
+            DEBUG_Q("ET_%d: woke up in while loop, going back to sleep, const_phase = %d\n", eid, exec_wakeup.load());
+            execution_cv->wait(lck);
+        }
+//        while(!exec_wakeup.load()){
+//            SAMPLED_DEBUG_Q("ET_%d: spinng as I am not allowed to wake up\n", eid);
+//        } // spin here if we should not wake up
+
+//        M_ASSERT_V(const_phase.load() == false && exec_wakeup.load(),
+//                   "ET_%d: const_phase = %d, exec_wakeup = %d\n",
+//                   eid,
+//                   const_phase.load(),
+//                   exec_wakeup.load()
+//        );
+
+        DEBUG_Q("ET_%d: Executor woke up, const_phase = %d\n", eid, const_phase.load());
     }
 
 
-    void SyncWorker::executor_wait_begin()
+    void SyncWorker::executor_wait_begin(int eid)
     {
         std::unique_lock<std::mutex> lck(*execution_mutex);
-        if(execution_cv == nullptr) {
-            M_ASSERT_V(false,"SyncWorker::executor_wait_begin execution_cv==NULL");
-        }
+        DEBUG_Q("ET_%d: Executor initially, going to sleep\n", eid);
+
         execution_cv->wait(lck);
+        while(const_phase.load()){
+            execution_cv->wait(lck);
+        }
+//        while(!sync_worker->exec_wakeup.load()){}
+//        M_ASSERT_V(const_phase.load() == false && exec_wakeup.load(),
+//                   "ET_%d: const_phase = %d, exec_wakeup = %d\n",
+//                   eid,
+//                   const_phase.load(),
+//                   exec_wakeup.load()
+//        );
+
+        DEBUG_Q("ET_%d: Executor woke up from initial sleep\n", eid);
     }
 
 
@@ -939,6 +1099,8 @@ implementation of Action
             heartbeat();
             progress_stats();
 
+            assert(syncworker->const_phase.load() == true);
+
             if (idle_starttime == 0 && simulation->is_warmup_done()){
                 idle_starttime = get_sys_clock();
             }
@@ -996,7 +1158,7 @@ implementation of Action
                     idle_starttime = get_sys_clock();
                 }
 
-                syncworker->constructor_wait();
+                syncworker->constructor_wait(cid);
 
                 if(idle_starttime > 0) {
                     INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
@@ -1016,13 +1178,17 @@ implementation of Action
 #endif
         }
 
-        if (sync_worker->const_phase.load()){
-            // we are done during construction phase, we need to stop ETs from spining
-            sync_worker->batch_ready.store(true);
-        }
+//        if (sync_worker->const_phase.load()){
+//            // we are done during construction phase, we need to stop ETs from spining/sleeping
+//            sync_worker->batch_ready.store(true);
+//        }
 
         if(cid == 0) {
             *(syncworker->execution_continue) = false;
+
+            syncworker->exec_wakeup.store(true);
+
+
             DEBUG_Q("ConstT_%d: Notifying ETs\n", cid);
             syncworker->execution_cv->notify_all();
 
@@ -1188,28 +1354,44 @@ implementation of Action
 //        bind_cpu();
 //        run_one_queue();
         printf("Running LADS Executor Thread %ld\n", _thd_id);
+        sync_worker->executor_wait_begin(eid);
 
         while (!simulation->is_done()) {
             heartbeat();
             progress_stats();
-            if (sync_worker->batch_ready){
+
+            assert(syncworker->const_phase.load() == false);
+
+//            if (sync_worker->batch_ready.load()){
                 DEBUG_Q("ET_%d: processing batch\n", eid);
                 run_one_queue();
                 DEBUG_Q("ET_%d: DONE!! processing batch\n", eid);
-                // spin until all ETs are done
-//                while(sync_worker->batch_ready.load()){}
 
-//                sync_worker->executor_wait(eid, dgra, dgraphs)
                 DEBUG_Q("ET_%d: going to wait -- for next batch\n", eid);
                 syncworker->executor_wait(eid, g_plan_thread_cnt, dgraphs);
-            }
+//            }
+//            else{
+//                M_ASSERT_V(false, "ET_%d: expected batch ready to be true, batch ready = %d\n", eid, sync_worker->batch_ready.load())
+//            }
         }
 
-        if (!sync_worker->const_phase){
-            // this means that simulation is done while in execution phase
-            // need to stop ConstT from spinning
-            sync_worker->batch_ready.store(false);
+//        if (!sync_worker->const_phase.load()){
+//            // this means that simulation is done while in execution phase
+//            // need to stop ConstT from spinning
+////            sync_worker->batch_ready.store(false);
+//        }
+
+        if(eid == 0) {
+            DEBUG_Q("ET_%d: Notifying CTs\n", eid);
+
+            sync_worker->const_wakeup.store(true);
+
+            syncworker->construction_cv->notify_all();
+
+//            DEBUG_Q("ConstT_%d: going to wait now\n", cid);
+//            syncworker->constructor_wait();
         }
+
 
         return rc;
     }
@@ -1251,7 +1433,7 @@ implementation of Action
 
         this->dgraphs       = new ActionDependencyGraph*[workercnt];
         for(int i=0; i<workercnt; i++) {
-            dgraphs[i] = new ActionDependencyGraph(configinfo);
+            dgraphs[i] = new ActionDependencyGraph(configinfo, (UInt32) i);
         }
 
         //init the data structure in constructor and executor

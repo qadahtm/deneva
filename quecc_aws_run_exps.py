@@ -63,7 +63,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
             nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
         pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
-            nline = '#define PART_CNT {}\n'.format(nwthd_cnt)
+            if ncc_alg == 'CALVIN':
+                nline = '#define PART_CNT {}\n'.format(int(nwthd_cnt)-1)
+            else:
+                nline = '#define PART_CNT {}\n'.format(nwthd_cnt)
 
         pa_m =    re.search('#define PART_PER_TXN\s+(\d+|THREAD_CNT|PART_CNT)',line.strip())
         if pa_m:
@@ -284,7 +287,8 @@ num_trials = 2;
 # cc_algs = ['HSTORE']
 # cc_algs = ['QUECC', "NO_WAIT"]
 # # cc_algs = ['LADS']
-cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT']
+# cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP']
+cc_algs = ['OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP']
 # cc_algs = ['QUECC', 'HSTORE', 'SILO']
 # cc_algs = ['QUECC']
 # cc_algs = ['QUECC','TIMESTAMP']
@@ -299,7 +303,7 @@ cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT']
 # wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
 wthreads = [8,12,16,20,24,30]
-# wthreads = [32] # for m4.10xlarge for QueCC -  Normal mode
+# wthreads = [16] # for m4.10xlarge for QueCC -  Normal mode
 # wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
 # wthreads = [16] # for m4.10xlarge for QueCC
 # pt_perc = [0.25,0.5,0.75, 1]

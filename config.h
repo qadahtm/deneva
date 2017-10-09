@@ -13,7 +13,7 @@
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 //
-#define PART_CNT (PLAN_THREAD_CNT+THREAD_CNT-1)// For QueCC
+#define PART_CNT (PLAN_THREAD_CNT+THREAD_CNT-1)// For QueCC and LADS
 //#define PART_CNT THREAD_CNT // For others because of the abort thread
 
 
@@ -173,8 +173,8 @@
 
 
 // [QUECC]
-// Planner thread cnt should be equal to part_cnt
-#define PLAN_THREAD_CNT 8
+// Planner thread cnt should be greater than or equal to part_cnt
+#define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
@@ -288,10 +288,10 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM 8
 //#define SYNTH_TABLE_SIZE 1024
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -403,7 +403,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

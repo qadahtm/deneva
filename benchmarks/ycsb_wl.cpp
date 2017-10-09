@@ -102,8 +102,6 @@ int
 YCSBWorkload::key_to_part(uint64_t key) {
 	uint64_t rows_per_part = g_synth_table_size / g_part_cnt;
 	return (key / rows_per_part) % g_part_cnt;
-//	return key / rows_per_part;
-//  return key % g_part_cnt;
 }
 
 RC YCSBWorkload::init_table() {

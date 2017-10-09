@@ -46,6 +46,7 @@
 void network_test();
 void network_test_recv();
 void * run_thread(void *);
+void * initADGHelper(void * adg);
 
 
 WorkerThread * worker_thds;
@@ -282,9 +283,18 @@ int main(int argc, char* argv[])
     printf("Initializing ActionDependencyGraphs ... ");
     fflush(stdout);
     dgraphs = new gdgcc::ActionDependencyGraph*[THREAD_CNT];
-    for(UInt32 i=0; i< g_thread_cnt; i++) {
-        dgraphs[i] = new gdgcc::ActionDependencyGraph(configinfo);
+
+    pthread_t * p_init_thds = new pthread_t[g_thread_cnt];
+    for (UInt32 i = 0; i < g_thread_cnt; i++) {
+        dgraphs[i] = new gdgcc::ActionDependencyGraph(configinfo, i);
+        pthread_create(&p_init_thds[i], NULL, initADGHelper, dgraphs[i]);
+        pthread_setname_np(p_init_thds[i], "ADGinit");
     }
+
+    for (uint32_t i = 0; i < g_thread_cnt; i++) {
+        pthread_join(p_init_thds[i], NULL);
+    }
+
     printf("Done\n");
     stats.printProcInfo();
 #endif
@@ -808,7 +818,7 @@ int main(int argc, char* argv[])
         }else if (EAGAIN == pthread_rc){
             DEBUG_Q("EINVAL = %d\n", EINVAL);
         }
-        M_ASSERT_V(pthread_rc == 0, "Could not create s_constr_%ld with id=%ld, cpu_cnt=%ld\n", i, id, cpu_cnt);
+        M_ASSERT_V(pthread_rc == 0, "Could not create s_constr_%ld with id=%ld\n", i, id);
         pthread_setname_np(p_thds[id - 1], "s_constr");
     }
 
@@ -874,6 +884,13 @@ int main(int argc, char* argv[])
 void * run_thread(void * id) {
     Thread * thd = (Thread *) id;
 	thd->run();
+	return NULL;
+}
+void * initADGHelper(void * adg) {
+    printf("Starting initialization ADG at %d\n", ((gdgcc::ActionDependencyGraph*) adg)->_id);
+    ((gdgcc::ActionDependencyGraph*) adg)->init();
+    printf("Initialized ADG at %d\n", ((gdgcc::ActionDependencyGraph*) adg)->_id);
+    fflush(stdout);
 	return NULL;
 }
 
