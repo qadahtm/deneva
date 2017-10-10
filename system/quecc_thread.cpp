@@ -887,7 +887,7 @@ RC PlannerThread::run_fixed_mode() {
                         // Allocate memory for exec_qs
                         batch_part->sub_exec_qs_cnt = fa_execqs->size();
                         batch_part->exec_qs = fa_execqs;
-                        quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id, i);
+//                        quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id, i);
 
                     }
                     else{
@@ -1510,7 +1510,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 //                    DEBUG_Q("PT_%ld: adding excess EQs to ET_%ld\n", _planner_id, a_tmp->exec_thd_id);
                 }
                 else{
-                    quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, RAND(g_thread_cnt));
+                    quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, i % g_thread_cnt);
                 }
             }
         }
@@ -1814,7 +1814,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
                 // Allocate memory for exec_qs
                 batch_part->sub_exec_qs_cnt = fa_execqs->size();
                 batch_part->exec_qs = fa_execqs;
-                quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id,i);
+//                quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id,i);
             }
             else{
                 batch_part->exec_q = fa_execqs->get(0);
@@ -1844,11 +1844,11 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
             while(bcond) {
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
-                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
+//                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
                 }
             }
             // include idle time from spinning above
-            if (idle_starttime != 0){
+            if (idle_starttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
                 idle_starttime = 0;
             }
@@ -1867,7 +1867,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
             }
 
 #endif
-//                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
+//                DEBUG_Q("PT_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
         }
 
         // Set priority group pointer in the pg_map
@@ -1898,7 +1898,11 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
         exec_queues->clear();
         for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
             Array<exec_queue_entry> * exec_q;
+#if MERGE_STRATEGY == RR
             et_id = eq_idx_rand->operator()(plan_rng);
+#else
+            et_id = i % g_thread_cnt;
+#endif
             quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
             exec_queues->add(exec_q);
         }
@@ -1957,7 +1961,7 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 
 
         // include idle time from spinning above
-        if (idle_starttime != 0){
+        if (idle_starttime > 0){
             INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
             idle_starttime = 0;
         }
@@ -1987,9 +1991,18 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     transaction_context *tctx = &txn_ctxs[batch_cnt-1];
 
 //                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
+
+    // reset transaction context
+
     tctx->txn_id = planner_txn_id;
     tctx->txn_state = TXN_INITIALIZED;
     tctx->completion_cnt.store(0);
+    tctx->txn_comp_cnt.store(0);
+
+    //TODO(tq): move to repective benchmark transaction manager implementation
+#if WORKLOAD == TPCC
+    tctx->o_id.store(-1);
+#endif
 
 #if ROLL_BACK
     if (tctx->accesses.isInitilized()){
@@ -2012,9 +2025,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     // we need to reset the mutable values of tctx
     entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
-#if WORKLOAD == TPCC
-    tctx->o_id.store(-1);
-#endif
+
     // initialize access_lock if it is not intinialized
     if (tctx->access_lock == NULL){
         tctx->access_lock = new spinlock();
@@ -2129,9 +2140,16 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 //    uint64_t idx;
     uint64_t rid;
 
+    uint8_t e8 = TXN_INITIALIZED;
+    uint8_t d8 = TXN_STARTED;
+
     switch (tpcc_msg->txn_type) {
         case TPCC_PAYMENT:
             prof_starttime = get_sys_clock();
+
+            if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+                assert(false);
+            }
             // index look up for warehouse record
             tpcc_txn_man->payment_lookup_w(tpcc_msg->w_id, r_local);
             rid = r_local->get_row_id();
@@ -2176,6 +2194,10 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             break;
         case TPCC_NEW_ORDER:
             // plan read on warehouse record
+
+            if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+                assert(false);
+            }
             tpcc_txn_man->neworder_lookup_w(tpcc_msg->w_id,r_local);
             rid = r_local->get_row_id();
 //            idx = get_split(rid, exec_qs_ranges);
@@ -2411,10 +2433,17 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
                 // add two new and empty exec_queues
                 Array<exec_queue_entry> * nexec_q = NULL;
                 Array<exec_queue_entry> * oexec_q = NULL;
+#if MERGE_STRATEGY == RR
+                quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, r % g_thread_cnt);
+                quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, (r+1) % g_thread_cnt);
+#else
                 quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, et_id);
+                quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, et_id);
+#endif
+
 //                M_ASSERT_V(oexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
 //                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
-                quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, et_id);
+
 //                M_ASSERT_V(nexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
 //                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
 //                assert(oexec_q->size() == 0);
@@ -2459,7 +2488,7 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
 //                _planner_id, exec_qs_ranges->size(), exec_qs_ranges_tmp->size());
 
         // release current mrange
-        quecc_pool.exec_queue_release(mrange,_planner_id,0);
+        quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
 //        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
 
         // use the new ranges to assign the new execution entry

@@ -104,6 +104,7 @@ public:
     volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
 #elif COMMIT_BEHAVIOR == AFTER_BATCH_COMP
     volatile atomic<uint8_t> batch_map_comp_cnts[BATCH_MAP_LENGTH];
+    volatile atomic<uint8_t> batch_commit_et_cnts[BATCH_MAP_LENGTH];
 #endif
 
 

@@ -6,15 +6,14 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 10
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
-//
-#define PART_CNT (PLAN_THREAD_CNT+THREAD_CNT-1)// For QueCC and LADS
-//#define PART_CNT THREAD_CNT // For others because of the abort thread
+
+#define PART_CNT THREAD_CNT // For others because of the abort thread
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -41,15 +40,15 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-#define CPU_FREQ          2.4//2.6
+#define CPU_FREQ          2.0//2.4//2.6
 // enable hardware migration.
 #define HW_MIGRATE          false
 
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD YCSB
-//#define WORKLOAD TPCC
+//#define WORKLOAD YCSB
+#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -180,6 +179,7 @@
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 #define BATCH_SIZE 5*56*6*3*6 // ~30K
+//#define BATCH_SIZE 5040
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
@@ -208,19 +208,22 @@
 #define GREEDY_RANGE_LOCALITY 2
 #define RR  3
 
-#define QUECC_DB_ACCESS true
+#define QUECC_DB_ACCESS false
 
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS true
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 4
-#define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_CNT*THREAD_CNT*2
+#define EXECQ_CAP_FACTOR 10
+#define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
 #define ENABLE_EQ_SWITCH true
+#define PARALLEL_COMMIT true
+
 #define SAMPLING_FACTOR 0.000001
+
 
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
@@ -403,7 +406,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

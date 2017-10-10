@@ -124,50 +124,76 @@ struct thr_args{
     UInt32 tot;
 };
 
-class TPCCTxnManager : public TxnManager
-{
+class TPCCTxnManager : public TxnManager {
 public:
-    void init(uint64_t thd_id, Workload * h_wl);
+    void init(uint64_t thd_id, Workload *h_wl);
+
     void reset();
+
     RC acquire_locks();
+
     RC run_txn();
+
     RC run_txn_post_wait();
+
     RC run_calvin_txn();
+
     RC run_tpcc_phase2();
+
     RC run_tpcc_phase5();
+
     TPCCRemTxnType state;
-    void copy_remote_items(TPCCQueryMessage * msg);
+
+    void copy_remote_items(TPCCQueryMessage *msg);
 
 
 #if CC_ALG == QUECC
-    RC run_quecc_txn(exec_queue_entry * exec_qe);
 
-    inline RC payment_lookup_w(uint64_t w_id, row_t *& r_wh_local){
+    RC run_quecc_txn(exec_queue_entry *exec_qe);
+
+    inline void check_commit_ready(exec_queue_entry *entry) ALWAYS_INLINE {
+        uint8_t e8;
+        uint8_t d8;
+        uint32_t comp_cnt = entry->txn_ctx->completion_cnt.fetch_add(1);
+        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt - 1)) {
+//            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load())
+            // this is the last entry to be executed, we should be ready to commit
+            e8 = TXN_STARTED;
+            d8 = TXN_READY_TO_COMMIT;
+            if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8)) {
+                assert(false);
+            }
+        }
+    }
+
+    inline RC payment_lookup_w(uint64_t w_id, row_t *&r_wh_local) ALWAYS_INLINE {
         uint64_t key;
-        itemid_t * item;
+        itemid_t *item;
         key = w_id;
-        INDEX * index = _wl->i_warehouse;
+        INDEX *index = _wl->i_warehouse;
         item = index_read(index, key, wh_to_part(w_id));
 
         assert(item != NULL);
-        r_wh_local = ((row_t *)item->location);
+        r_wh_local = ((row_t *) item->location);
         assert(r_wh_local);
         return RCOK;
     };
 
-    inline RC plan_payment_update_w(double h_amount, row_t * r_wh_local, exec_queue_entry *& entry){
+    inline RC plan_payment_update_w(double h_amount, row_t *r_wh_local, exec_queue_entry *&entry) ALWAYS_INLINE {
         assert(r_wh_local != NULL);
 
         entry->rid = r_wh_local->get_row_id();
         entry->row = r_wh_local;
         entry->txn_ctx->h_amount = h_amount;
         entry->type = TPCC_PAYMENT_UPDATE_W;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
 
         return RCOK;
     };
-    inline RC run_payment_update_w(exec_queue_entry * entry){
+
+    inline RC run_payment_update_w(exec_queue_entry *entry) ALWAYS_INLINE {
         double w_ytd;
-        row_t * r_wh_local = entry->row;
+        row_t *r_wh_local = entry->row;
         r_wh_local->get_value(W_YTD, w_ytd);
 
         row_access_backup(entry->txn_ctx, WR, r_wh_local, _thd_id);
@@ -175,29 +201,34 @@ public:
         if (g_wh_update) {
             r_wh_local->set_value(W_YTD, w_ytd + entry->txn_ctx->h_amount);
         }
+        check_commit_ready(entry);
         return RCOK;
     };
-    inline RC payment_lookup_d(uint64_t w_id, uint64_t d_id, uint64_t d_w_id, row_t *& r_dist_local){
+
+    inline RC payment_lookup_d(uint64_t w_id, uint64_t d_id, uint64_t d_w_id, row_t *&r_dist_local) ALWAYS_INLINE {
         uint64_t key;
-        itemid_t * item;
+        itemid_t *item;
         key = distKey(d_id, d_w_id);
         item = index_read(_wl->i_district, key, wh_to_part(w_id)); // TQ: should this be wh_to_part(d_w_id)??
         assert(item != NULL);
-        r_dist_local = ((row_t *)item->location);
+        r_dist_local = ((row_t *) item->location);
         // TODO(tq): handle deleted records
         return RCOK;
     };
-    inline RC plan_payment_update_d(double h_amount, row_t * r_dist_local, exec_queue_entry *& entry){
+
+    inline RC plan_payment_update_d(double h_amount, row_t *r_dist_local, exec_queue_entry *&entry) ALWAYS_INLINE {
         assert(r_dist_local != NULL);
         entry->row = r_dist_local;
         entry->rid = r_dist_local->get_row_id();
         entry->txn_ctx->h_amount = h_amount;
         entry->type = TPCC_PAYMENT_UPDATE_D;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
 
         return RCOK;
     };
-    inline RC run_payment_update_d(exec_queue_entry * entry){
-        row_t * r_dist_local = entry->row;
+
+    inline RC run_payment_update_d(exec_queue_entry *entry) ALWAYS_INLINE {
+        row_t *r_dist_local = entry->row;
         assert(r_dist_local != NULL);
 
         double d_ytd;
@@ -207,35 +238,38 @@ public:
 
         r_dist_local->set_value(D_YTD, d_ytd + entry->txn_ctx->h_amount);
 
+        check_commit_ready(entry);
+
         return RCOK;
     };
-    inline RC payment_lookup_c(uint64_t c_id,uint64_t c_w_id, uint64_t c_d_id, char * c_last, bool by_last_name, row_t *& r_cust_local){
 
-        itemid_t * item;
+    inline RC payment_lookup_c(uint64_t c_id, uint64_t c_w_id, uint64_t c_d_id, char *c_last, bool by_last_name,
+                               row_t *&r_cust_local) ALWAYS_INLINE {
+
+        itemid_t *item;
         uint64_t key;
         if (by_last_name) {
 
             key = custNPKey(c_last, c_d_id, c_w_id);
             // XXX: the list is not sorted. But let's assume it's sorted...
             // The performance won't be much different.
-            INDEX * index = _wl->i_customer_last;
+            INDEX *index = _wl->i_customer_last;
             item = index_read(index, key, wh_to_part(c_w_id));
             assert(item != NULL);
 
             int cnt = 0;
-            itemid_t * it = item;
-            itemid_t * mid = item;
+            itemid_t *it = item;
+            itemid_t *mid = item;
             while (it != NULL) {
-                cnt ++;
+                cnt++;
                 it = it->next;
                 if (cnt % 2 == 0)
                     mid = mid->next;
             }
-            r_cust_local = ((row_t *)mid->location);
-        }
-        else { // search customers by cust_id
+            r_cust_local = ((row_t *) mid->location);
+        } else { // search customers by cust_id
             key = custKey(c_id, c_d_id, c_w_id);
-            INDEX * index = _wl->i_customer_id;
+            INDEX *index = _wl->i_customer_id;
             item = index_read(index, key, wh_to_part(c_w_id));
             assert(item != NULL);
             r_cust_local = (row_t *) item->location;
@@ -243,15 +277,18 @@ public:
 
         return RCOK;
     };
-    inline RC plan_payment_update_c(double h_amount, row_t * r_cust_local, exec_queue_entry *& entry){
+
+    inline RC plan_payment_update_c(double h_amount, row_t *r_cust_local, exec_queue_entry *&entry) ALWAYS_INLINE {
         entry->row = r_cust_local;
         entry->txn_ctx->h_amount = h_amount;
         entry->rid = r_cust_local->get_row_id();
         entry->type = TPCC_PAYMENT_UPDATE_C;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
-    inline RC run_payment_update_c(exec_queue_entry * entry){
-        row_t * r_cust_local = entry->row;
+
+    inline RC run_payment_update_c(exec_queue_entry *entry) ALWAYS_INLINE {
+        row_t *r_cust_local = entry->row;
 
         assert(r_cust_local != NULL);
         double c_balance;
@@ -266,9 +303,14 @@ public:
         r_cust_local->set_value(C_YTD_PAYMENT, c_ytd_payment + entry->txn_ctx->h_amount);
         r_cust_local->get_value(C_PAYMENT_CNT, c_payment_cnt);
         r_cust_local->set_value(C_PAYMENT_CNT, c_payment_cnt + 1);
+
+        check_commit_ready(entry);
+
         return RCOK;
     };
-    inline RC plan_payment_insert_h(uint64_t w_id, uint64_t d_id,uint64_t c_id,uint64_t c_w_id, uint64_t c_d_id, double h_amount, exec_queue_entry *& entry){
+
+    inline RC plan_payment_insert_h(uint64_t w_id, uint64_t d_id, uint64_t c_id, uint64_t c_w_id, uint64_t c_d_id,
+                                    double h_amount, exec_queue_entry *&entry) ALWAYS_INLINE {
         uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 
         entry->rid = row_id;
@@ -279,10 +321,11 @@ public:
         entry->txn_ctx->c_d_id = c_d_id;
         entry->txn_ctx->h_amount = h_amount;
         entry->type = TPCC_PAYMENT_INSERT_H;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
 
         return RCOK;
     };
-    inline RC run_payment_insert_h(exec_queue_entry * entry){
+    inline RC run_payment_insert_h(exec_queue_entry * entry) ALWAYS_INLINE{
 
         row_t * r_hist;
         RC rc = _wl->t_history->get_new_row(r_hist, wh_to_part(entry->txn_ctx->c_w_id), entry->rid);
@@ -298,11 +341,14 @@ public:
         // TQ: the following just records the insert into the transaction manager. The actual insert is done above by get_new_row
         // Since this is a MainMemory-DB, allocating the row is basically an insert.
 //        insert_row(r_hist, _wl->t_history);
+
+        check_commit_ready(entry);
+
         return RCOK;
     };
 
 
-    inline RC neworder_lookup_w(uint64_t w_id, row_t *& r_wh_local){
+    inline RC neworder_lookup_w(uint64_t w_id, row_t *& r_wh_local) ALWAYS_INLINE{
         uint64_t key;
         itemid_t * item;
         key = w_id;
@@ -312,22 +358,24 @@ public:
         r_wh_local = ((row_t *)item->location);
         return RCOK;
     };
-    inline RC plan_neworder_read_w(row_t *& r_wh_local, exec_queue_entry * entry){
+    inline RC plan_neworder_read_w(row_t *& r_wh_local, exec_queue_entry * entry) ALWAYS_INLINE{
         entry->row = r_wh_local;
         entry->rid = r_wh_local->get_row_id();
         entry->type = TPCC_NEWORDER_READ_W;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
 
-    inline RC run_neworder_read_w(exec_queue_entry * entry){
+    inline RC run_neworder_read_w(exec_queue_entry * entry) ALWAYS_INLINE{
         assert(entry != NULL);
         assert(entry->row != NULL);
         double w_tax;
         entry->row->get_value(W_TAX, w_tax);
+        check_commit_ready(entry);
         return RCOK;
     };
 
-    inline RC neworder_lookup_c(uint64_t w_id, uint64_t d_id, uint64_t c_id, row_t *& r_cust_local){
+    inline RC neworder_lookup_c(uint64_t w_id, uint64_t d_id, uint64_t c_id, row_t *& r_cust_local) ALWAYS_INLINE{
         uint64_t key;
         itemid_t * item;
         key = custKey(c_id, d_id, w_id);
@@ -337,13 +385,14 @@ public:
         r_cust_local = (row_t *) item->location;
         return RCOK;
     };
-    inline RC plan_neworder_read_c(row_t *& r_cust_local, exec_queue_entry * entry){
+    inline ALWAYS_INLINE RC plan_neworder_read_c(row_t *& r_cust_local, exec_queue_entry * entry) ALWAYS_INLINE {
         entry->row = r_cust_local;
         entry->rid = r_cust_local->get_row_id();
         entry->type = TPCC_NEWORDER_READ_C;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
-    inline RC run_neworder_read_c(exec_queue_entry * entry){
+    inline ALWAYS_INLINE RC run_neworder_read_c(exec_queue_entry * entry) ALWAYS_INLINE{
         assert(entry != NULL);
         assert(entry->row != NULL);
         uint64_t c_discount;
@@ -354,10 +403,11 @@ public:
         c_last = entry->row->get_value(C_LAST);
         c_credit = entry->row->get_value(C_CREDIT);
 #endif
+        check_commit_ready(entry);
         return RCOK;
     };
 
-    inline RC neworder_lookup_d(uint64_t w_id, uint64_t d_id, row_t *& r_dist_local){
+    inline  RC neworder_lookup_d(uint64_t w_id, uint64_t d_id, row_t *& r_dist_local) ALWAYS_INLINE{
         uint64_t key;
         itemid_t * item;
         key = distKey(d_id, w_id);
@@ -366,10 +416,11 @@ public:
         r_dist_local = ((row_t *)item->location);
         return RCOK;
     };
-    inline RC plan_neworder_update_d(row_t *& r_dist_local, exec_queue_entry * entry){
+    inline RC plan_neworder_update_d(row_t *& r_dist_local, exec_queue_entry * entry) ALWAYS_INLINE{
         entry->row = r_dist_local;
         entry->rid = r_dist_local->get_row_id();
         entry->type = TPCC_NEWORDER_UPDATE_D;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
     inline RC run_neworder_update_d(exec_queue_entry * entry){
@@ -395,10 +446,12 @@ public:
             M_ASSERT_V(false, "we should have -1 but found %ld\n", entry->txn_ctx->o_id.load());
         }
 
+        check_commit_ready(entry);
         return RCOK;
     };
 
-    inline RC plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry){
+    inline RC plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id,
+                                     bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry) ALWAYS_INLINE{
         uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
         entry->rid = row_id;
         entry->txn_ctx->w_id = w_id;
@@ -408,11 +461,12 @@ public:
         entry->txn_ctx->ol_cnt = ol_cnt;
         entry->txn_ctx->remote = remote;
         entry->type = TPCC_NEWORDER_INSERT_O;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
 
         return RCOK;
 
     };
-    inline RC run_neworder_insert_o(exec_queue_entry * entry){
+    inline RC run_neworder_insert_o(exec_queue_entry * entry) ALWAYS_INLINE{
         row_t * r_order;
 #if ENABLE_EQ_SWITCH
 
@@ -442,20 +496,22 @@ public:
         r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
 
 //        _wl->index_insert(_wl->i_order, orderPrimaryKey(entry->w_id,entry->d_id,entry->txn_ctx->o_id), r_order, wh_to_part(entry->w_id));
+        check_commit_ready(entry);
         return rc;
     };
 
-    inline RC plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
+    inline RC plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry) ALWAYS_INLINE{
         uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 
         entry->txn_ctx->w_id = w_id;
         entry->txn_ctx->d_id = d_id;
         entry->rid = row_id;
         entry->type = TPCC_NEWORDER_INSERT_NO;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
 
         return RCOK;
     };
-    inline RC run_neworder_insert_no(exec_queue_entry * entry){
+    inline RC run_neworder_insert_no(exec_queue_entry * entry) ALWAYS_INLINE{
         row_t * r_no;
 #if ENABLE_EQ_SWITCH
         if (entry->txn_ctx->o_id.load() == -1){
@@ -479,10 +535,12 @@ public:
 
         //TQ: do we need to have an index for NewOrder table??
 
+
+        check_commit_ready(entry);
         return rc;
     };
 
-    inline RC neworder_lookup_i(uint64_t ol_i_id, row_t *& r_item_local){
+    inline RC neworder_lookup_i(uint64_t ol_i_id, row_t *& r_item_local) ALWAYS_INLINE{
         uint64_t key;
         itemid_t * item;
         key = ol_i_id;
@@ -491,13 +549,14 @@ public:
         r_item_local = ((row_t *)item->location);
         return RCOK;
     };
-    inline RC plan_neworder_read_i(row_t *& r_item_local, exec_queue_entry * entry){
+    inline RC plan_neworder_read_i(row_t *& r_item_local, exec_queue_entry * entry) ALWAYS_INLINE{
         entry->row = r_item_local;
         entry->rid = r_item_local->get_row_id();
         entry->type = TPCC_NEWORDER_READ_I;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
-    inline RC run_neworder_read_i(exec_queue_entry * entry){
+    inline RC run_neworder_read_i(exec_queue_entry * entry) ALWAYS_INLINE{
         assert(entry != NULL);
         assert(entry->row != NULL);
         int64_t i_price;
@@ -509,10 +568,11 @@ public:
         i_name = entry->row->get_value(I_NAME);
         i_data = entry->row->get_value(I_DATA);
 #endif
+        check_commit_ready(entry);
         return RCOK;
     };
 
-    inline RC neworder_lookup_s(uint64_t ol_i_id, uint64_t ol_supply_w_id, row_t *& r_stock_local){
+    inline RC neworder_lookup_s(uint64_t ol_i_id, uint64_t ol_supply_w_id, row_t *& r_stock_local) ALWAYS_INLINE{
         uint64_t key;
         itemid_t * item;
         key = stockKey(ol_i_id, ol_supply_w_id);
@@ -522,16 +582,17 @@ public:
         r_stock_local = ((row_t *)item->location);
         return RCOK;
     };
-    inline RC plan_neworder_update_s(uint64_t ol_quantity, bool remote, row_t *& r_stock_local, exec_queue_entry * entry){
+    inline RC plan_neworder_update_s(uint64_t ol_quantity, bool remote, row_t *& r_stock_local, exec_queue_entry * entry) ALWAYS_INLINE{
         entry->row = r_stock_local;
         entry->rid = r_stock_local->get_row_id();
         entry->txn_ctx->ol_quantity = ol_quantity;
         entry->txn_ctx->remote = remote;
         entry->type = TPCC_NEWORDER_UPDATE_S;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
 
-    inline RC run_neworder_update_s(exec_queue_entry * entry){
+    inline RC run_neworder_update_s(exec_queue_entry * entry) ALWAYS_INLINE{
         assert(entry != NULL);
         assert(entry->row != NULL);
         row_t * r_stock_local = entry->row;
@@ -566,10 +627,13 @@ public:
             quantity = s_quantity - entry->txn_ctx->ol_quantity + 91;
         }
         r_stock_local->set_value(S_QUANTITY, &quantity);
+
+        check_commit_ready(entry);
         return RCOK;
     };
 
-    inline RC plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, row_t *& r_ol_local, exec_queue_entry * entry){
+    inline RC plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number,
+                                      row_t *& r_ol_local, exec_queue_entry * entry) ALWAYS_INLINE{
 
         uint64_t row_id = rid_man.next_rid(wh_to_part(ol_supply_w_id));
 
@@ -579,10 +643,11 @@ public:
         entry->txn_ctx->ol_quantity = ol_quantity;
         entry->txn_ctx->ol_number = ol_number;
         entry->type = TPCC_NEWORDER_INSERT_OL;
+        entry->txn_ctx->txn_comp_cnt.fetch_add(1);
 
         return RCOK;
     };
-    inline RC run_neworder_insert_ol(exec_queue_entry * entry){
+    inline RC run_neworder_insert_ol(exec_queue_entry * entry) ALWAYS_INLINE{
         /*====================================================+
 		EXEC SQL INSERT
 			INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number,
@@ -623,6 +688,7 @@ public:
 #endif
         r_ol->set_value(OL_O_ID, entry->txn_ctx->o_id.load());
 
+        check_commit_ready(entry);
         return RCOK;
     };
 

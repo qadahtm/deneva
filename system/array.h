@@ -25,6 +25,27 @@ template <class T> class Array {
 public:
   Array() : items(NULL), capacity(0), count(0) {
   }
+  void init(uint64_t size, int64_t et_id, int64_t pt_id) {
+      _et_id = et_id;
+      _pt_id = pt_id;
+      init(size);
+  }
+    inline int64_t et_id(){
+        return _et_id;
+    }
+
+    inline int64_t pt_id(){
+        return _pt_id;
+    }
+
+    inline void set_et_id(int64_t et_id){
+        _et_id = et_id;
+    }
+
+    inline void set_pt_id(int64_t pt_id){
+        _pt_id = pt_id;
+    }
+
   void init(uint64_t size) {
     /*
     if(!items) {
@@ -140,11 +161,15 @@ public:
   bool is_full() { return count == capacity;}
   bool is_empty() { return count == 0;}
     bool isInitilized() {return capacity > 0;}
+
 private:
   T * items;
   uint64_t capacity;
   uint64_t count;
 //  uint64_t head;
+
+    int64_t _et_id =-1;
+    int64_t _pt_id =-1;
 };
 
 

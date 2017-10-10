@@ -56,7 +56,11 @@ public:
     uint64_t get_next_txn_id();
     bool is_cc_new_timestamp();
 
+#if CC_ALG == QUECC
+    inline RC commit_txn(priority_group * planner_pg, uint64_t txn_idx,
+                                       std::list<uint64_t> * pending_txn, uint64_t &commit_cnt);
     inline void wt_release_accesses(transaction_context * context, bool cascading_abort, bool rollback);
+#endif
 
 private:
     uint64_t _thd_txn_id;

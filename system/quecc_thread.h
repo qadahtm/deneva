@@ -33,14 +33,18 @@ typedef std::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
  */
 struct transaction_context {
     uint64_t txn_id;
-//    uint64_t completion_cnt;
 // this need to be reset on reuse
-    boost::atomic<uint32_t> completion_cnt;
+    atomic<uint32_t> completion_cnt; // used at execution time to track operations that have completed
+    atomic<uint32_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
 #endif
 //    uint64_t batch_id;
+#if PARALLEL_COMMIT
+    atomic<uint8_t> txn_state;
+#else
     uint8_t txn_state;
+#endif
 #if WORKLOAD == TPCC
     atomic<int64_t> o_id;
     double h_amount;

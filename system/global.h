@@ -393,4 +393,6 @@ enum TsType {R_REQ = 0, W_REQ, P_REQ, XP_REQ};
 #define TXN_INITIALIZED 0
 #define TXN_STARTED 1
 #define TXN_READY_TO_COMMIT 2
-#define READY_TO_ABORT 3
+#define TXN_READY_TO_ABORT 3
+#define TXN_COMMITTED  4
+#define TXN_ABORTED  5

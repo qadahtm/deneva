@@ -235,6 +235,9 @@ public:
     double * exec_txn_commit_time;
     double * exec_txn_index_lookup_time;
     double * exec_txn_proc_time;
+    double * exec_entry_deq_time;
+    double * exec_txn_wait_time;
+    double * exec_eq_swtich_time;
 
 
   // OCC
