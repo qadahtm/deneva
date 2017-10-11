@@ -188,6 +188,8 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
+#define PIPELINED true
+
 #define INIT_QUERY_MSGS false
 
 // Controls the batching decitions in the planning phase
@@ -406,7 +408,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

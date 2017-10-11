@@ -26,7 +26,7 @@ class Workload;
 class Message;
 
 #if CC_ALG == QUECC
-enum SRC { SUCCESS=0, BREAK, BATCH_READY, BATCH_WAIT };
+enum SRC { SUCCESS=0, BREAK, BATCH_READY, BATCH_WAIT, FATAL_ERROR };
 #endif
 
 class WorkerThread : public Thread {
@@ -63,6 +63,61 @@ public:
     bool is_cc_new_timestamp();
 
 #if CC_ALG == QUECC
+
+    inline SRC sync_on_planning_phase_end(uint64_t &idle_starttime, uint64_t batch_slot) ALWAYS_INLINE{
+        uint8_t desired8;
+        uint8_t expected8;
+
+        if (_thd_id == 0){
+            if (idle_starttime > 0){
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            }
+            idle_starttime = get_sys_clock();
+            // wait for all ets to finish
+            while (work_queue.batch_plan_comp_cnts[batch_slot].load() != g_thread_cnt){
+                //TQ: no need to preeempt this wait
+                if (simulation->is_done()){
+                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+                    idle_starttime =0;
+                    return BREAK;
+                }
+            };
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+            idle_starttime =0;
+
+            // allow other ETs to proceed
+            desired8 = 0;
+            expected8 = g_thread_cnt;
+            if(!work_queue.batch_plan_comp_cnts[batch_slot].compare_exchange_strong(expected8, desired8)){
+                M_ASSERT_V(false, "ET_%ld: this should not happen, I am the only one who can reset batch_plan_comp_cnts\n", _thd_id);
+            };
+
+        }
+        else{
+//                DEBUG_Q("ET_%ld: going to wait for ET_0 to finalize the commit phase for batch_id = %ld\n", _thd_id, wbatch_id);
+            if (idle_starttime > 0){
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            }
+            idle_starttime = get_sys_clock();
+//                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
+            while (work_queue.batch_plan_comp_cnts[batch_slot].load() != 0){
+                if (simulation->is_done()){
+                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+                    idle_starttime =0;
+                    return BREAK;
+                }
+                // SPINN Here untill all ETs are done and batch is committed
+            }
+//                DEBUG_Q("ET_%ld: execution phase is done, starting commit phase for batch_id = %ld\n", _thd_id, wbatch_id);
+//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+            idle_starttime =0;
+        }
+
+        return SUCCESS;
+    }
 
     inline SRC sync_on_execution_phase_end(uint64_t &idle_starttime, uint64_t batch_slot) ALWAYS_INLINE{
         uint8_t desired8;
@@ -222,6 +277,9 @@ public:
         quecc_pool.batch_part_release(batch_part, wplanner_id, _thd_id);
         INC_STATS(_thd_id,exec_mem_free_time[_thd_id],get_sys_clock() - quecc_prof_time);
     };
+
+    inline SRC plan_batch(uint64_t batch_slot) ALWAYS_INLINE;
+    inline SRC execute_batch(uint64_t batch_slot, uint64_t &idle_starttime, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) ALWAYS_INLINE;
 
     inline SRC execute_batch_part(batch_partition * batch_part, uint64_t *eq_comp_cnts, TxnManager * my_txn_man, uint64_t wplanner_id)
     ALWAYS_INLINE{

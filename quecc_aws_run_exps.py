@@ -92,6 +92,18 @@ def exec_cmd(cmd, env):
     print('Error:')
     for el in p.stderr:
         print(el.decode(encoding="utf-8", errors="strict"), end='')
+def exec_cmd_capture_output(cmd, env):
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env=env)
+    p.wait()
+
+    out = ""
+    out += 'Output:\n'
+    for ol in p.stdout:
+        out += (ol.decode(encoding="utf-8", errors="strict"))
+    out += 'Error:\n'
+    for el in p.stderr:
+        out += (el.decode(encoding="utf-8", errors="strict"))
+    return out;
 
 def build_project():
     env = dict(os.environ)
@@ -276,7 +288,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-vm_cores = 64
+vm_cores = 32
 exp_set = 1 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
@@ -300,9 +312,8 @@ elif vm_cores == 128:
 else:
     assert(False)
 
-# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
-cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
-note = "quecc4-{} with -O3 CC_ALG: {}".format(vm_cores,",".join(cc_algs))
+cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
+# cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
 pt_perc = [0.5]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
@@ -350,6 +361,15 @@ if (len(sys.argv) == 2):
 exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.txt'), env)
 exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
 exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
+
+note = "uname:\n{}\nlscpu output:\n{}\nquecc-{} with -O3 CC_ALG: {}".format(
+    exec_cmd_capture_output("uname -a",env),
+    exec_cmd_capture_output("lscpu",env),
+    vm_cores,",".join(cc_algs))
+print(note)
+notefile = open("{}/{}".format(outdir,'exp_ote.txt'), 'w');
+notefile.write(note)
+notefile.close()
 
 if is_azure:
     print("Enter password for Azure:")
