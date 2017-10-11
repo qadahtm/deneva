@@ -276,6 +276,8 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
+vm_cores = 64
+exp_set = 1 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
@@ -288,33 +290,20 @@ num_trials = 2;
 # cc_algs = ['QUECC', "NO_WAIT"]
 # # cc_algs = ['LADS']
 # cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP']
-cc_algs = ['OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP', 'HSTORE']
-# cc_algs = ['QUECC', 'HSTORE', 'SILO']
-# cc_algs = ['QUECC']
-# cc_algs = ['QUECC','TIMESTAMP']
-# wthreads = [4,8,12,16,20,24,28,30,32,40,44,48,52,56,60] # for m4.16xlarge
-#8 data points
-# wthreads = [20,40] # for m4.16xlarge all
-# wthreads = [8,16,20,24,30,48,56,60] # for m4.16xlarge non-Quecc
-# wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
-# wthreads = [16,24,32,40,48,56,60] # for m4.16xlarge for QueCC
-# wthreads = [32,40,48,56,60] # for m4.16xlarge for QueCC
-# wthreads = [4,8,12,16,20,24,28,32,36] # for m4.10xlarge for QueCC - Fixed mode
-# wthreads = [8,16,24,32,36] # for m4.10xlarge for QueCC -  Normal mode
-# wthreads = [16,32,48,62,80,96,112,120] # for x1.32xlarge for QueCC -  Normal mode
-wthreads = [8,12,16,20,24,30]
-# wthreads = [4,8,16]
-# wthreads = [16] # for m4.10xlarge for QueCC -  Normal mode
-# wthreads = [8,12,16,18] # for 20-core RCAC for QueCC
-# wthreads = [16] # for m4.10xlarge for QueCC
-# pt_perc = [0.25,0.5,0.75, 1]
-# pt_perc = [1]
-# pt_perc = [8]
+
+if (vm_cores == 32):
+    wthreads = [8,12,16,20,24,30] # 32 core machine
+elif vm_cores == 64:
+    wthreads = [8,16,32,48,56,62] # 64 core machine
+elif vm_cores == 128:
+    wthreads = [8,32,64,96,112,126] # 128 core machine
+else:
+    assert(False)
+
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
+cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
+note = "quecc4-{} with -O3 CC_ALG: {}".format(vm_cores,",".join(cc_algs))
 pt_perc = [0.5]
-# pt_perc = [0.5,4,8,10]
-# wthreads = [16,32,48,62,80,96,112,124] # x1.32xlarge for non-Quecc
-# wthreads = [8,16,24,31,40,48,56,62] # x1.32xlarge for Quecc
-# wthreads = [1,2]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
@@ -435,7 +424,7 @@ for ncc_alg in cc_algs:
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
-send_email(subject, '')
+send_email(subject, note)
 if is_azure:
     exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
 else:

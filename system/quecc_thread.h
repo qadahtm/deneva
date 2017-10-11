@@ -134,10 +134,10 @@ struct batch_partition{
 
     // Info. related to having multiple exec. queues
     uint64_t sub_exec_qs_cnt;
-    atomic<uint64_t> exec_qs_comp_cnt;
+//    atomic<uint64_t> exec_qs_comp_cnt;
 //    Array<exec_queue_entry> ** exec_qs;
     Array<Array<exec_queue_entry> *> * exec_qs;
-    atomic<uint8_t> * exec_qs_status;
+//    atomic<uint8_t> * exec_qs_status;
 };
 
 

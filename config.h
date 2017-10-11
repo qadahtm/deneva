@@ -6,14 +6,14 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 10
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 
-#define PART_CNT THREAD_CNT // For others because of the abort thread
+#define PART_CNT 15 // For others because of the abort thread
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -178,8 +178,8 @@
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
-#define BATCH_SIZE 5*56*6*3*6 // ~30K
-//#define BATCH_SIZE 5040
+//#define BATCH_SIZE 5*56*6*3*6 // ~30K
+#define BATCH_SIZE 5040
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
@@ -208,7 +208,7 @@
 #define GREEDY_RANGE_LOCALITY 2
 #define RR  3
 
-#define QUECC_DB_ACCESS false
+#define QUECC_DB_ACCESS true
 
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS true
