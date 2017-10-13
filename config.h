@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 8
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -188,7 +188,7 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED true
+#define PIPELINED false
 
 #define INIT_QUERY_MSGS false
 
@@ -408,7 +408,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

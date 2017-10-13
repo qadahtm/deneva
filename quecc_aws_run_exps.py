@@ -288,7 +288,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-vm_cores = 32
+vm_cores = 128
 exp_set = 1 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
@@ -308,12 +308,12 @@ if (vm_cores == 32):
 elif vm_cores == 64:
     wthreads = [8,16,32,48,56,62] # 64 core machine
 elif vm_cores == 128:
-    wthreads = [8,32,64,96,112,126] # 128 core machine
+    wthreads = [8,16,32,64,96,112,126] # 128 core machine
 else:
     assert(False)
 
-cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
-# cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
+cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
 pt_perc = [0.5]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
@@ -362,7 +362,7 @@ exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.txt'), env)
 exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
 exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
 
-note = "uname:\n{}\nlscpu output:\n{}\nquecc-{} with -O3 CC_ALG: {}".format(
+note = "uname:\n{}\nlscpu output:\n{}\nquecc-{} with CC_ALG: {}".format(
     exec_cmd_capture_output("uname -a",env),
     exec_cmd_capture_output("lscpu",env),
     vm_cores,",".join(cc_algs))

@@ -162,10 +162,10 @@ public:
   bool is_empty() { return count == 0;}
     bool isInitilized() {return capacity > 0;}
 
+    T * items;
+    uint64_t capacity;
+    uint64_t count;
 private:
-  T * items;
-  uint64_t capacity;
-  uint64_t count;
 //  uint64_t head;
 
     int64_t _et_id =-1;

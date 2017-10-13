@@ -65,7 +65,7 @@ struct transaction_context {
 
 #if ROLL_BACK
     spinlock * access_lock = NULL;
-    Array<Access*> accesses;
+    Array<Access*> * accesses;
 #endif
 };
 
@@ -125,7 +125,7 @@ struct batch_partition{
 //    uint64_t batch_id;
     atomic<uint64_t> status;
     priority_group * planner_pg;
-
+    bool empty;
     // A small optimization in case there is only a single exec_q
     // This optimization will avoid a cache miss
     bool single_q;
@@ -133,7 +133,7 @@ struct batch_partition{
     atomic<uint64_t> exec_q_status;
 
     // Info. related to having multiple exec. queues
-    uint64_t sub_exec_qs_cnt;
+//    uint64_t sub_exec_qs_cnt;
 //    atomic<uint64_t> exec_qs_comp_cnt;
 //    Array<exec_queue_entry> ** exec_qs;
     Array<Array<exec_queue_entry> *> * exec_qs;

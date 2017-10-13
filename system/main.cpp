@@ -314,7 +314,9 @@ int main(int argc, char* argv[])
 #endif
 
 #if CC_ALG == QUECC
+#if PIPELINED
     all_thd_cnt += g_plan_thread_cnt;
+#endif
     all_thd_cnt -= 1; // to remove abort thread for QueCC but there is a logger
 #if CT_ENABLED
     all_thd_cnt += 1; // add commit thread
@@ -356,6 +358,7 @@ int main(int argc, char* argv[])
 #endif
 
 #if MODE == FIXED_MODE
+    M_ASSERT_V(false, "fixed mode is not supported anymore\n");
     worker_thds = new WorkerThread[wthd_cnt];
 
 #if CC_ALG == QUECC
@@ -627,7 +630,7 @@ int main(int argc, char* argv[])
     calvin_seq_thds = new CalvinSequencerThread[1];
 #endif
 
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC && PIPELINED
     planner_thds = new PlannerThread[g_plan_thread_cnt];
 #if CT_ENABLED
     commit_thds = new CommitThread[1];
@@ -761,7 +764,7 @@ int main(int argc, char* argv[])
 #endif
 
     // creating threads for QUECC
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC && PIPELINED
     DEBUG_Q("Initilizing Quecc threads\n");
     for (uint64_t j = 0; j < g_plan_thread_cnt; j++) {
 #if SET_AFFINITY

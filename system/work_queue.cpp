@@ -60,6 +60,12 @@ void QWorkQueue::init() {
   }
 #endif
   //TODO(tq): is this cache-aware? Need to study and figure out hte optimal layout
+
+
+  batch_plan_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
+  batch_map_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
+  batch_commit_et_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
+
   for (uint64_t i=0; i < g_batch_map_length ; i++){
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
       (batch_plan_comp_cnts[i]).store(0);
@@ -73,7 +79,7 @@ void QWorkQueue::init() {
         // pointer-based implementation of PG_MAP
         // with static allocation there is no need fo this
 #if BATCHING_MODE == SIZE_BASED
-      (batch_pg_map[i][j]).status.store(0);
+      (batch_pg_map[i][j]).status.store(PG_AVAILABLE);
 #else
       (batch_pg_map[i][j]).store(0);
 #endif

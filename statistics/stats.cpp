@@ -1156,11 +1156,8 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,i
             ,exec_txn_wait_time[i] /BILLION
     );
-    fprintf(outf,
-            ",quecc_exec%ld_eq_switch_time=%f"
-            ,i
-            ,exec_eq_swtich_time[i] /BILLION
-    );
+
+
   }
 #endif
 

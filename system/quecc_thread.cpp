@@ -885,7 +885,7 @@ RC PlannerThread::run_fixed_mode() {
 
                         batch_part->single_q = false;
                         // Allocate memory for exec_qs
-                        batch_part->sub_exec_qs_cnt = fa_execqs->size();
+//                        batch_part->sub_exec_qs_cnt = fa_execqs->size();
                         batch_part->exec_qs = fa_execqs;
 //                        quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id, i);
 
@@ -1352,6 +1352,18 @@ RC PlannerThread::run_normal_mode() {
 //    memset(&planner_pg->txn_ctxs,0,BATCH_SIZE/PLAN_THREAD_CNT);
     txn_ctxs = planner_pg->txn_ctxs;
 #endif
+
+    // Initialize access list
+    for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
+        for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
+            for (uint64_t i=0; i < planner_batch_size; ++i){
+                priority_group * planner_pg = &work_queue.batch_pg_map[b][j];
+                planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
+                planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
+            }
+        }
+    }
+
     planner_txn_id = txn_prefix_planner_base;
 
 #if BUILD_TXN_DEPS
@@ -1366,7 +1378,6 @@ RC PlannerThread::run_normal_mode() {
                "PT_%ld: Number of paritions must be geq to number of planners."
                        " g_part_cnt = %d, g_plan_thread_cnt = %d\n", _planner_id, g_part_cnt, g_plan_thread_cnt);
 
-//    uint64_t parts_per_planner = g_part_cnt / g_plan_thread_cnt;
     uint64_t next_part = 0;
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
@@ -1379,7 +1390,6 @@ RC PlannerThread::run_normal_mode() {
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
         prof_starttime = get_sys_clock();
         next_part = (_planner_id + (g_plan_thread_cnt * query_cnt)) % g_part_cnt;
-
         query_cnt++;
 //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
         msg = work_queue.plan_dequeue(_thd_id, next_part);
@@ -1800,19 +1810,13 @@ inline void PlannerThread::do_batch_delivery(bool force_batch_delivery, priority
 
             // create a new batch_partition
             quecc_pool.batch_part_get_or_create(batch_part, _planner_id, i);
-//                batch_part->planner_id = _planner_id;
-//                batch_part->batch_id = batch_id;
-            batch_part->single_q = true;
-            batch_part->status.store(0);
-            batch_part->exec_q_status.store(0);
-
 #if SPLIT_MERGE_ENABLED
             Array<Array<exec_queue_entry> *> * fa_execqs = ((Array<Array<exec_queue_entry> *> *)f_assign[i]);
             if (fa_execqs->size() > 1){
 
                 batch_part->single_q = false;
                 // Allocate memory for exec_qs
-                batch_part->sub_exec_qs_cnt = fa_execqs->size();
+//                batch_part->sub_exec_qs_cnt = fa_execqs->size();
                 batch_part->exec_qs = fa_execqs;
 //                quecc_pool.exec_qs_status_get_or_create(batch_part->exec_qs_status, _planner_id,i);
             }
@@ -2005,14 +2009,14 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 #endif
 
 #if ROLL_BACK
-    if (tctx->accesses.isInitilized()){
+    if (tctx->accesses->isInitilized()){
         // need to clear on commit phase
 //        DEBUG_Q("reusing tctx accesses\n");
-        tctx->accesses.clear();
+        tctx->accesses->clear();
     }
     else{
 //        DEBUG_Q("initializing tctx accesses\n");
-        tctx->accesses.init(MAX_ROW_PER_TXN);
+        tctx->accesses->init(MAX_ROW_PER_TXN);
     }
 #endif
 
@@ -2651,9 +2655,9 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 }
 
 
-void QueCCPool::batch_part_get_or_create(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id){
-    if (!batch_part_free_list[et_id][planner_id]->pop(batch_p)){
-        batch_p = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+void QueCCPool::batch_part_get_or_create(batch_partition *&batch_part, uint64_t planner_id, uint64_t et_id){
+    if (!batch_part_free_list[et_id][planner_id]->pop(batch_part)){
+        batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
 //        DEBUG_Q("Allocating batch_p\n");
 #if DEBUG_QUECC
         batch_part_alloc_cnts[et_id].fetch_add(1);
@@ -2664,6 +2668,11 @@ void QueCCPool::batch_part_get_or_create(batch_partition *&batch_p, uint64_t pla
         batch_part_reuse_cnts[et_id].fetch_add(1);
 #endif
     }
+    batch_part->empty = false;
+    batch_part->single_q = true;
+    batch_part->empty = true;
+    batch_part->status.store(0);
+    batch_part->exec_q_status.store(0);
 }
 void QueCCPool::batch_part_release(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id){
     while(!batch_part_free_list[et_id][planner_id]->push(batch_p));

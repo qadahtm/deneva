@@ -869,7 +869,7 @@ void TxnManager::row_access_backup(transaction_context * context, access_t type,
     access->data = row;
     // Need to protect accesses and synchronize updates to it.
     context->access_lock->lock();
-    context->accesses.add(access);
+    context->accesses->add(access);
     context->access_lock->unlock();
 #endif
 }
