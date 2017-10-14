@@ -423,7 +423,7 @@ RC YCSBTxnManager::run_calvin_txn() {
     txn_stats.wait_starttime = get_sys_clock();
     return rc;
 }
-
+#if CC_ALG == QUECC
 inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
 //    uint64_t starttime = get_sys_clock();
@@ -443,6 +443,8 @@ inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     // perfrom access
     rc = run_ycsb_1(req->acctype, row);
     assert(rc == RCOK);
+
+    check_commit_ready(exec_qe);
 #endif
 //    INC_STATS(get_thd_id(), exec_txn_proc_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
 
@@ -452,7 +454,7 @@ inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 //    txn_stats.wait_starttime = get_sys_clock();
     return rc;
 }
-
+#endif // #if CC_ALG == QUECC
 
 
 RC YCSBTxnManager::run_ycsb() {

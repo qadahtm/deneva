@@ -30,11 +30,12 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
     else:
         pt_cnt = pt_p
 
-    nwthd_cnt = wthd_cnt - pt_cnt
+    # nwthd_cnt = wthd_cnt - pt_cnt
+    nwthd_cnt = wthd_cnt #ignore planner percentage now. 
 
-    if nwthd_cnt == 0:
+    # if nwthd_cnt == 0:
         # need to account for the Abort thread
-        nwthd_cnt = wthd_cnt -1 
+        # nwthd_cnt = wthd_cnt -1
     print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}, PPT={}, STRICT_PPT={}'
         .format(ncc_alg, nwthd_cnt, theta, pt_cnt, nwthd_cnt, ets, pa,strict))
 
@@ -63,10 +64,7 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
             nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
         pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
-            if ncc_alg == 'CALVIN':
-                nline = '#define PART_CNT {}\n'.format(int(nwthd_cnt)-1)
-            else:
-                nline = '#define PART_CNT {}\n'.format(nwthd_cnt)
+            nline = '#define PART_CNT {}\n'.format(nwthd_cnt)
 
         pa_m =    re.search('#define PART_PER_TXN\s+(\d+|THREAD_CNT|PART_CNT)',line.strip())
         if pa_m:
@@ -288,7 +286,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-vm_cores = 128
+vm_cores = 32
 exp_set = 1 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
@@ -313,8 +311,10 @@ else:
     assert(False)
 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
-cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
-pt_perc = [0.5]
+# cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
+cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # both
+# pt_perc = [0.5]
+pt_perc = [1]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
@@ -367,7 +367,7 @@ note = "uname:\n{}\nlscpu output:\n{}\nquecc-{} with CC_ALG: {}".format(
     exec_cmd_capture_output("lscpu",env),
     vm_cores,",".join(cc_algs))
 print(note)
-notefile = open("{}/{}".format(outdir,'exp_ote.txt'), 'w');
+notefile = open("{}/{}".format(outdir,'exp_note.txt'), 'w');
 notefile.write(note)
 notefile.close()
 

@@ -19,7 +19,7 @@
 #include "thread.h"
 #include "abort_thread.h"
 #include "abort_queue.h"
-
+#if ABORT_THREAD
 void AbortThread::setup() {
 }
 
@@ -33,5 +33,4 @@ RC AbortThread::run() {
   return FINISH;
  
 }
-
-
+#endif // if ABORT_THREAD

@@ -58,7 +58,9 @@ RowPool row_pool;
 QryPool qry_pool;
 TxnTable txn_table;
 QWorkQueue work_queue;
+#if ABORT_THREAD
 AbortQueue abort_queue;
+#endif
 MessageQueue msg_queue;
 Client_txn client_man;
 Sequencer seq_man;

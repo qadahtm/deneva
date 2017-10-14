@@ -18,7 +18,7 @@
 #define _ABORTTHREAD_H_
 
 #include "global.h"
-
+#if ABORT_THREAD
 class Workload;
 
 class AbortThread : public Thread {
@@ -26,5 +26,5 @@ public:
 	RC 			run();
   void setup();
 };
-
+#endif // if ABORT_THREAD
 #endif

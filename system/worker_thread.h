@@ -401,6 +401,7 @@ public:
 //                            _thd_id, wbatch_id, exec_qe.txn_id, wplanner_id);
 
             quecc_prof_time = get_sys_clock();
+            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context\n", _thd_id);
             rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
 
@@ -526,8 +527,7 @@ public:
     };
 
     inline RC commit_batch(uint64_t batch_slot) ALWAYS_INLINE;
-    inline RC commit_txn(priority_group * planner_pg, uint64_t txn_idx,
-                                       std::list<uint64_t> * pending_txn, uint64_t &commit_cnt) ALWAYS_INLINE;
+    inline RC commit_txn(priority_group * planner_pg, uint64_t txn_idx) ALWAYS_INLINE;
     inline void wt_release_accesses(transaction_context * context, bool cascading_abort, bool rollback) ALWAYS_INLINE;
 
     inline void move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts,
@@ -682,7 +682,8 @@ public:
 //                _planner_id, exec_qs_ranges->size(), exec_qs_ranges_tmp->size());
 
             // release current mrange
-            quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
+//            quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
+            quecc_pool.exec_queue_release(mrange,_planner_id,_thd_id);
 //        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
 
             // use the new ranges to assign the new execution entry
@@ -757,9 +758,14 @@ public:
      * We group keys that fall in the same range to be processed together
      * TODO(tq): add repartitioning
      */
+        uint8_t e8 = TXN_INITIALIZED;
+        uint8_t d8 = TXN_STARTED;
+        if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+            assert(false);
+        }
     YCSBClientQueryMessage *ycsb_msg = ((YCSBClientQueryMessage *) msg);
     for (uint64_t j = 0; j < ycsb_msg->requests.size(); j++) {
-        memset(entry, 0, sizeof(exec_queue_entry));
+//        memset(entry, 0, sizeof(exec_queue_entry));
         ycsb_request *ycsb_req = ycsb_msg->requests.get(j);
         uint64_t key = ycsb_req->key;
 //                    DEBUG_Q("Planner_%d looking up bucket for key %ld\n", _planner_id, key);
@@ -770,7 +776,8 @@ public:
         Array<exec_queue_entry> *mrange = exec_queues->get(idx);
 
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
-        et_id = eq_idx_rand->operator()(plan_rng);
+//        et_id = eq_idx_rand->operator()(plan_rng);
+        et_id = _thd_id;
         checkMRange(mrange, key, et_id);
         INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
 #endif
@@ -784,6 +791,7 @@ public:
         // add entry into range/bucket queue
         // entry is a sturct, need to double check if this works
         // this actually performs a full memcopy when adding entries
+        tctx->txn_comp_cnt.fetch_add(1);
         mrange->add(*entry);
         prof_starttime = get_sys_clock();
 
@@ -1477,7 +1485,9 @@ private:
     uint64_t idle_starttime = 0;
 
 
-#if !PIPELINED && CC_ALG == QUECC
+#if CC_ALG == QUECC
+    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+#if !PIPELINED
     // for QueCC palnning
 
     // txn related
@@ -1486,7 +1496,6 @@ private:
     uint64_t txn_prefix_planner_base = 0;
 
     // Batch related
-    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
     uint64_t pbatch_cnt = 0;
     bool force_batch_delivery = false;
     uint64_t batch_starting_txn_id;
@@ -1555,6 +1564,7 @@ private:
     void print_eqs_ranges_after_swap() const;
     void print_eqs_ranges_before_swap() const;
 #endif // - if !PIPELINED
+#endif // - if CC_ALG == QUECC
 
 
 };

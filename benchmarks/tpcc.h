@@ -151,21 +151,6 @@ public:
 
     RC run_quecc_txn(exec_queue_entry *exec_qe);
 
-    inline void check_commit_ready(exec_queue_entry *entry) ALWAYS_INLINE {
-        uint8_t e8;
-        uint8_t d8;
-        uint32_t comp_cnt = entry->txn_ctx->completion_cnt.fetch_add(1);
-        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt - 1)) {
-//            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load())
-            // this is the last entry to be executed, we should be ready to commit
-            e8 = TXN_STARTED;
-            d8 = TXN_READY_TO_COMMIT;
-            if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8)) {
-                assert(false);
-            }
-        }
-    }
-
     inline RC payment_lookup_w(uint64_t w_id, row_t *&r_wh_local) ALWAYS_INLINE {
         uint64_t key;
         itemid_t *item;

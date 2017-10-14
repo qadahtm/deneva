@@ -182,11 +182,11 @@ void WorkerThread::abort() {
 
     ++txn_man->abort_cnt;
     txn_man->reset();
-
+#if ABORT_THREAD
     uint64_t penalty = abort_queue.enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
 
     txn_man->txn_stats.total_abort_time += penalty;
-
+#endif
 }
 
 TxnManager *WorkerThread::get_transaction_manager(Message *msg) {
@@ -679,9 +679,9 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 #if PIPELINED
 
         // wait for batch to be ready
-//        if (wait_for_batch_ready(batch_slot, wplanner_id, batch_part, idle_starttime) == BATCH_WAIT){
-//            continue;
-//        }
+        if (wait_for_batch_ready(batch_slot, wplanner_id, batch_part) == BATCH_WAIT){
+            continue;
+        }
 
 
 
@@ -798,6 +798,10 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
     uint64_t txn_commit_seq=0; // the transaction order in the batch
     uint64_t commit_et_id =0;
     uint64_t commit_cnt = 0;
+    uint8_t e8 =0;
+    uint8_t d8 =0;
+    RC rc;
+
 
     for (uint64_t i=0; i < g_plan_thread_cnt;++i){
 
@@ -812,96 +816,13 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
                 assert(planner_pg->status.load() == PG_READY);
+                rc = commit_txn(planner_pg, j);
+                if (rc == Commit){
 
-                commit_txn(planner_pg, j, pending_txns, commit_cnt);
-            }
-
-        }
-        // check for transactions that requires the result status of their dependents transactions
-        // and are pending
-
-        while(!pending_txns->empty()){
-            uint64_t txn_idx = pending_txns->front();
-            commit_txn(planner_pg, txn_idx, pending_txns, commit_cnt);
-        }
-
-        INC_STATS(_thd_id, txn_cnt, commit_cnt);
-//                DEBUG_Q("ET_%ld: commit count = %ld, PG=%ld, txn_per_pg = %ld, batch_id = %ld\n",
-//                        _thd_id, commit_cnt, i, txn_per_pg, wbatch_id);
-        //TODO(tq): collect abort cnts??
-        INC_STATS(_thd_id,exec_txn_commit_time[_thd_id],get_sys_clock() - quecc_commit_starttime);
-    }
-
-    return RCOK;
-}
-
-inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx, std::list<uint64_t> * pending_txns, uint64_t &commit_cnt){
-
-    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
-    // assume that we can commit
-    bool canCommit = true;
-    bool cascading_abort = false;
-    uint8_t e8 =0;
-    uint8_t d8 =0;
-    uint64_t j = txn_idx;
-
-    // check if transactio is ready to commit
-    if (txn_ctxs[j].txn_state.load() == TXN_READY_TO_COMMIT){
-        // check for any dependent transaction
-
-#if BUILD_TXN_DEPS
-        // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
-        // to check if we need to abort, we lookup transaction dependency graph
-        auto search = planner_pg->txn_dep_graph->find(txn_ctxs[j].txn_id);
-        if (search != planner_pg->txn_dep_graph->end()){
-            // print dependenent transactions for now.
-            if (search->second->size() > 0){
-                // there are dependen transactions
-                //                        DEBUG_Q("CT_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[i].txn_id, search->second->size());
-                //                        for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
-                //                            DEBUG_Q("CT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[i].txn_id, (uint64_t) *it);
-                //                        }
-                uint64_t d_txn_id = search->second->back();
-                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
-                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
-                           "Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
-                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld) \n",
-                           txn_ctxs[d_txn_ctx_idx].txn_id,
-                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
-                           (uint64_t)txn_ctxs
-                );
-                if (txn_ctxs[d_txn_ctx_idx].txn_state == TXN_READY_TO_ABORT){
-                    // abort due to dependencies on an aborted txn
-                    //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
-                    canCommit = false;
-#if ROW_ACCESS_TRACKING
-                    cascading_abort = true;
-#endif
-                }
-                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load() == TXN_READY_TO_COMMIT){
-                    // queue up this transaction j in the pedning txn list and check later if it can commit
-                    pending_txns->push_back(j);
-                }
-                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load() == TXN_COMMITTED){
-                    canCommit = true;
-#if ROW_ACCESS_TRACKING
-                    cascading_abort = false;
-#endif
-                }
-                else{
-                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %d\n",
-                               _thd_id, txn_ctxs[d_txn_ctx_idx].txn_state.load());
-
-                }
-            }
-        }
-#endif // #if BUILD_TXN_DEPS
-
-        if (canCommit){
-            // Committing
-            // Sending response to client a
+                    // Committing
+                    // Sending response to client a
 #if !SERVER_GENERATE_QUERIES
-            Message * rsp_msg = Message::create_message(CL_RSP);
+                    Message * rsp_msg = Message::create_message(CL_RSP);
                                 rsp_msg->txn_id = txn_ctxs[i].txn_id;
                                 rsp_msg->batch_id = batch_id; // using batch_id from local, we can also use the one in the context
                                 ((ClientResponseMessage *) rsp_msg)->client_startts = txn_ctxs[i].client_startts;
@@ -915,43 +836,167 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
 
                                 msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[j].return_node_id);
 #endif
-            wt_release_accesses(&txn_ctxs[j], cascading_abort, false);
-            e8 = TXN_READY_TO_COMMIT;
-            d8 = TXN_COMMITTED;
-            if (!txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8)){
-                M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
-            }
-            commit_cnt++;
-        }
-        else{
-            // need to do cascading abort
-            // copying back original value is done during release
+                    wt_release_accesses(&planner_pg->txn_ctxs[j], false, false);
+                    e8 = TXN_READY_TO_COMMIT;
+                    d8 = TXN_COMMITTED;
+                    if (!planner_pg->txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8)){
+                        M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
+                    }
 
-            wt_release_accesses(&txn_ctxs[j], cascading_abort, true);
-            e8 = TXN_READY_TO_COMMIT;
-            d8 = TXN_ABORTED;
-            if (!txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8)){
-                M_ASSERT_V(false, "ET_%ld: trying to abort a transaction with invalid status\n", _thd_id);
+//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld\n",
+//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
+                    commit_cnt++;
+                }
+                else if (rc == WAIT){
+                    pending_txns->push_back(j);
+                }
+                else{
+                    assert(rc == Abort);
+                    // need to do cascading abort
+                    // copying back original value is done during release
+                    if (planner_pg->txn_ctxs[j].txn_state.load() == TXN_READY_TO_COMMIT){
+                        wt_release_accesses(&planner_pg->txn_ctxs[j], true, true);
+                        e8 = TXN_READY_TO_COMMIT;
+                        d8 = TXN_ABORTED;
+                        if (!planner_pg->txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8)){
+                            M_ASSERT_V(false, "ET_%ld: trying to abort a transaction with invalid status\n", _thd_id);
+                        }
+                    }
+                    else{
+                        assert(planner_pg->txn_ctxs[j].txn_state.load() == TXN_READY_TO_ABORT);
+                        wt_release_accesses(&planner_pg->txn_ctxs[j], false, true);
+
+                        e8 = TXN_READY_TO_ABORT;
+                        d8 = TXN_ABORTED;
+                        if (!planner_pg->txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8)){
+                            M_ASSERT_V(false, "ET_%ld: trying to abort a transaction with invalid status\n", _thd_id);
+                        }
+                    }
+                }
             }
 
         }
+        // check for transactions that requires the result status of their dependents transactions
+        // and are pending
+
+        while(!pending_txns->empty()){
+            uint64_t txn_idx = pending_txns->front();
+            rc = commit_txn(planner_pg, txn_idx);
+            if (rc == Commit){
+                if (rc == Commit){
+                    commit_cnt++;
+                    wt_release_accesses(&planner_pg->txn_ctxs[txn_idx], false, false);
+                    e8 = TXN_READY_TO_COMMIT;
+                    d8 = TXN_COMMITTED;
+                    if (!planner_pg->txn_ctxs[txn_idx].txn_state.compare_exchange_strong(e8,d8)){
+                        M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
+                    }
+                }
+                // icrement abort
+                pending_txns->pop_front();
+            }
+            else if (rc == Abort){
+                wt_release_accesses(&planner_pg->txn_ctxs[txn_idx], true, true);
+                e8 = TXN_READY_TO_COMMIT;
+                d8 = TXN_ABORTED;
+                if (!planner_pg->txn_ctxs[txn_idx].txn_state.compare_exchange_strong(e8,d8)){
+                    M_ASSERT_V(false, "ET_%ld: trying to abort a transaction with invalid status\n", _thd_id);
+                }
+            }
+//            else{
+//                DEBUG_Q("ET_%ld: wating on txn_id = %ld, batch_id = %ld, rc = %d, commit_cnt = %ld\n",
+//                            _thd_id, planner_pg->txn_ctxs[txn_idx].txn_id, wbatch_id, rc, commit_cnt);
+//            }
+        }
+
+//        DEBUG_Q("ET_%ld: committed %ld transactions, batch_id = %ld, PG=%ld\n",
+//                _thd_id, commit_cnt, wbatch_id, i);
+
+        INC_STATS(_thd_id, txn_cnt, commit_cnt);
+//                DEBUG_Q("ET_%ld: commit count = %ld, PG=%ld, txn_per_pg = %ld, batch_id = %ld\n",
+//                        _thd_id, commit_cnt, i, txn_per_pg, wbatch_id);
+        //TODO(tq): collect abort cnts??
+        INC_STATS(_thd_id,exec_txn_commit_time[_thd_id],get_sys_clock() - quecc_commit_starttime);
+    }
+
+    return RCOK;
+}
+
+inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx){
+
+    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
+    uint64_t j = txn_idx;
+
+//    DEBUG_Q("ET_%ld:trying to commit txn_id = %ld\n",_thd_id, txn_ctxs[j].txn_id);
+    // check if transactio is ready to commit
+    if (txn_ctxs[j].txn_state.load() == TXN_READY_TO_COMMIT){
+        // check for any dependent transaction
+
+#if BUILD_TXN_DEPS
+        // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
+        // to check if we need to abort, we lookup transaction dependency graph
+        auto search = planner_pg->txn_dep_graph->find(txn_ctxs[j].txn_id);
+        if (search != planner_pg->txn_dep_graph->end()){
+            // print dependenent transactions for now.
+            if (search->second->size() > 0){
+                // there are dependen transactions
+                DEBUG_Q("ET_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[j].txn_id, search->second->size());
+                for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
+                    DEBUG_Q("ET_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[j].txn_id, (uint64_t) *it);
+                }
+                uint64_t d_txn_id = search->second->back();
+                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
+                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
+                           "ET_%ld: Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
+                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld), batch_id=%ld, j = %ld \n", _thd_id,
+                           txn_ctxs[d_txn_ctx_idx].txn_id,
+                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
+                           (uint64_t)txn_ctxs, wbatch_id, j
+                );
+                if (txn_ctxs[d_txn_ctx_idx].txn_state == TXN_READY_TO_ABORT){
+                    // abort due to dependencies on an aborted txn
+                    //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+                    return Abort;
+//                    canCommit = false;
+//#if ROW_ACCESS_TRACKING
+//                    cascading_abort = true;
+//#endif
+                }
+                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load() == TXN_READY_TO_COMMIT){
+                    // queue up this transaction j in the pedning txn list and check later if it can commit
+                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
+                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+                    return WAIT;
+                }
+                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load() == TXN_COMMITTED){
+                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
+                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+                    return Commit;
+//                    canCommit = true;
+//#if ROW_ACCESS_TRACKING
+//                    cascading_abort = false;
+//#endif
+                }
+                else{
+                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %d\n",
+                               _thd_id, txn_ctxs[d_txn_ctx_idx].txn_state.load());
+
+                }
+            }
+        }
+#endif // #if BUILD_TXN_DEPS
 
     }
     else if (txn_ctxs[j].txn_state.load() == TXN_READY_TO_ABORT){
         //     abort transaction, this abort decision is done by an ET during execution phase
-        wt_release_accesses(&txn_ctxs[j], cascading_abort, true);
-
-        e8 = TXN_READY_TO_ABORT;
-        d8 = TXN_ABORTED;
-        if (!txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8)){
-            M_ASSERT_V(false, "ET_%ld: trying to abort a transaction with invalid status\n", _thd_id);
-        }
+        return Abort;
     }
     else {
-        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %d\n", _thd_id, txn_ctxs[j].txn_state.load());
+        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %d, txn_id = %ld\n",
+                   _thd_id, txn_ctxs[j].txn_state.load(), txn_ctxs[j].txn_id);
     }
 
-    return RCOK;
+    return Commit;
 }
 
 
@@ -1043,6 +1088,7 @@ RC WorkerThread::run_normal_mode() {
 #endif
 
 #if WORKLOAD == TPCC
+
     for (uint64_t i = 0; i < g_num_wh; i++) {
         Array<exec_queue_entry> * exec_q;
 
@@ -1106,14 +1152,14 @@ RC WorkerThread::run_normal_mode() {
         batch_slot = wbatch_id % g_batch_map_length;
 
 #if PIPELINED
-        if (execute_batch(batch_slot, idle_starttime, eq_comp_cnts, my_txn_man) == SUCCESS) {
+        if (execute_batch(batch_slot, eq_comp_cnts, my_txn_man) == SUCCESS) {
 
 #if PARALLEL_COMMIT
             // ET is done with its PGs for the current batch
 //            DEBUG_Q("ET_%ld: done with my batch partition, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
 
             // spin on map_comp_cnts
-            if (sync_on_execution_phase_end(idle_starttime, batch_slot) == BREAK){
+            if (sync_on_execution_phase_end(batch_slot) == BREAK){
                 goto end_et;
             }
 
@@ -1125,7 +1171,7 @@ RC WorkerThread::run_normal_mode() {
             // indicate that I am done with all commit phase
 //            DEBUG_Q("ET_%ld: is done with commit task\n", _thd_id);
 
-            if (sync_on_commit_phase_end(idle_starttime,batch_slot) == BREAK){
+            if (sync_on_commit_phase_end(batch_slot) == BREAK){
                 goto end_et;
             }
 

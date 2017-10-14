@@ -178,7 +178,11 @@ void parser(int argc, char * argv[]) {
 			assert(false);
     }
 	}
+#if ABORT_THREAD
   g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_abort_thread_cnt;
+#else
+  g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt;
+#endif
 #if LOGGING
   g_total_thread_cnt += g_logger_thread_cnt; // logger thread
 #endif
@@ -193,7 +197,7 @@ void parser(int argc, char * argv[]) {
 #if PIPELINED
     g_total_thread_cnt += g_plan_thread_cnt; // planner threads
 #endif
-    g_total_thread_cnt -= 1; // remove abort thread
+//    g_total_thread_cnt -= 1; // remove abort thread
 
 
 #if CT_ENABLED
@@ -202,7 +206,8 @@ void parser(int argc, char * argv[]) {
 #endif
 
 #if CC_ALG == DUMMY_CC
-    g_total_thread_cnt -= 1; // remove abort thread
+    assert(false);
+//    g_total_thread_cnt -= 1; // remove abort thread
 #endif
 
 #if SERVER_GENERATE_QUERIES

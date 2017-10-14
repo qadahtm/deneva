@@ -84,7 +84,8 @@ void Thread::tsetup() {
 #if TIME_ENABLE
   run_starttime = get_sys_clock();
 #else
-  run_starttime = get_wall_clock();
+//  run_starttime = get_wall_clock();
+  run_starttime = get_server_clock();
 #endif
   simulation->set_starttime(run_starttime);
   prog_time = run_starttime;
@@ -99,7 +100,8 @@ void Thread::progress_stats() {
 #if TIME_ENABLE
       uint64_t now_time = get_sys_clock();
 #else
-      uint64_t now_time = get_wall_clock();
+//      uint64_t now_time = get_wall_clock();
+      uint64_t now_time = get_server_clock();
 #endif
       if (now_time - prog_time >= g_prog_timer) {
         prog_time = now_time;

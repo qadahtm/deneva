@@ -21,7 +21,7 @@
 #include "global.h"
 #include "helper.h"
 
-
+#if ABORT_THREAD
 struct abort_entry {
   uint64_t penalty_end;
   uint64_t txn_id;
@@ -52,5 +52,5 @@ private:
 };
 
 
-
+#endif // if ABORT_THREAD
 #endif

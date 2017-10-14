@@ -52,7 +52,9 @@ void * initADGHelper(void * adg);
 WorkerThread * worker_thds;
 InputThread * input_thds;
 OutputThread * output_thds;
+#if ABORT_THREAD
 AbortThread * abort_thds;
+#endif
 LogThread * log_thds;
 #if CC_ALG == CALVIN
 CalvinLockThread * calvin_lock_thds;
@@ -149,10 +151,12 @@ int main(int argc, char* argv[])
   fflush(stdout);
   work_queue.init();
   printf("Done\n");
+#if ABORT_THREAD
   printf("Initializing abort queue... ");
   fflush(stdout);
   abort_queue.init();
   printf("Done\n");
+#endif
   printf("Initializing message queue... ");
   fflush(stdout);
   msg_queue.init();
@@ -304,7 +308,11 @@ int main(int argc, char* argv[])
 	uint64_t wthd_cnt = thd_cnt;
 	uint64_t rthd_cnt = g_rem_thread_cnt;
 	uint64_t sthd_cnt = g_send_thread_cnt;
+#if ABORT_THREAD
     uint64_t all_thd_cnt = thd_cnt + rthd_cnt + sthd_cnt + g_abort_thread_cnt;
+#else
+    uint64_t all_thd_cnt = thd_cnt + rthd_cnt + sthd_cnt;
+#endif
 
 #if LOGGING
     all_thd_cnt += 1; // logger thread
@@ -317,7 +325,7 @@ int main(int argc, char* argv[])
 #if PIPELINED
     all_thd_cnt += g_plan_thread_cnt;
 #endif
-    all_thd_cnt -= 1; // to remove abort thread for QueCC but there is a logger
+//    all_thd_cnt -= 1; // to remove abort thread for QueCC but there is a logger
 #if CT_ENABLED
     all_thd_cnt += 1; // add commit thread
 #endif
@@ -327,7 +335,7 @@ int main(int argc, char* argv[])
 #if CC_ALG == LADS
     // executor threads will be the same as worker threads
     all_thd_cnt += g_thread_cnt; // for constructors which is equal to executors
-    all_thd_cnt -= 1; // remove abort thread from count for now
+//    all_thd_cnt -= 1; // remove abort thread from count for now
 #endif
 
 #if CC_ALG == DUMMY_CC
@@ -621,10 +629,16 @@ int main(int argc, char* argv[])
     pthread_attr_init(&attr);
 
     worker_thds = new WorkerThread[wthd_cnt];
+#if !SINGLE_NODE
     input_thds = new InputThread[rthd_cnt];
     output_thds = new OutputThread[sthd_cnt];
+#endif
+#if ABORT_THREAD
     abort_thds = new AbortThread[1];
+#endif
+#if LOGGING
     log_thds = new LogThread[1];
+#endif
 #if CC_ALG == CALVIN
     calvin_lock_thds = new CalvinLockThread[1];
     calvin_seq_thds = new CalvinSequencerThread[1];
@@ -727,7 +741,7 @@ int main(int argc, char* argv[])
     pthread_setname_np(p_thds[id-1], "s_logger");
 #endif
 
-#if CC_ALG != CALVIN && CC_ALG != QUECC && CC_ALG != DUMMY_CC && CC_ALG != LADS
+#if (CC_ALG != CALVIN && CC_ALG != QUECC && CC_ALG != DUMMY_CC && CC_ALG != LADS) && ABORT_THREAD
 #if SET_AFFINITY
       CPU_ZERO(&cpus);
       CPU_SET(cpu_cnt, &cpus);

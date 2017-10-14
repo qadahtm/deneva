@@ -18,7 +18,7 @@
 #include "abort_queue.h"
 #include "message.h"
 #include "work_queue.h"
-
+#if ABORT_THREAD
 void AbortQueue::init() {
   pthread_mutex_init(&mtx,NULL);
 }
@@ -82,3 +82,4 @@ void AbortQueue::process(uint64_t thd_id) {
 
 }
 
+#endif // if ABORT_THREAD

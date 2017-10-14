@@ -13,7 +13,7 @@
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 
-#define PART_CNT 15 // For others because of the abort thread
+#define PART_CNT THREAD_CNT// For others because of the abort thread
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -40,19 +40,21 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-#define CPU_FREQ          2.0//2.4//2.6
+//#define CPU_FREQ          2.0 // FOR GS32
+//#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
+#define CPU_FREQ          2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-//#define WORKLOAD YCSB
-#define WORKLOAD TPCC
+#define WORKLOAD YCSB
+//#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define TIME_ENABLE         true //STATS_ENABLE
+#define TIME_ENABLE         false //STATS_ENABLE
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -245,6 +247,7 @@
 #define PG_READY     1
 
 #define SINGLE_NODE true
+#define ABORT_THREAD false
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20
@@ -291,12 +294,12 @@
 #define DATA_PERC 100
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
-#define INIT_PARALLELISM 8
+#define INIT_PARALLELISM THREAD_CNT
 //#define SYNTH_TABLE_SIZE 1024
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC 0.5
@@ -331,7 +334,7 @@
 #define WH_UPDATE         true
 #define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
-#define MPR 0.10 // used for TPCC
+#define MPR 0.0 // used for TPCC
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -344,7 +347,7 @@ enum TPCCTable {TPCC_WAREHOUSE,
           TPCC_ITEM,
           TPCC_STOCK};
 enum TPCCTxnType {TPCC_ALL, 
-          TPCC_PAYMENT, 
+          TPCC_PAYMENT,
           TPCC_NEW_ORDER, 
           TPCC_ORDER_STATUS, 
           TPCC_DELIVERY, 
@@ -352,7 +355,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.5 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 1.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

@@ -34,7 +34,8 @@ void SimManager::init() {
 #if TIME_ENABLE
   run_starttime = get_sys_clock();
 #else
-  run_starttime = get_wall_clock();
+//  run_starttime = get_wall_clock();
+  run_starttime = get_server_clock();
 #endif
   last_worker_epoch_time = run_starttime;
   last_seq_epoch_time = get_wall_clock();
@@ -54,7 +55,8 @@ bool SimManager::timeout() {
 #if TIME_ENABLE
   return (get_sys_clock() - run_starttime) >= g_done_timer + g_warmup_timer;
 #else
-  return (get_wall_clock() - run_starttime) >= g_done_timer + g_warmup_timer;
+//  return (get_wall_clock() - run_starttime) >= g_done_timer + g_warmup_timer;
+  return (get_server_clock() - run_starttime) >= g_done_timer + g_warmup_timer;
 #endif
 }
 
@@ -71,13 +73,15 @@ bool SimManager::is_warmup_done() {
     return true;
   }
 
-  bool done = ((get_sys_clock() - run_starttime) >= g_warmup_timer);
+  uint64_t server_clock = get_server_clock();
+  bool done = ((server_clock - run_starttime) >= g_warmup_timer);
   if(done) {
-    ATOM_CAS(warmup_end_time,0,get_sys_clock());
+    ATOM_CAS(warmup_end_time,0,get_server_clock());
     ATOM_CAS(warmup,false,true);
-    stats.totals->quecc_txn_comp_cnt.store(0);
-    stats.totals->quecc_txn_sent_cnt.store(0);
-    DEBUG_Q("Warm up is done!! at %ld and warmup = %d\n", warmup_end_time, warmup);
+//    stats.totals->quecc_txn_comp_cnt.store(0);
+//    stats.totals->quecc_txn_sent_cnt.store(0);
+//    printf("Warm up is done!! at %ld and warmup = %d, g_warmup_timer = %lu, run_starttime = %lu, server_clock = %lu, diff = %lu\n",
+//           warmup_end_time, warmup, g_warmup_timer, run_starttime, server_clock, (server_clock - run_starttime));
   }
   return done;
 }
@@ -93,7 +97,7 @@ void SimManager::set_done() {
     if(ATOM_CAS(sim_done, false, true)) {
       if(warmup_end_time == 0)
         warmup_end_time = run_starttime;
-      SET_STATS(0, total_runtime, get_sys_clock() - warmup_end_time); 
+      SET_STATS(0, total_runtime, get_server_clock()- warmup_end_time);
     }
 }
 
@@ -138,7 +142,7 @@ uint64_t SimManager::get_worker_epoch() {
 }
 
 void SimManager::next_worker_epoch() {
-  last_worker_epoch_time = get_sys_clock();
+  last_worker_epoch_time = get_server_clock();
   ATOM_ADD(worker_epoch,1);
 }
 
