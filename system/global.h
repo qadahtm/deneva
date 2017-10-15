@@ -280,6 +280,12 @@ extern UInt32 g_repl_type;
 extern UInt32 g_repl_cnt;
 
 enum RC { RCOK=0, Commit, Abort, WAIT, WAIT_REM, ERROR, FINISH, NONE };
+
+#if CC_ALG == QUECC
+enum SRC { SUCCESS=0, BREAK, BATCH_READY, BATCH_WAIT, FATAL_ERROR };
+#endif
+
+
 enum RemReqType {INIT_DONE=0,
     RLK,
     RULK,

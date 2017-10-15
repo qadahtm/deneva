@@ -170,7 +170,7 @@ public:
         uint8_t d8;
         uint32_t comp_cnt = entry->txn_ctx->completion_cnt.fetch_add(1);
         if (comp_cnt == (entry->txn_ctx->txn_comp_cnt - 1)) {
-//            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load())
+//            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load());
             // this is the last entry to be executed, we should be ready to commit
             e8 = TXN_STARTED;
             d8 = TXN_READY_TO_COMMIT;

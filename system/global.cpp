@@ -184,7 +184,11 @@ UInt64 g_his_recycle_len = HIS_RECYCLE_LEN;
 UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 
 // QUECC
+#if PIPELINED
 const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
+#else
+const UInt32 g_plan_thread_cnt = THREAD_CNT;
+#endif
 UInt32 g_batch_size = BATCH_SIZE;
 UInt32 g_exec_qs_max_size = EXEC_QS_MAX_SIZE;
 const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;

@@ -6,13 +6,15 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 8
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
-
+// [QUECC]
+// Planner thread cnt should be greater than or equal to part_cnt
+#define PLAN_THREAD_CNT THREAD_CNT
 #define PART_CNT THREAD_CNT// For others because of the abort thread
 
 
@@ -40,9 +42,9 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-//#define CPU_FREQ          2.0 // FOR GS32
+#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-#define CPU_FREQ          2.4//2.6 // FOR D15v3
+//#define CPU_FREQ          2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -174,14 +176,14 @@
 
 
 // [QUECC]
-// Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
-#define BATCH_SIZE 5040
+//#define BATCH_SIZE 5040
+//#define BATCH_SIZE 13440
+#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
@@ -190,7 +192,7 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED false
+#define PIPELINED true
 
 #define INIT_QUERY_MSGS false
 
@@ -296,14 +298,16 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM THREAD_CNT
 //#define SYNTH_TABLE_SIZE 1024
-#define SYNTH_TABLE_SIZE 65536
+//#define SYNTH_TABLE_SIZE 65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 //#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
+#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
-#define TXN_WRITE_PERC 0.5
-#define TUP_WRITE_PERC 0.5
+#define TXN_WRITE_PERC WRITE_PERC
+#define TUP_WRITE_PERC WRITE_PERC
 #define SCAN_PERC           0
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.

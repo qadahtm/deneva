@@ -30,8 +30,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
     else:
         pt_cnt = pt_p
 
-    # nwthd_cnt = wthd_cnt - pt_cnt
-    nwthd_cnt = wthd_cnt #ignore planner percentage now. 
+    if ncc_alg == 'QUECC':
+        nwthd_cnt = wthd_cnt - pt_cnt
+    else:
+        nwthd_cnt = wthd_cnt #ignore planner percentage now. 
 
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
@@ -135,8 +137,9 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, pref
                                  # WORK_DIR, 
                                  cc_alg.replace('_',''), 's', trial, seq_num, core_cnt)
             print(fscmd)
-            p = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
-            procs.append(p);
+            if not dry_run:
+                p = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
+                procs.append(p);
         else:
             if not server_only:
                 #run a client process
@@ -286,6 +289,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
+dry_run = False;
 vm_cores = 32
 exp_set = 1 
 num_trials = 2;
@@ -297,24 +301,24 @@ num_trials = 2;
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
 # cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
 # cc_algs = ['HSTORE']
-# cc_algs = ['QUECC', "NO_WAIT"]
+cc_algs = ['QUECC']
 # # cc_algs = ['LADS']
 # cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP']
-
+# 8,12,16,20,24,32,48,56,64,96,112,128
 if (vm_cores == 32):
-    wthreads = [8,12,16,20,24,30] # 32 core machine
-elif vm_cores == 64:
-    wthreads = [8,16,32,48,56,62] # 64 core machine
+    wthreads = [8,12,16,20,24,32] # 32 core machine
+elif vm_cores == 64:    
+    wthreads = [8,16,32,48,56,64] # 64 core machine
 elif vm_cores == 128:
-    wthreads = [8,16,32,64,96,112,126] # 128 core machine
+    wthreads = [8,16,32,64,96,112,128] # 128 core machine
 else:
     assert(False)
 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
 # cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
-cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # both
-# pt_perc = [0.5]
-pt_perc = [1]
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # both
+pt_perc = [0.25,0.5,0.75]
+# pt_perc = [1]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
@@ -322,8 +326,8 @@ pt_perc = [1]
 # strict = [True, False]
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
-zipftheta = [0.0]
-# zipftheta = [0.9]
+# zipftheta = [0.0,0.6,0.99]
+zipftheta = [0.0,0.6,0.99]
 # zipftheta = [0.99, 0.0]
 # zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
 # parts_accessed = [1,2,4,8,16,24,32]
@@ -408,7 +412,8 @@ for ncc_alg in cc_algs:
                                     pt = 1
                                 set_config(ncc_alg, wthd, theta, pt, ets, pa, ppts)
                                 # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                                build_project()
+                                if not dry_run:
+                                    build_project()
                                 for trial in list(range(num_trials)):
                                     if pt <= 1:
                                         pt_cnt = str(int(pt*wthd))
@@ -445,7 +450,8 @@ eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
 send_email(subject, note)
-if is_azure:
-    exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
-else:
-    exec_cmd('sudo shutdown -h now', env)
+if not dry_run:
+    if is_azure:
+        exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
+    else:
+        exec_cmd('sudo shutdown -h now', env)

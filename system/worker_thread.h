@@ -28,10 +28,6 @@
 class Workload;
 class Message;
 
-#if CC_ALG == QUECC
-enum SRC { SUCCESS=0, BREAK, BATCH_READY, BATCH_WAIT, FATAL_ERROR };
-#endif
-
 class WorkerThread : public Thread {
 public:
     RC run();
@@ -224,11 +220,20 @@ public:
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime =0;
 
-            // Reset PG map so that planners can continue
-            desired8 = PG_AVAILABLE;
-            expected8 = PG_READY;
             for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
-                if(!work_queue.batch_pg_map[batch_slot][i].status.compare_exchange_strong(expected8, desired8)){
+                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+#if BUILD_TXN_DEPS
+                // Clean up and clear txn_graph
+                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+                    delete it->second;
+                }
+                planner_pg->txn_dep_graph->clear();
+                assert(planner_pg->txn_dep_graph->size() == 0);
+#endif
+                // Reset PG map so that planners can continue
+                desired8 = PG_AVAILABLE;
+                expected8 = PG_READY;
+                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
                     M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
                 };
             }
@@ -360,6 +365,7 @@ public:
         memset(eq_comp_cnts,0, sizeof(uint64_t)*g_exec_qs_max_size);
 
         if (batch_part->empty){
+//            DEBUG_Q("ET_%ld: going to work on PG %ld, batch_id = %ld\n",_thd_id, wplanner_id, wbatch_id);
             return SUCCESS;
         }
 
@@ -374,11 +380,11 @@ public:
         }
 
         while (true){
-//            DEBUG_Q("ET_%ld: Got a pointer for map slot [%ld][%ld][%ld] is %ld, current_batch_id = %ld,"
-//                            "batch partition exec_q size = %ld entries, single queue = %d, sub_queues_cnt = %ld"
+//            DEBUG_Q("ET_%ld: Got a pointer for map slot PG = [%ld] is %ld, current_batch_id = %ld,"
+//                            "batch partition exec_q size = %ld entries, single queue = %d"
 //                            "\n",
-//                    _thd_id, batch_slot,_thd_id, wplanner_id, ((uint64_t) exec_q), wbatch_id,
-//                    exec_q->size(), batch_part->single_q, batch_part->sub_exec_qs_cnt);
+//                    _thd_id, wplanner_id, ((uint64_t) exec_q), wbatch_id,
+//                    exec_q->size(), batch_part->single_q);
 
 #if ENABLE_EQ_SWITCH
 
@@ -398,10 +404,10 @@ public:
             }
             // execute selected entry
 //            DEBUG_Q("ET_%ld: Processing an entry, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
-//                            _thd_id, wbatch_id, exec_qe.txn_id, wplanner_id);
+//                            _thd_id, wbatch_id, exec_qe_ptr->txn_id, wplanner_id);
 
             quecc_prof_time = get_sys_clock();
-            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context\n", _thd_id);
+            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
             rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
 
@@ -411,19 +417,18 @@ public:
                     quecc_txn_wait_starttime = 0;
                 }
 //                DEBUG_Q("ET_%ld: Processed an entry successfully, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
-//                _thd_id, wbatch_id, exec_qe.txn_id, wplanner_id);
+//                _thd_id, wbatch_id, exec_qe_ptr->txn_id, wplanner_id);
                 eq_comp_cnts[w_exec_q_index]++;
 
                 if (exec_q->size() == eq_comp_cnts[w_exec_q_index]){
                     batch_part_eq_cnt--;
 
-//                DEBUG_Q("ET_%ld: completed full EQ for batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
-//                                " completed %ld out of %ld"
-//                                " et_idle_time = %f\n",
-//                        _thd_id,wbatch_id, eq_cnt, wplanner_id,
-//                        eq_comp_cnts[w_exec_q_index], exec_q->size(),
-//                        et_idle_time/BILLION
-//                );
+//                    DEBUG_Q("ET_%ld: completed full EQ for batch_id= %ld, for planner = %ld,"
+//                                    " completed %ld out of %ld"
+//                                    "\n",
+//                            _thd_id,wbatch_id, wplanner_id,
+//                            eq_comp_cnts[w_exec_q_index], exec_q->size()
+//                    );
                     quecc_prof_time = get_sys_clock();
                     quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
                     INC_STATS(_thd_id,exec_mem_free_time[_thd_id],get_sys_clock() - quecc_prof_time);
@@ -710,7 +715,7 @@ public:
 
         // reset transaction context
         tctx->txn_id = planner_txn_id;
-        tctx->txn_state = TXN_INITIALIZED;
+        tctx->txn_state.store(TXN_INITIALIZED);
         tctx->completion_cnt.store(0);
         tctx->txn_comp_cnt.store(0);
 
@@ -1340,7 +1345,8 @@ public:
 //            planner_pg->batch_txn_cnt = batch_cnt;
 //            planner_pg->batch_id = batch_id;
 #if BUILD_TXN_DEPS
-        planner_pg->txn_dep_graph = txn_dep_graph;
+        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET%ld:  planner_pg->txn_dep_graph size is non-zero\n", _thd_id);
+//        planner_pg->txn_dep_graph = txn_dep_graph;
 #endif
         planner_pg->batch_starting_txn_id = batch_starting_txn_id;
 
@@ -1453,8 +1459,8 @@ public:
         for (auto it = access_table.begin(); it != access_table.end(); ++it){
             delete it->second;
         }
+        //TODO(tq): FIXME
         access_table.clear();
-
         txn_dep_graph = new hash_table_t();
         M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
         M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");

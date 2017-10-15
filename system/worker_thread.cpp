@@ -609,6 +609,17 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
     plan_starttime = get_sys_clock();
     planner_pg = &work_queue.batch_pg_map[batch_slot][_planner_id];
+    if (!planner_pg->initialized){
+        // clear stuf
+        planner_pg->txn_dep_graph = new hash_table_t();
+        planner_pg->initialized = true;
+    }
+    else{
+        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
+    }
+
+
+
 
     while (true){
 
@@ -680,6 +691,7 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 
         // wait for batch to be ready
         if (wait_for_batch_ready(batch_slot, wplanner_id, batch_part) == BATCH_WAIT){
+            if (simulation->is_done()) return BREAK;
             continue;
         }
 
@@ -703,11 +715,11 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 //
 //        // collect some stats
 ////        quecc_batch_part_proc_starttime = get_sys_clock();
-//        if(idle_starttime > 0) {
-//            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-//            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-//            idle_starttime = 0;
-//        }
+        if(idle_starttime > 0) {
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+            idle_starttime = 0;
+        }
 
 #else
 
@@ -911,7 +923,6 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
 
 //        DEBUG_Q("ET_%ld: committed %ld transactions, batch_id = %ld, PG=%ld\n",
 //                _thd_id, commit_cnt, wbatch_id, i);
-
         INC_STATS(_thd_id, txn_cnt, commit_cnt);
 //                DEBUG_Q("ET_%ld: commit count = %ld, PG=%ld, txn_per_pg = %ld, batch_id = %ld\n",
 //                        _thd_id, commit_cnt, i, txn_per_pg, wbatch_id);
@@ -940,10 +951,10 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
             // print dependenent transactions for now.
             if (search->second->size() > 0){
                 // there are dependen transactions
-                DEBUG_Q("ET_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[j].txn_id, search->second->size());
-                for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
-                    DEBUG_Q("ET_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[j].txn_id, (uint64_t) *it);
-                }
+//                DEBUG_Q("ET_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[j].txn_id, search->second->size());
+//                for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
+//                    DEBUG_Q("ET_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[j].txn_id, (uint64_t) *it);
+//                }
                 uint64_t d_txn_id = search->second->back();
                 uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
                 M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
@@ -964,13 +975,13 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
                 }
                 else if (txn_ctxs[d_txn_ctx_idx].txn_state.load() == TXN_READY_TO_COMMIT){
                     // queue up this transaction j in the pedning txn list and check later if it can commit
-                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
                     return WAIT;
                 }
                 else if (txn_ctxs[d_txn_ctx_idx].txn_state.load() == TXN_COMMITTED){
-                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
-                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
                     return Commit;
 //                    canCommit = true;
 //#if ROW_ACCESS_TRACKING
@@ -1367,8 +1378,6 @@ RC WorkerThread::run_normal_mode() {
                 if (sync_on_execution_phase_end(batch_slot) == BREAK){
                     goto end_et;
                 }
-
-
                 //Commit
 
 //                DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
@@ -1377,7 +1386,7 @@ RC WorkerThread::run_normal_mode() {
                 commit_batch(batch_slot);
 
                 // indicate that I am done with all commit phase
-//                DEBUG_Q("ET_%ld: is done with commit task\n", _thd_id);
+//                DEBUG_Q("ET_%ld: is done with commit task, going to sync for commit\n", _thd_id);
 
                 if (sync_on_commit_phase_end(batch_slot) == BREAK){
                     goto end_et;
@@ -1687,20 +1696,20 @@ RC WorkerThread::run_normal_mode() {
         }
     }
 
-    if (_thd_id == 0){
-
-        for (uint64_t i = 0; i < g_batch_map_length; ++i){
-            for (uint64_t j = 0; j < g_plan_thread_cnt; ++j){
-                // we need to signal all ETs that are spinning
-                // Signal all spinning PTs
-#if BATCHING_MODE == SIZE_BASED
-                work_queue.batch_pg_map[i][j].status.store(PG_AVAILABLE);
-#else
-                work_queue.batch_pg_map[i][j].store(desired);
-#endif
-            }
-        }
-    }
+//    if (_thd_id == 0){
+//
+//        for (uint64_t i = 0; i < g_batch_map_length; ++i){
+//            for (uint64_t j = 0; j < g_plan_thread_cnt; ++j){
+//                // we need to signal all ETs that are spinning
+//                // Signal all spinning PTs
+//#if BATCHING_MODE == SIZE_BASED
+//                work_queue.batch_pg_map[i][j].status.store(PG_AVAILABLE);
+//#else
+//                work_queue.batch_pg_map[i][j].store(desired);
+//#endif
+//            }
+//        }
+//    }
 
 #endif
 

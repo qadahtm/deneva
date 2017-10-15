@@ -110,6 +110,7 @@ struct priority_group{
 //    uint64_t planner_id;
 //    uint64_t batch_id;
 //    uint64_t batch_txn_cnt;
+    bool initialized = false;
     atomic<uint8_t> status;
     hash_table_t * txn_dep_graph;
     uint64_t batch_starting_txn_id;
@@ -216,7 +217,7 @@ public:
 
     inline void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
     inline void process_client_msg(Message *msg, transaction_context * txn_ctxs);
-    inline void do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
+    inline SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
 
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
