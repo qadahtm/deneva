@@ -18,6 +18,7 @@
 #include <boost/random/uniform_int_distribution.hpp>
 #include <boost/random.hpp>
 
+#if CC_ALG == QUECC
 class Workload;
 
 typedef std::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
@@ -392,5 +393,7 @@ private:
     atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT];
 #endif
 };
+
+#endif // if CC_ALG == QUECC
 
 #endif //_QUECC_THREAD_H

@@ -125,12 +125,15 @@ private:
 	PPSWorkload * _wl;
 	volatile RC _rc;
   row_t * row;
-
+#if CC_ALG == QUECC
 	// For QueCC
 	RC run_quecc_txn(exec_queue_entry * exec_qe);
+#endif
 	RC run_hstore_txn();
+#if CC_ALG == LADS
 	RC execute_lads_action(gdgcc::Action * action, int eid);
 	RC resolve_txn_dependencies(Message* msg);
+#endif
 	uint64_t parts_processed_count;
 
   void next_pps_state();

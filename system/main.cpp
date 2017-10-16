@@ -903,6 +903,8 @@ void * run_thread(void * id) {
 	thd->run();
 	return NULL;
 }
+
+#if CC_ALG == LADS
 void * initADGHelper(void * adg) {
     printf("Starting initialization ADG at %d\n", ((gdgcc::ActionDependencyGraph*) adg)->_id);
     ((gdgcc::ActionDependencyGraph*) adg)->init();
@@ -910,7 +912,7 @@ void * initADGHelper(void * adg) {
     fflush(stdout);
 	return NULL;
 }
-
+#endif
 void network_test() {
 
       /*

@@ -42,8 +42,8 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-#define CPU_FREQ          2.0 // FOR GS32
-//#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
+//#define CPU_FREQ          2.0 // FOR GS32
+#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
 //#define CPU_FREQ          2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
@@ -120,7 +120,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG HSTORE
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 

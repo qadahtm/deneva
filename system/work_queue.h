@@ -82,11 +82,15 @@ public:
   Message * sched_dequeue(uint64_t thd_id);
   void sequencer_enqueue(uint64_t thd_id, Message * msg);
   Message * sequencer_dequeue(uint64_t thd_id);
+
+#if CC_ALG == QUECC || CC_ALG == LADS
     // TQ: QUECC
     uint64_t get_random_planner_id(uint64_t thd_id);
     void plan_enqueue(uint64_t thd_id, Message * msg);
     Message * plan_dequeue(uint64_t thd_id, uint64_t home_partition);
+#endif
 
+#if CC_ALG == QUECC
     // QueCC batch slot map
 // Layout of the batch map is imporatant to avoid potential tharshing
 #if BATCH_MAP_ORDER == BATCH_ET_PT
@@ -132,6 +136,8 @@ public:
     atomic<int64_t> inflight_msg;
 #endif
 //------
+
+#endif // #if CC_ALG == QUECC
   uint64_t get_cnt() {return get_wq_cnt() + get_rem_wq_cnt() + get_new_wq_cnt();}
   uint64_t get_wq_cnt() {return 0;}
   //uint64_t get_wq_cnt() {return work_queue.size();}
@@ -147,10 +153,13 @@ private:
   boost::lockfree::queue<work_queue_entry* > * new_txn_queue;
   boost::lockfree::queue<work_queue_entry* > * seq_queue;
   boost::lockfree::queue<work_queue_entry* > ** sched_queue;
+#if CC_ALG == QUECC || CC_ALG == LADS
     // TQ: QueCC
   boost::lockfree::queue<work_queue_entry* > ** plan_queue;
-    //*******************/
 
+    boost::random::mt19937 * rng;         // produces randomness out of thin air
+    uint32_t max_planner_index = g_plan_thread_cnt-1;
+#endif // #if CC_ALG == QUECC
   uint64_t sched_ptr;
   BaseQuery * last_sched_dq;
   uint64_t curr_epoch;
@@ -158,8 +167,6 @@ private:
     uint64_t query_seq_cnt =0;
 #endif
 
-    boost::random::mt19937 * rng;         // produces randomness out of thin air
-    uint32_t max_planner_index = g_plan_thread_cnt-1;
 };
 
 

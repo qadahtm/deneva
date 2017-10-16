@@ -68,9 +68,8 @@ RC YCSBWorkload::init_schema(const char * schema_file) {
 	the_index = indexes["MAIN_INDEX"];
 	return RCOK;
 }
-
+#if CC_ALG == LADS
 RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
-#if WORKLOAD == YCSB
 	YCSBClientQueryMessage* ycsb_msg = (YCSBClientQueryMessage *) msg;
 
 	//there are no logical dependency in YCSB
@@ -92,12 +91,10 @@ RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
 
 		dgraphs[cid]->addActionToGraph(req->key, tmpAction);
 	}
-#else
-	assert(false);
-#endif
 	return RCOK;
 }
-	
+#endif
+
 int 
 YCSBWorkload::key_to_part(uint64_t key) {
 	uint64_t rows_per_part = g_synth_table_size / g_part_cnt;

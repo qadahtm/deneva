@@ -20,6 +20,7 @@
 #include<time.h>
 #include <spinlock.h>
 
+#if CC_ALG == LADS
 namespace gdgcc {
 
     class ConfigInfo;
@@ -701,4 +702,6 @@ public:
 
 
 }
+#endif // #if CC_ALG == LADS
+
 #endif //DENEVA_LADS_H

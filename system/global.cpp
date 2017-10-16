@@ -67,19 +67,20 @@ Sequencer seq_man;
 Logger logger;
 
 RIDMgr rid_man;
+
 // for Hstore
-//#if CC_ALG == HSTORE
+#if CC_ALG == HSTORE
 Plock part_lock_man;
-//#endif;
-//#if CC_ALG == QUECC
+#endif
+#if CC_ALG == QUECC
 QueCCPool quecc_pool;
-//#endif
-//#if CC_ALG == LADS
+#endif
+#if CC_ALG == LADS
 gdgcc::ConfigInfo* configinfo;
 gdgcc::SyncWorker* sync_worker;
 gdgcc::ActionDependencyGraph** dgraphs;
 gdgcc::ActionBuffer*   action_allocator;
-//#endif
+#endif
 
 bool volatile warmup_done = false;
 bool volatile enable_thread_mem_pool = false;
@@ -184,6 +185,7 @@ UInt64 g_his_recycle_len = HIS_RECYCLE_LEN;
 UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 
 // QUECC
+#if CC_ALG == QUECC || CC_ALG == LADS
 #if PIPELINED
 const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
 #else
@@ -196,6 +198,7 @@ const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;
 uint16_t g_pt_map[PLAN_THREAD_CNT];
 // For mapping between ETs and Cores
 uint16_t g_et_map[THREAD_CNT];
+#endif
 
 double g_mpr = MPR;
 double g_mpitem = MPIR;

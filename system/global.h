@@ -133,19 +133,19 @@ extern TimeTable time_table;
 extern RIDMgr rid_man;
 
 // For Hstore
-//#if CC_ALG == HSTORE
+#if CC_ALG == HSTORE
 extern Plock part_lock_man;
-//#endif
+#endif
 // for QueCC
-//#if CC_ALG == QUECC
+#if CC_ALG == QUECC
 extern QueCCPool quecc_pool;
-//#endif
-//#if CC_ALG == LADS
+#endif
+#if CC_ALG == LADS
 extern gdgcc::ConfigInfo* configinfo;
 extern gdgcc::SyncWorker* sync_worker;
 extern gdgcc::ActionDependencyGraph** dgraphs;
 extern gdgcc::ActionBuffer* action_allocator;
-//#endif
+#endif
 
 extern bool volatile warmup_done;
 extern bool volatile enable_thread_mem_pool;
@@ -265,6 +265,7 @@ extern double g_perc_updatepart;
 extern UInt32 g_seq_thread_cnt;
 
 // QUECC
+#if CC_ALG == QUECC || CC_ALG == LADS
 extern const UInt32 g_plan_thread_cnt;
 extern UInt32 g_batch_size;
 extern UInt32 g_exec_qs_max_size;
@@ -274,7 +275,7 @@ extern const UInt32 g_batch_map_length;
 extern uint16_t g_pt_map[PLAN_THREAD_CNT];
 // For mapping between ETs and Cores
 extern uint16_t g_et_map[THREAD_CNT];
-
+#endif
 // Replication
 extern UInt32 g_repl_type;
 extern UInt32 g_repl_cnt;

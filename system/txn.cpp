@@ -837,6 +837,7 @@ RC TxnManager::get_lock(row_t *row, access_t type) {
     return rc;
 }
 
+#if CC_ALG == QUECC
 void TxnManager::row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid){
 #if ROW_ACCESS_TRACKING
     Access *access;
@@ -873,6 +874,7 @@ void TxnManager::row_access_backup(transaction_context * context, access_t type,
     context->access_lock->unlock();
 #endif
 }
+#endif // #if CC_ALG == QUECC
 
 RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     uint64_t starttime = get_sys_clock();

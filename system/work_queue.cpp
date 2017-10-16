@@ -34,6 +34,7 @@ void QWorkQueue::init() {
     sched_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
 
+#if CC_ALG == QUECC
   // QUECC planners
 
   rng = new boost::random::mt19937[g_rem_thread_cnt];
@@ -99,12 +100,76 @@ void QWorkQueue::init() {
   inflight_msg.store(0);
 #endif
   DEBUG_Q("Initialized batch_map\n");
+
+#endif // #if CC_ALG == QUECC
 }
 
+
+#if CC_ALG == QUECC || CC_ALG == LADS
 uint64_t QWorkQueue::get_random_planner_id(uint64_t thd_id) {
   boost::random::uniform_int_distribution<> dist(0, max_planner_index);
   return (uint64_t) dist(rng[thd_id]);
 }
+
+
+void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
+    uint64_t planner_id = get_random_planner_id(thd_id);
+    work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
+    entry->msg = msg;
+    entry->rtype = msg->rtype;
+    entry->txn_id = msg->txn_id;
+    entry->batch_id = msg->batch_id;
+    entry->starttime = get_sys_clock();
+    assert(ISSERVER);
+//    DEBUG_Q("Enqueue work for Planner(%ld) (%ld,%ld) %d\n",planner_id,entry->txn_id,entry->batch_id,entry->rtype);
+    // insert into planner's queue
+    while(!plan_queue[planner_id]->push(entry) && !simulation->is_done()) {}
+    INC_STATS(thd_id,plan_txn_cnts[planner_id],1);
+}
+// need a mapping between thread ids and planner ids
+Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
+  assert(ISSERVER);
+  Message * msg = NULL;
+
+  uint64_t prof_starttime = 0;
+//    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, home_partition);
+  prof_starttime = get_sys_clock();
+#if SERVER_GENERATE_QUERIES
+  if(ISSERVER) {
+#if INIT_QUERY_MSGS
+    msg = client_query_queue.get_next_query(home_partition, thd_id);
+#else
+    BaseQuery * m_query = NULL;
+    m_query = client_query_queue.get_next_query(home_partition,thd_id);
+    assert(m_query);
+    if(m_query) {
+//      DEBUG_Q("thread %ld, home partition = %ld, creating client query message\n", thd_id, home_partition);
+      msg = Message::create_message((BaseQuery*)m_query,CL_QRY);
+    }
+#endif
+  }
+#else
+    work_queue_entry * entry = NULL;
+    bool valid = plan_queue[home_partition]->pop(entry);
+    if(valid) {
+    msg = entry->msg;
+    assert(msg);
+//    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
+    //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
+//    DEBUG_M("PlanQueue::dequeue work_queue_entry free\n");
+    prof_starttime = get_sys_clock();
+    mem_allocator.free(entry,sizeof(work_queue_entry));
+    INC_STATS(thd_id, plan_queue_deq_free_mem_time[home_partition], get_sys_clock()-prof_starttime);
+  }
+#endif
+
+  INC_STATS(thd_id, plan_queue_deq_pop_time[home_partition], get_sys_clock()-prof_starttime);
+
+  return msg;
+
+}
+
+#endif // - if CC_ALG == QUECC
 
 void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
   uint64_t starttime = get_sys_clock();
@@ -255,64 +320,6 @@ Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
   return msg;
 
 }
-
-void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
-    uint64_t planner_id = get_random_planner_id(thd_id);
-    work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
-    entry->msg = msg;
-    entry->rtype = msg->rtype;
-    entry->txn_id = msg->txn_id;
-    entry->batch_id = msg->batch_id;
-    entry->starttime = get_sys_clock();
-    assert(ISSERVER);
-//    DEBUG_Q("Enqueue work for Planner(%ld) (%ld,%ld) %d\n",planner_id,entry->txn_id,entry->batch_id,entry->rtype);
-    // insert into planner's queue
-    while(!plan_queue[planner_id]->push(entry) && !simulation->is_done()) {}
-    INC_STATS(thd_id,plan_txn_cnts[planner_id],1);
-}
-// need a mapping between thread ids and planner ids
-Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
-  assert(ISSERVER);
-  Message * msg = NULL;
-
-  uint64_t prof_starttime = 0;
-//    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, home_partition);
-  prof_starttime = get_sys_clock();
-#if SERVER_GENERATE_QUERIES
-  if(ISSERVER) {
-#if INIT_QUERY_MSGS
-    msg = client_query_queue.get_next_query(home_partition, thd_id);
-#else
-    BaseQuery * m_query = NULL;
-    m_query = client_query_queue.get_next_query(home_partition,thd_id);
-    assert(m_query);
-    if(m_query) {
-//      DEBUG_Q("thread %ld, home partition = %ld, creating client query message\n", thd_id, home_partition);
-      msg = Message::create_message((BaseQuery*)m_query,CL_QRY);
-    }
-#endif
-  }
-#else
-    work_queue_entry * entry = NULL;
-    bool valid = plan_queue[home_partition]->pop(entry);
-    if(valid) {
-    msg = entry->msg;
-    assert(msg);
-//    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
-    //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
-//    DEBUG_M("PlanQueue::dequeue work_queue_entry free\n");
-    prof_starttime = get_sys_clock();
-    mem_allocator.free(entry,sizeof(work_queue_entry));
-    INC_STATS(thd_id, plan_queue_deq_free_mem_time[home_partition], get_sys_clock()-prof_starttime);
-  }
-#endif
-
-  INC_STATS(thd_id, plan_queue_deq_pop_time[home_partition], get_sys_clock()-prof_starttime);
-
-  return msg;
-
-}
-
 
 void QWorkQueue::enqueue(uint64_t thd_id, Message * msg,bool busy) {
   if (CC_ALG == QUECC && msg->rtype == CL_QRY){

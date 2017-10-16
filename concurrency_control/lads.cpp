@@ -16,6 +16,7 @@ using namespace gdgcc;
 
 class Thread;
 
+#if CC_ALG == LADS
 namespace gdgcc {
 /**************** Start of Action.cpp ************************/
 /*
@@ -1502,3 +1503,5 @@ implementation of Action
 //        DEBUG_Q("Average Throughput: %f txn/second", (double)totaltxn/timediff);
     }
 }
+
+#endif // #if CC_ALG == LADS

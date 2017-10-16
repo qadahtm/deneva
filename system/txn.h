@@ -179,13 +179,16 @@ public:
             }
         }
     }
+    void     row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid);
 
 #endif
     // For HStore
     virtual RC      run_hstore_txn() = 0;
+
+#if CC_ALG == LADS
     // For LADS
     virtual RC      execute_lads_action(gdgcc::Action * action, int eid) = 0;
-
+#endif
     virtual RC      acquire_locks() = 0;
     void            register_thread(Thread * h_thd);
     uint64_t        get_thd_id();
@@ -197,8 +200,6 @@ public:
     bool            is_done();
     void            commit_stats();
     bool            is_multi_part();
-
-    void     row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid);
 
     void            set_timestamp(ts_t timestamp);
     ts_t            get_timestamp();

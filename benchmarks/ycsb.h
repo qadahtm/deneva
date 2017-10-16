@@ -87,16 +87,17 @@ public:
     RC run_txn_post_wait();
 
     RC run_calvin_txn();
-
+#if CC_ALG == QUECC
     // For QueCC
     RC run_quecc_txn(exec_queue_entry * exec_qe);
-
+#endif
     // For HStore
     RC run_hstore_txn();
 
     // For LADS
+#if CC_ALG == LADS
     RC execute_lads_action(gdgcc::Action * action, int eid);
-
+#endif
     void copy_remote_requests(YCSBQueryMessage *msg);
 
 private:

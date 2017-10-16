@@ -111,7 +111,7 @@ RC YCSBTxnManager::run_hstore_txn(){
     // we always commit in YCSB
     return Commit;
 }
-
+#if CC_ALG == LADS
 RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
     RC rc = RCOK;
 #if WORKLOAD == YCSB
@@ -158,6 +158,7 @@ RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
 
     return rc;
 }
+#endif // #if CC_ALG == LADS
 
 RC YCSBTxnManager::run_txn() {
     RC rc = RCOK;

@@ -31,15 +31,18 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
         pt_cnt = pt_p
 
     if ncc_alg == 'QUECC':
-        nwthd_cnt = wthd_cnt - pt_cnt
+        nwthd_cnt = wthd_cnt - pt_cnt        
+        part_cnt = nwthd_cnt + pt_cnt
     else:
         nwthd_cnt = wthd_cnt #ignore planner percentage now. 
+        part_cnt = nwthd_cnt
+
 
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
-    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}, PPT={}, STRICT_PPT={}'
-        .format(ncc_alg, nwthd_cnt, theta, pt_cnt, nwthd_cnt, ets, pa,strict))
+    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}, PART_CNT={}, PPT={}, STRICT_PPT={}'
+        .format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, ets, part_cnt, pa,strict))
 
     for line in oconf:
     #     print(line, end='')
@@ -66,7 +69,7 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
             nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
         pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
-            nline = '#define PART_CNT {}\n'.format(nwthd_cnt)
+            nline = '#define PART_CNT {}\n'.format(part_cnt)
 
         pa_m =    re.search('#define PART_PER_TXN\s+(\d+|THREAD_CNT|PART_CNT)',line.strip())
         if pa_m:
@@ -290,7 +293,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 env = dict(os.environ)
 
 dry_run = False;
-vm_cores = 32
+vm_cores = 64
 exp_set = 1 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
@@ -301,7 +304,8 @@ num_trials = 2;
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
 # cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
 # cc_algs = ['HSTORE']
-cc_algs = ['QUECC']
+# cc_algs = ['QUECC']
+cc_algs = ['HSTORE']
 # # cc_algs = ['LADS']
 # cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP']
 # 8,12,16,20,24,32,48,56,64,96,112,128
@@ -317,8 +321,8 @@ else:
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
 # cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # both
-pt_perc = [0.25,0.5,0.75]
-# pt_perc = [1]
+# pt_perc = [0.25,0.5,0.75]
+pt_perc = [1]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
@@ -327,7 +331,9 @@ pt_perc = [0.25,0.5,0.75]
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 # zipftheta = [0.0,0.6,0.99]
-zipftheta = [0.0,0.6,0.99]
+# zipftheta = [0.0]
+wthreads = [32] # redo experiments
+zipftheta = [0.6,0.99]
 # zipftheta = [0.99, 0.0]
 # zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
 # parts_accessed = [1,2,4,8,16,24,32]
@@ -450,8 +456,8 @@ eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
 send_email(subject, note)
-if not dry_run:
-    if is_azure:
-        exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
-    else:
-        exec_cmd('sudo shutdown -h now', env)
+# if not dry_run:
+#     if is_azure:
+#         exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
+#     else:
+#         exec_cmd('sudo shutdown -h now', env)

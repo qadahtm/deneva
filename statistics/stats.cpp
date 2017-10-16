@@ -34,6 +34,7 @@ void Stats_thd::init(uint64_t thd_id) {
   worker_process_cnt_by_type= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * NO_MSG);
   DEBUG_M("Stats_thd::init worker_process_time_by_type alloc\n");
   worker_process_time_by_type= (double *) mem_allocator.align_alloc(sizeof(double) * NO_MSG);
+#if CC_ALG == QUECC
 // QueCC
   DEBUG_M("Stats_thd::init plan_txn_cnts alloc\n");
   plan_txn_cnts= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
@@ -72,7 +73,7 @@ void Stats_thd::init(uint64_t thd_id) {
   exec_entry_deq_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_txn_wait_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_eq_swtich_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
-
+#endif
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
 
@@ -232,7 +233,7 @@ void Stats_thd::clear() {
   sched_txn_table_time=0;
   sched_epoch_cnt=0;
   sched_epoch_diff=0;
-
+#if CC_ALG == QUECC
   // QueCC
   for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
     plan_txn_cnts[i] =0;
@@ -280,7 +281,7 @@ void Stats_thd::clear() {
     exec_txn_wait_time[i]=0;
     exec_eq_swtich_time[i]=0;
   }
-
+#endif
 
   //OCC
   occ_validate_time=0;
@@ -382,12 +383,12 @@ void Stats_thd::clear() {
 void Stats_thd::print_client(FILE * outf, bool prog) {
   double txn_run_avg_time = 0;
   double tput = 0;
-#if CC_ALG == QUECC
-  double quecc_tput = 0;
-  if(total_runtime > 0){
-    quecc_tput =  quecc_txn_comp_cnt.load() / (total_runtime / BILLION);
-  }
-#endif
+//#if CC_ALG == QUECC
+//  double quecc_tput = 0;
+//  if(total_runtime > 0){
+//    quecc_tput =  quecc_txn_comp_cnt.load() / (total_runtime / BILLION);
+//  }
+//#endif
   if(txn_cnt > 0)
     txn_run_avg_time = txn_run_time / txn_cnt;
 
@@ -396,12 +397,12 @@ void Stats_thd::print_client(FILE * outf, bool prog) {
     tput = txn_cnt / (total_runtime / BILLION);
   fprintf(outf,
       "total_runtime=%f"
-#if CC_ALG == QUECC
-              ",inf_msgs=%ld"
-                  ",quecc_txn_sent_cnt=%ld"
-                  ",quecc_txn_comp_cnt=%ld"
-                  ",quecc_tput=%f"
-#endif
+//#if CC_ALG == QUECC
+//              ",inf_msgs=%ld"
+//                  ",quecc_txn_sent_cnt=%ld"
+//                  ",quecc_txn_comp_cnt=%ld"
+//                  ",quecc_tput=%f"
+//#endif
       ",tput=%f"
       ",txn_cnt=%ld"
       ",txn_sent_cnt=%ld"
@@ -409,12 +410,12 @@ void Stats_thd::print_client(FILE * outf, bool prog) {
       ",txn_run_avg_time=%f"
       ",cl_send_intv=%f"
       ,total_runtime/BILLION
-#if CC_ALG == QUECC
-          ,client_man.inflight_msgs.load()
-          ,quecc_txn_sent_cnt.load()
-          ,quecc_txn_comp_cnt.load()
-          ,quecc_tput
-#endif
+//#if CC_ALG == QUECC
+//          ,client_man.inflight_msgs.load()
+//          ,quecc_txn_sent_cnt.load()
+//          ,quecc_txn_comp_cnt.load()
+//          ,quecc_tput
+//#endif
       ,tput
       ,txn_cnt
       ,txn_sent_cnt
@@ -1641,7 +1642,7 @@ void Stats_thd::combine(Stats_thd * stats) {
   sched_txn_table_time+=stats->sched_txn_table_time;
   sched_epoch_cnt+=stats->sched_epoch_cnt;
   sched_epoch_diff+=stats->sched_epoch_diff;
-
+#if CC_ALG == QUECC
     // QueCC
     for(uint64_t i = 0; i < g_plan_thread_cnt; i ++) {
       plan_txn_cnts[i] += stats->plan_txn_cnts[i];
@@ -1689,7 +1690,7 @@ void Stats_thd::combine(Stats_thd * stats) {
     exec_txn_wait_time[i] += stats->exec_txn_wait_time[i];
     exec_eq_swtich_time[i] += stats->exec_eq_swtich_time[i];
   }
-
+#endif
 
   //OCC
   occ_validate_time+=stats->occ_validate_time;
