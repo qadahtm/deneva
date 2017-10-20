@@ -354,7 +354,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = True;
+time_enable = False;
 dry_run = False;
 vm_shut = False;
 vm_cores = multiprocessing.cpu_count();
@@ -414,13 +414,13 @@ wthreads = [vm_cores]
 # wthreads = [32] # redo experiments
 num_trials = 2
 cc_algs = ['QUECC']
-# zipftheta = [0.0]
-zipftheta = [0.99]
+zipftheta = [0.0]
+# zipftheta = [0.99]
 # batch_sized = [5184,10368,20736,41472,82944]
 # batch_sized = [5184] // this causes problems, so we ommit it
-batch_sized = [10368,20736,41472]
-# batch_sized = [20736,82944]
-pt_perc = [0.5]
+# batch_sized = [10368,20736,41472,82944]
+batch_sized = [82944]
+pt_perc = [0.75]
 
 # parts_accessed = [1,32]
 # parts_accessed = [0.5]
