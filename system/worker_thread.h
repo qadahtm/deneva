@@ -223,6 +223,8 @@ public:
             for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
                 priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
 #if BUILD_TXN_DEPS
+//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
+//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
                 // Clean up and clear txn_graph
                 for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
                     delete it->second;
@@ -261,7 +263,7 @@ public:
                 }
                 // SPINN Here untill all ETs are done and batch is committed
             }
-//                DEBUG_Q("ET_%ld: commit phase is done, going to work on the next batch\n", _thd_id);
+//                DEBUG_Q("ET_%ld: commit phase is done for batch_slot=%ld, going to work on the next batch\n", _thd_id,batch_slot);
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime =0;
@@ -714,29 +716,37 @@ public:
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
 
         // reset transaction context
+//        uint64_t ctx_status = tctx->txn_state.load();
+//        if (wbatch_id > BATCH_MAP_LENGTH){
+//            M_ASSERT_V(ctx_status == TXN_COMMITTED || ctx_status == TXN_ABORTED,
+//                       "ET_%ld: invalid txn status while planning, txn_state=%ld, batch_id=%ld\n",
+//                       _thd_id, ctx_status, wbatch_id);
+//        }
+
         tctx->txn_id = planner_txn_id;
         tctx->txn_state.store(TXN_INITIALIZED);
         tctx->completion_cnt.store(0);
         tctx->txn_comp_cnt.store(0);
-
+        tctx->starttime = get_sys_clock(); // record start time of transaction
         //TODO(tq): move to repective benchmark transaction manager implementation
 #if WORKLOAD == TPCC
         tctx->o_id.store(-1);
 #endif
 
-#if ROLL_BACK
-        if (tctx->accesses->isInitilized()){
-            // need to clear on commit phase
-//        DEBUG_Q("WT_%ld: reusing tctx accesses for txn_id=%ld, pbach_cnt=%ld, items_ptr=%lu\n",
-//                _thd_id, planner_txn_id, pbatch_cnt, (uint64_t) tctx->accesses->items);
-            tctx->accesses->clear();
-        }
-        else{
-//        DEBUG_Q("WT_%ld: initializing tctx accesses for txn_id =%ld, pbach_cnt=%ld, items_ptr=%lu\n",
-//                _thd_id, planner_txn_id, pbatch_cnt, (uint64_t) tctx->accesses->items);
-            tctx->accesses->init(MAX_ROW_PER_TXN);
-        }
-#endif
+//#if ROLL_BACK
+//        assert(tctx->accesses);
+//        if (tctx->accesses->isInitilized()){
+//            // need to clear on commit phase
+////        DEBUG_Q("WT_%ld: reusing tctx accesses for txn_id=%ld, pbach_cnt=%ld, items_ptr=%lu\n",
+////                _thd_id, planner_txn_id, pbatch_cnt, (uint64_t) tctx->accesses->items);
+//            tctx->accesses->clear();
+//        }
+//        else{
+////        DEBUG_Q("WT_%ld: initializing tctx accesses for txn_id =%ld, pbach_cnt=%ld, items_ptr=%lu\n",
+////                _thd_id, planner_txn_id, pbatch_cnt, (uint64_t) tctx->accesses->items);
+//            tctx->accesses->init(MAX_ROW_PER_TXN);
+//        }
+//#endif
 
 #if !SERVER_GENERATE_QUERIES
         tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
@@ -763,8 +773,12 @@ public:
      * We group keys that fall in the same range to be processed together
      * TODO(tq): add repartitioning
      */
-        uint8_t e8 = TXN_INITIALIZED;
-        uint8_t d8 = TXN_STARTED;
+//        uint8_t e8 = TXN_INITIALIZED;
+//        uint8_t d8 = TXN_STARTED;
+
+        uint64_t e8 = TXN_INITIALIZED;
+        uint64_t d8 = TXN_STARTED;
+
         if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
             assert(false);
         }
@@ -1345,8 +1359,9 @@ public:
 //            planner_pg->batch_txn_cnt = batch_cnt;
 //            planner_pg->batch_id = batch_id;
 #if BUILD_TXN_DEPS
-        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET%ld:  planner_pg->txn_dep_graph size is non-zero\n", _thd_id);
-//        planner_pg->txn_dep_graph = txn_dep_graph;
+//        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET%ld:  planner_pg->txn_dep_graph size is non-zero, batch_id=%ld\n",
+//                   _thd_id, wbatch_id);
+        planner_pg->txn_dep_graph = txn_dep_graph;
 #endif
         planner_pg->batch_starting_txn_id = batch_starting_txn_id;
 
@@ -1461,11 +1476,15 @@ public:
         }
         //TODO(tq): FIXME
         access_table.clear();
-        txn_dep_graph = new hash_table_t();
+//        txn_dep_graph = new hash_table_t();
+
         M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
-        M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");
+//        M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");
         INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
 #endif
+
+        batch_starting_txn_id = planner_txn_id;
+        pbatch_cnt = 0;
     }
 
 #if WORKLOAD == YCSB

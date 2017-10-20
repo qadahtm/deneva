@@ -54,7 +54,8 @@ private:
 	std::vector<std::vector<BaseQuery*>> queries;
 #endif
 	uint64_t ** query_cnt;
-	volatile uint64_t next_tid;
+//	volatile uint64_t next_tid;
+	static atomic<uint64_t> next_tid;
 };
 
 #endif

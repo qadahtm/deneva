@@ -17,7 +17,7 @@ import time
 from datetime import timedelta
 import multiprocessing
 
-def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict):
     
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -31,18 +31,24 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
         pt_cnt = pt_p
 
     if ncc_alg == 'QUECC':
-        nwthd_cnt = wthd_cnt - pt_cnt        
+        nwthd_cnt = wthd_cnt - pt_cnt 
         part_cnt = nwthd_cnt + pt_cnt
+        piplined = 'true'
+        if (nwthd_cnt == 0):
+            nwthd_cnt = wthd_cnt     
+            part_cnt = wthd_cnt  
+            piplined = 'false'
+        
     else:
         nwthd_cnt = wthd_cnt #ignore planner percentage now. 
         part_cnt = nwthd_cnt
-
+        piplined = 'true'
 
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
-    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, ET_COMMIT={}, PART_CNT={}, PPT={}, STRICT_PPT={}'
-        .format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, ets, part_cnt, pa,strict))
+    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}'
+        .format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict))
 
     for line in oconf:
     #     print(line, end='')
@@ -64,13 +70,30 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
         pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
         if (pt_m):
             nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))            
-        etsync_m =    re.search('#define COMMIT_BEHAVIOR\s+(IMMEDIATE|AFTER_BATCH_COMP|AFTER_PG_COMP)',line.strip())
+        etsync_m =    re.search('#define BATCH_SIZE\s+(\d+)',line.strip())
         if etsync_m:
-            nline = '#define COMMIT_BEHAVIOR {}\n'.format(ets)
+            nline = '#define BATCH_SIZE {}\n'.format(bs)
         pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
             nline = '#define PART_CNT {}\n'.format(part_cnt)
+        m =    re.search('#define PIPELINED\s+(true|false)',line.strip())
+        if m:
+            nline = '#define PIPELINED {}\n'.format(piplined)
 
+        m =    re.search('#define TIME_ENABLE\s+(true|false)',line.strip())
+        if m:
+            if time_enable:
+                nline = '#define TIME_ENABLE {}\n'.format('true')
+            else:
+                nline = '#define TIME_ENABLE {}\n'.format('false')
+        m =    re.search('#define PROG_STATS\s+(true|false)',line.strip())
+        if m:
+            nline = '#define PROG_STATS {}\n'.format('false')
+
+        m =    re.search('#define DEBUG_QUECC\s+(true|false)',line.strip())
+        if m:
+            nline = '#define DEBUG_QUECC {}\n'.format('false')
+ 
         pa_m =    re.search('#define PART_PER_TXN\s+(\d+|THREAD_CNT|PART_CNT)',line.strip())
         if pa_m:
             nline = '#define PART_PER_TXN {}\n'.format(pa)
@@ -80,6 +103,14 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, ets, pa, strict):
                 nline = '#define STRICT_PPT {}\n'.format('true')
             else:
                 nline = '#define STRICT_PPT {}\n'.format('false')
+        m = re.search('#define CPU_FREQ\s+(\d+\.\d+)',line.strip())
+        if m:
+            if vm_cores == 32:
+                nline = '#define CPU_FREQ {}\n'.format('2.0') #based on lscpu
+            elif vm_cores == 64 or vm_cores == 128:
+                nline = '#define CPU_FREQ {}\n'.format('2.5') #based on lscpu
+            else:
+                nline = line;
         nconf.write(nline)
     nconf.close()
     oconf.close()
@@ -126,39 +157,70 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, pref
             clcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./runcl -nid1 > {}/{}{}_{}_t{}_{}.txt'"
         dbcmd = "ssh -i 'quecc.pem' ubuntu@{:s} 'cd {}; ./rundb -nid0 > {}/{}{}_{}_t{}_{}_{}.txt'" # AWS setup
     
-    for i in range(ip_cnt):
+    # for i in range(ip_cnt):
         #run processes
-        if (i < S_NODE_CNT):
+        # if (i < S_NODE_CNT):
             #run a server process
 #             print("server {}".format(fnode_list[i]['ip']))
-            core_cnt = multiprocessing.cpu_count();
-            print("server {}".format(fnode_list[i]))
-            fscmd = dbcmd.format(fnode_list[i],
-                                 WORK_DIR+'/'+DENEVA_DIR_PREFIX,
-                                 outdir,
-                                 prefix,
-                                 # WORK_DIR, 
-                                 cc_alg.replace('_',''), 's', trial, seq_num, core_cnt)
-            print(fscmd)
-            if not dry_run:
-                p = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
-                procs.append(p);
-        else:
-            if not server_only:
-                #run a client process
-                print("Client {}".format(fnode_list[i]))
-                fscmd = clcmd.format(fnode_list[i],
-                                     WORK_DIR+'/'+DENEVA_DIR_PREFIX,
-                                     outdir,
-                                     prefix,
-                                     # WORK_DIR, 
-                                     cc_alg.replace('_',''), 'c', trial, seq_num)
-                print(fscmd)
-                p = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
-                procs.append(p);
-    for p in procs:
-        p.wait()
-    print("Done Trial {}".format(trial))
+    core_cnt = multiprocessing.cpu_count();
+    print("server {}".format(fnode_list[0]))
+    fscmd = dbcmd.format(fnode_list[0],
+                         WORK_DIR+'/'+DENEVA_DIR_PREFIX,
+                         outdir,
+                         prefix,
+                         # WORK_DIR, 
+                         cc_alg.replace('_',''), 's', trial, seq_num, core_cnt)    
+    max_retries = 10
+    tries = 0
+    while True:
+        tries = tries + 1
+        if tries == max_retries:
+            print("could not execute trial {} successfully, retry count = {}. deleting output file and moving on.".format(trial, tries))
+            exec_cmd('rm {}/{}{}_{}_t{}_{}_{}.txt'.format(outdir,
+                             prefix,                         
+                             cc_alg.replace('_',''), 's', trial, seq_num, core_cnt),env)  
+            break
+        print(fscmd)
+        if not dry_run:            
+            sp = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
+            # procs.append(sp);
+            # else:
+            #     if not server_only:
+            #         #run a client process
+            #         print("Client {}".format(fnode_list[i]))
+            #         fscmd = clcmd.format(fnode_list[i],
+            #                              WORK_DIR+'/'+DENEVA_DIR_PREFIX,
+            #                              outdir,
+            #                              prefix,
+            #                              # WORK_DIR, 
+            #                              cc_alg.replace('_',''), 'c', trial, seq_num)
+            #         print(fscmd)
+            #         p = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
+            #         procs.append(p);
+        # for p in procs:
+        #     p.wait(10)
+        #Wait for for it to finish
+            try:
+                outs, errs = sp.communicate(timeout=150)            
+                if sp.returncode != 0:
+                    raise subprocess.CalledProcessError(cmd=fscmd,returncode=sp.returncode)
+                print("Done Trial {}, rc = {}".format(trial, sp.returncode))
+                break
+
+            except subprocess.TimeoutExpired:
+                exec_cmd('pkill -9 rundb', env);
+                exec_cmd('rm {}/{}{}_{}_t{}_{}_{}.txt'.format(outdir,
+                                 prefix,                         
+                                 cc_alg.replace('_',''), 's', trial, seq_num, core_cnt),env)        
+                print("Timeout - Trial {}, rc = {}, retrying {} ...".format(trial, sp.returncode, tries))     
+            except subprocess.CalledProcessError:
+                exec_cmd('rm {}/{}{}_{}_t{}_{}_{}.txt'.format(outdir,
+                                 prefix,                         
+                                 cc_alg.replace('_',''), 's', trial, seq_num, core_cnt),env)        
+                print("RC Error - Trial {}, rc = {}, retrying {} ...".format(trial, sp.returncode, tries))     
+        else: 
+            break
+
 
 def send_email(subject, msg):
     fromaddr = 'tq.autosender@gmail.com'
@@ -292,8 +354,10 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
+time_enable = True;
 dry_run = False;
-vm_cores = 64
+vm_shut = False;
+vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
 num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
@@ -303,26 +367,33 @@ num_trials = 2;
 # cc_algs = ['QUECC','HSTORE']
 # cc_algs = ['HSTORE', 'SILO', 'QUECC','NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC']
 # cc_algs = ['HSTORE', 'SILO', 'NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC', 'OCC', 'LADS']
-# cc_algs = ['HSTORE']
+# cc_algs = ['SILO']
 # cc_algs = ['QUECC']
-cc_algs = ['HSTORE']
+# cc_algs = ['CALVIN']
+# cc_algs = ['MVCC']
+# cc_algs = ['HSTORE']
 # # cc_algs = ['LADS']
 # cc_algs = ['HSTORE', 'SILO', 'CALVIN','WAIT_DIE', 'MVCC', 'OCC', 'NO_WAIT', 'QUECC', 'TIMESTAMP']
 # 8,12,16,20,24,32,48,56,64,96,112,128
 if (vm_cores == 32):
-    wthreads = [8,12,16,20,24,32] # 32 core machine
+    # wthreads = [8,12,16,20,24,32] # 32 core machine
+    wthreads = [8,16,20,24,32] # 32 core machine - 12 cores gives problems
 elif vm_cores == 64:    
     wthreads = [8,16,32,48,56,64] # 64 core machine
 elif vm_cores == 128:
     wthreads = [8,16,32,64,96,112,128] # 128 core machine
 else:
-    assert(False)
+    wthreads = [vm_cores]
 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
-# cc_algs = ['SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # set 2
-# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC', 'CALVIN'] # both
-# pt_perc = [0.25,0.5,0.75]
-pt_perc = [1]
+cc_algs = ['SILO', 'WAIT_DIE', 'MVCC'] # set 2
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','CALVIN'] # both
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC'] # both
+# pt_perc = [0.25,0.5,0.75,1]
+# pt_perc = [0.25,0.5]
+# pt_perc = [0.75,1]
+# pt_perc = [0.5,1]
+# pt_perc = [1]
 # zipftheta = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] # 1.0 theta is not supported
 # zipftheta = [0.0,0.3,0.6,0.7,0.9]
 # zipftheta = [0.0,0.9]
@@ -332,12 +403,27 @@ strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 # zipftheta = [0.0,0.6,0.99]
 # zipftheta = [0.0]
-wthreads = [32] # redo experiments
-zipftheta = [0.6,0.99]
-# zipftheta = [0.99, 0.0]
-# zipftheta = [0.0, 0.6, 0.9, 0.95, 0.99]
-# parts_accessed = [1,2,4,8,16,24,32]
+# zipftheta = [0.6]
+# zipftheta = [0.99]
+batch_sized = [40320]
+# batch_sized = [13440,26880,40320,53760,107520]
+# batch_sized = [13440,26880,53760,107520]
+# batch_sized = [5184,10368,20736,41472,82944]
+
+wthreads = [vm_cores]
+# wthreads = [32] # redo experiments
+num_trials = 2
+cc_algs = ['QUECC']
+# zipftheta = [0.0]
+zipftheta = [0.99]
+# batch_sized = [5184,10368,20736,41472,82944]
+# batch_sized = [5184] // this causes problems, so we ommit it
+batch_sized = [10368,20736,41472]
+# batch_sized = [20736,82944]
+pt_perc = [0.5]
+
 # parts_accessed = [1,32]
+# parts_accessed = [0.5]
 parts_accessed = [0.5]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
@@ -381,11 +467,23 @@ notefile = open("{}/{}".format(outdir,'exp_note.txt'), 'w');
 notefile.write(note)
 notefile.close()
 
+if (time_enable):
+    print("Time is enabled in experiments")
+else:
+    print("Time is NOT enabled in experiments, no latency measurments")
+if (dry_run):
+    print("Dry run .. no execution ...")
+if vm_shut:
+    print("VM will shut down at the end of the experiments!!!")
+else:
+    print("VM will NOT shut down at the end of the experiments!!!")
+
 if is_azure:
     print("Enter password for Azure:")
     exec_cmd('az login -u {}'.format(secrets['azlogin']), env)
     exec_cmd('az account set -s {}'.format(secrets['azsub_id']), env)
     exec_cmd('az account list', env)
+
 
 for ncc_alg in cc_algs:
     for wthd in wthreads:
@@ -407,7 +505,7 @@ for ncc_alg in cc_algs:
                 for ppts in strict:
                     exp_cnt = 0
                     for pt in pt_perc:                    
-                        for ets in et_sync:
+                        for bs in batch_sized:
                             #use this condition if QUECC is included only
                             if ncc_alg != 'QUECC' and exp_cnt >= 1:
                                 runexp = False
@@ -416,7 +514,7 @@ for ncc_alg in cc_algs:
                                 exp_cnt = exp_cnt + 1        
                                 if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
                                     pt = 1
-                                set_config(ncc_alg, wthd, theta, pt, ets, pa, ppts)
+                                set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts)
                                 # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
                                 if not dry_run:
                                     build_project()
@@ -435,14 +533,14 @@ for ncc_alg in cc_algs:
 
                                     if prefix != "":
                                         if ppts:
-                                            nprefix = prefix + '_pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                            nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
                                         else:
-                                            nprefix = prefix + '_pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                            nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
                                     else:
                                         if ppts:
-                                            nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                            nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
                                         else:
-                                            nprefix = 'pa' + str(pa) + '_' + ets.replace('_','') + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                            nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
                                     run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
                                     # print('Dry run: {}, {}, {}, t{}, {}'
                                     #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
@@ -456,8 +554,8 @@ eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
 print(subject)
 send_email(subject, note)
-# if not dry_run:
-#     if is_azure:
-#         exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
-#     else:
-#         exec_cmd('sudo shutdown -h now', env)
+if not dry_run and vm_shut:
+    if is_azure:
+        exec_cmd('az vm deallocate -g quecc -n {}'.format(secrets['vm_name']), env)
+    else:
+        exec_cmd('sudo shutdown -h now', env)

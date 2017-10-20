@@ -26,6 +26,7 @@
 /*************************************************/
 //     class Query_queue
 /*************************************************/
+volatile atomic<uint64_t> Client_query_queue::next_tid;
 
 void
 Client_query_queue::init(Workload * h_wl) {
@@ -50,7 +51,8 @@ Client_query_queue::init(Workload * h_wl) {
 #endif
         query_cnt[id] = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t));
     }
-    next_tid = 0;
+//    next_tid = 0;
+    next_tid.store(0);
 
 #if CREATE_TXN_FILE
     // single threaded generation to ensure output is not malformed
@@ -79,7 +81,8 @@ Client_query_queue::initQueriesHelper(void * context) {
 
 void
 Client_query_queue::initQueriesParallel() {
-    UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
+//    UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
+    UInt32 tid = next_tid.fetch_add(1);
     uint64_t request_cnt;
     request_cnt = g_max_txn_per_part + 4;
 

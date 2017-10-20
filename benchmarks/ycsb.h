@@ -69,7 +69,7 @@ private:
 
     pthread_mutex_t insert_lock;
     //  For parallel initialization
-    static int next_tid;
+    static atomic<int> next_tid;
 };
 
 class YCSBTxnManager : public TxnManager {

@@ -96,6 +96,7 @@ void Thread::tsetup() {
 }
 
 void Thread::progress_stats() {
+#if PROG_STATS
 		if(get_thd_id() == 0) {
 #if TIME_ENABLE
       uint64_t now_time = get_sys_clock();
@@ -114,5 +115,5 @@ void Thread::progress_stats() {
         }
       }
 		}
-
+#endif // -if PROG_STATS
 }

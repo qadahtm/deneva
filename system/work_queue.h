@@ -110,10 +110,10 @@ public:
 //    volatile atomic<uint16_t> batch_plan_comp_cnts[BATCH_MAP_LENGTH];
 //    volatile atomic<uint16_t> batch_map_comp_cnts[BATCH_MAP_LENGTH];
 //    volatile atomic<uint16_t> batch_commit_et_cnts[BATCH_MAP_LENGTH];
-
-    atomic<uint16_t> * batch_plan_comp_cnts;
-    atomic<uint16_t> * batch_map_comp_cnts;
-    atomic<uint16_t> * batch_commit_et_cnts;
+// need to make not to use stale values of these counts.
+    volatile atomic<uint16_t> * batch_plan_comp_cnts;
+    volatile atomic<uint16_t> * batch_map_comp_cnts;
+    volatile atomic<uint16_t> * batch_commit_et_cnts;
 #endif
 
 

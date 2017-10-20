@@ -61,7 +61,16 @@ void QWorkQueue::init() {
   }
 #endif
   //TODO(tq): is this cache-aware? Need to study and figure out hte optimal layout
-
+  uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+  for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
+    for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
+      priority_group * planner_pg = &batch_pg_map[b][j];
+      for (uint64_t i=0; i < planner_batch_size; ++i){
+        planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
+        planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
+      }
+    }
+  }
 
   batch_plan_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
   batch_map_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);

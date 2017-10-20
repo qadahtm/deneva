@@ -150,7 +150,15 @@ extern gdgcc::ActionBuffer* action_allocator;
 extern bool volatile warmup_done;
 extern bool volatile enable_thread_mem_pool;
 extern pthread_barrier_t warmup_bar;
+#if CC_ALG == QUECC && BARRIER_SYNC
+extern pthread_barrier_t plan_phase_start_bar;
+extern pthread_barrier_t exec_phase_start_bar;
+extern pthread_barrier_t commit_phase_start_bar;
 
+extern pthread_barrier_t plan_phase_end_bar;
+extern pthread_barrier_t exec_phase_end_bar;
+extern pthread_barrier_t commit_phase_end_bar;
+#endif
 /******************************************/
 // Client Global Params 
 /******************************************/
@@ -280,7 +288,7 @@ extern uint16_t g_et_map[THREAD_CNT];
 extern UInt32 g_repl_type;
 extern UInt32 g_repl_cnt;
 
-enum RC { RCOK=0, Commit, Abort, WAIT, WAIT_REM, ERROR, FINISH, NONE };
+enum RC { RCOK=0, Commit, Abort, WAIT, WAIT_REM, ERROR, FINISH, NONE, Committed, Aborted };
 
 #if CC_ALG == QUECC
 enum SRC { SUCCESS=0, BREAK, BATCH_READY, BATCH_WAIT, FATAL_ERROR };

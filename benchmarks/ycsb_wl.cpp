@@ -34,11 +34,12 @@
 
 #if WORKLOAD == YCSB
 
-int YCSBWorkload::next_tid;
+volatile atomic<int> YCSBWorkload::next_tid;
 
 RC YCSBWorkload::init() {
 	Workload::init();
-	next_tid = 0;
+//	next_tid = 0;
+	next_tid.store(0);
 	char * cpath = getenv("SCHEMA_PATH");
 	string path;
 	if (cpath == NULL) 
@@ -171,18 +172,25 @@ void YCSBWorkload::init_table_parallel() {
 }
 
 void *YCSBWorkload::init_table_slice() {
-	UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
+//	UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
+	UInt32 tid = next_tid.fetch_add(1);
 	RC rc;
-	assert(g_synth_table_size % g_init_parallelism == 0);
+//	assert(g_synth_table_size % g_init_parallelism == 0);
 	assert(tid < g_init_parallelism);
 	uint64_t key_cnt = 0;
-	while ((UInt32) ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
-	assert((UInt32) ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
+//	while ((UInt32) ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
+//	assert((UInt32) ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
+	while ((UInt32) next_tid.load() < g_init_parallelism) {}
+	assert((UInt32) next_tid.load() == g_init_parallelism);
 	uint64_t slice_size = g_synth_table_size / g_init_parallelism;
 
 	printf("Thd %d: slice size = %ld, inserting from %ld, to %ld\n", tid, slice_size, slice_size * tid, (slice_size * (tid+1))-1);
+	uint64_t slice_end = slice_size * (tid + 1);
+	if (tid == g_init_parallelism-1){
+		slice_end = g_synth_table_size;
+	}
 	for (uint64_t key = slice_size * tid;
-		 key < slice_size * (tid + 1);
+		 key < slice_end;
 		 key++
 			) {
 #if !SERVER_GENERATE_QUERIES

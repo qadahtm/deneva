@@ -876,7 +876,7 @@ RC PlannerThread::run_fixed_mode() {
 //                    batch_part->planner_id = _planner_id;
 //                    batch_part->batch_id = batch_id;
                     batch_part->single_q = true;
-                    batch_part->status.store(0);
+//                    batch_part->status.store(0);
                     batch_part->exec_q_status.store(0);
 
 #if SPLIT_MERGE_ENABLED
@@ -1299,6 +1299,10 @@ RC PlannerThread::run_normal_mode() {
             exec_qs_ranges->add(bucket_size);
             continue;
         }
+        else if (i == (g_thread_cnt-1)){
+            exec_qs_ranges->add(g_synth_table_size);
+            continue;
+        }
 
         exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
     }
@@ -1307,6 +1311,10 @@ RC PlannerThread::run_normal_mode() {
 
         if (i == 0){
             exec_qs_ranges->add(bucket_size);
+            continue;
+        }
+        else if (i == (g_thread_cnt-1)){
+            exec_qs_ranges->add(UINT64_MAX);
             continue;
         }
 
@@ -1354,15 +1362,15 @@ RC PlannerThread::run_normal_mode() {
 #endif
 
     // Initialize access list
-    for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
-        for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
-            for (uint64_t i=0; i < planner_batch_size; ++i){
-                priority_group * planner_pg = &work_queue.batch_pg_map[b][j];
-                planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
-                planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
-            }
-        }
-    }
+//    for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
+//        for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
+//            for (uint64_t i=0; i < planner_batch_size; ++i){
+//                priority_group * planner_pg = &work_queue.batch_pg_map[b][j];
+//                planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
+//                planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
+//            }
+//        }
+//    }
 
     planner_txn_id = txn_prefix_planner_base;
 
@@ -1425,7 +1433,6 @@ RC PlannerThread::run_normal_mode() {
         }
 
         // we have got a message, which is a transaction
-        batch_cnt++;
         if (batch_start_time == 0){
             batch_start_time = get_sys_clock();
         }
@@ -1435,6 +1442,7 @@ RC PlannerThread::run_normal_mode() {
 
                 if (!simulation->is_done()){
                     process_client_msg(msg, txn_ctxs);
+                    batch_cnt++;
                 }
                 break;
             }
@@ -1851,13 +1859,9 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             // In case batch slot is not ready, spin!
             expected = 0;
             desired = (uint64_t) batch_part;
-            bool bcond = false;
+
 #if BATCH_MAP_ORDER == BATCH_ET_PT
-            bcond = work_queue.batch_map[slot_num][i][_planner_id].load() != 0;
-#else
-            bcond = work_queue.batch_map[slot_num][_planner_id][i].load() != 0;
-#endif
-            while(bcond) {
+            while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0) {
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
 //                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
@@ -1871,6 +1875,22 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
                     return BREAK;
                 }
             }
+#else
+            while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
+                if(idle_starttime == 0){
+                    idle_starttime = get_sys_clock();
+//                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
+                }
+
+                if (simulation->is_done()){
+                    if (idle_starttime > 0){
+                        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+                        idle_starttime = 0;
+                    }
+                    return BREAK;
+                }
+            }
+#endif
             // include idle time from spinning above
             if (idle_starttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
@@ -1980,6 +2000,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
         while(work_queue.batch_pg_map[slot_num][_planner_id].status.load() != PG_AVAILABLE) {
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
+//                DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is not available\n", _planner_id, batch_id, slot_num);
             }
 //                SAMPLED_DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
             if (simulation->is_done()){
@@ -1991,7 +2012,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             }
         }
 
-
+//        DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is available now!! retarting planning again\n", _planner_id, batch_id, slot_num);
         // include idle time from spinning above
         if (idle_starttime > 0){
             INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
@@ -2021,7 +2042,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 //                prof_starttime = get_sys_clock();
 
     // Reset tctx memblock for reuse
-    transaction_context *tctx = &txn_ctxs[batch_cnt-1];
+    transaction_context *tctx = &txn_ctxs[batch_cnt];
 
 //                INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
 
@@ -2031,7 +2052,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     tctx->txn_state.store(TXN_INITIALIZED);
     tctx->completion_cnt.store(0);
     tctx->txn_comp_cnt.store(0);
-    M_ASSERT_V(tctx, "PT_%ld: invalid txn context???\n",_planner_id);
+    tctx->starttime = get_sys_clock(); // record start time of transaction
+
 
     //TODO(tq): move to repective benchmark transaction manager implementation
 #if WORKLOAD == TPCC
@@ -2075,8 +2097,11 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
      * We group keys that fall in the same range to be processed together
      * TODO(tq): add repartitioning
      */
-    uint8_t e8 = TXN_INITIALIZED;
-    uint8_t d8 = TXN_STARTED;
+//    uint8_t e8 = TXN_INITIALIZED;
+//    uint8_t d8 = TXN_STARTED;
+
+    uint64_t e8 = TXN_INITIALIZED;
+    uint64_t d8 = TXN_STARTED;
     if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
         assert(false);
     }
@@ -2707,7 +2732,7 @@ void QueCCPool::batch_part_get_or_create(batch_partition *&batch_part, uint64_t 
     }
     batch_part->single_q = true;
     batch_part->empty = false;
-    batch_part->status.store(0);
+//    batch_part->status.store(0);
     batch_part->exec_q_status.store(0);
 }
 void QueCCPool::batch_part_release(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id){

@@ -318,7 +318,8 @@ int main(int argc, char* argv[])
     all_thd_cnt += 1; // logger thread
 #endif
 #if CC_ALG == CALVIN
-    all_thd_cnt += 2; // sequencer + scheduler thread
+//    all_thd_cnt += 2; // sequencer + scheduler thread
+    wthd_cnt = thd_cnt -2; // use less worker counts
 #endif
 
 #if CC_ALG == QUECC
@@ -682,6 +683,18 @@ int main(int argc, char* argv[])
     warmup_done = true;
     pthread_barrier_init( &warmup_bar, NULL, all_thd_cnt);
 
+#if CC_ALG == QUECC && BARRIER_SYNC && !PIPELINED
+    pthread_barrier_init( &plan_phase_start_bar, NULL, all_thd_cnt);
+    pthread_barrier_init( &exec_phase_start_bar, NULL, all_thd_cnt);
+    pthread_barrier_init( &commit_phase_start_bar, NULL, all_thd_cnt);
+
+    pthread_barrier_init( &plan_phase_start_bar, NULL, all_thd_cnt);
+    pthread_barrier_init( &exec_phase_start_bar, NULL, all_thd_cnt);
+    pthread_barrier_init( &commit_phase_start_bar, NULL, all_thd_cnt);
+
+    // TODO: support pipelined phase
+#endif
+
   // spawn and run txns again.
   starttime = get_server_clock();
   simulation->run_starttime = starttime;
@@ -696,7 +709,8 @@ int main(int argc, char* argv[])
 #endif
       assert(id >= 0 && id < wthd_cnt);
       worker_thds[i].init(id,g_node_id,m_wl);
-      pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
+      int rc = pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
+      M_ASSERT_V(rc == 0, "Could not create worker thread, pthread_create rc=%d\n",rc);
       pthread_setname_np(p_thds[id-1], "s_worker");
 	}
 #endif
@@ -789,7 +803,8 @@ int main(int argc, char* argv[])
 #endif
         planner_thds[j].init(id,g_node_id,m_wl);
         planner_thds[j]._planner_id = j;
-        pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
+        int rc = pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
+        M_ASSERT_V(rc == 0, "Could not create planner thread, pthread_create rc=%d\n",rc);
         pthread_setname_np(p_thds[id-1], "s_planner");
     }
 #if CT_ENABLED

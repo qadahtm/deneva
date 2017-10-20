@@ -605,7 +605,7 @@ void TxnManager::commit_stats() {
 
 
     INC_STATS(ctid, txn_cnt, 1);
-//    INC_STATS(ctid, local_txn_commit_cnt, 1);
+    INC_STATS(ctid, local_txn_commit_cnt, 1);
     INC_STATS(ctid, txn_run_time, timespan_long);
 //    if(STRICT_PPT && PART_PER_TXN == 1) {
 //        if (query->partitions_touched.size() != PART_PER_TXN){
@@ -629,13 +629,13 @@ void TxnManager::commit_stats() {
       INC_STATS(get_thd_id(),cflt_cnt_txn,1);
     }*/
     txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
-//#if CC_ALG == CALVIN
-//    return;
-//#endif
-//
-//    INC_STATS_ARR(ctid, start_abort_commit_latency, timespan_short);
-//    INC_STATS_ARR(ctid, last_start_commit_latency, timespan_short);
-//    INC_STATS_ARR(ctid, first_start_commit_latency, timespan_long);
+#if CC_ALG == CALVIN
+    return;
+#endif
+
+    INC_STATS_ARR(ctid, start_abort_commit_latency, timespan_short);
+    INC_STATS_ARR(ctid, last_start_commit_latency, timespan_short);
+    INC_STATS_ARR(ctid, first_start_commit_latency, timespan_long);
 
 
     assert(query->partitions_touched.size() > 0);
