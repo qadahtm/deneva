@@ -916,7 +916,7 @@ RC PlannerThread::run_fixed_mode() {
 //                                   _planner_id, batch_id, slot_num, i, _planner_id)
                     }
 #else
-                    while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
+                    while(work_queue.batch_map[slot_num][_planner_id][i].fetch_add(0) != 0) {
                         if(idle_starttime == 0){
                             idle_starttime = get_sys_clock();
                             DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
@@ -1387,6 +1387,9 @@ RC PlannerThread::run_normal_mode() {
                        " g_part_cnt = %d, g_plan_thread_cnt = %d\n", _planner_id, g_part_cnt, g_plan_thread_cnt);
 
     uint64_t next_part = 0;
+#if DEBUG_QUECC
+    plan_active[_planner_id]->store(true);
+#endif
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
             plan_starttime = get_sys_clock();
@@ -1904,7 +1907,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 //                    M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
                 }
 #else
-            while(!work_queue.batch_map[slot_num][_planner_id][i].compare_exchange_strong(expected, desired)){
+            if(!work_queue.batch_map[slot_num][_planner_id][i].compare_exchange_strong(expected, desired)){
                 // this should not happen after spinning but can happen if simulation is done
                     M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
 //                SAMPLED_DEBUG_Q("PT_%ld: for batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id)
@@ -2001,6 +2004,9 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
 //                DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is not available\n", _planner_id, batch_id, slot_num);
+#if DEBUG_QUECC
+                plan_active[_planner_id]->store(false);
+#endif
             }
 //                SAMPLED_DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
             if (simulation->is_done()){
@@ -2011,7 +2017,10 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
                 return BREAK;
             }
         }
-
+#if DEBUG_QUECC
+        // back to planning again
+        plan_active[_planner_id]->store(true);
+#endif
 //        DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is available now!! retarting planning again\n", _planner_id, batch_id, slot_num);
         // include idle time from spinning above
         if (idle_starttime > 0){

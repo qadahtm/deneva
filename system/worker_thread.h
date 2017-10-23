@@ -80,7 +80,7 @@ public:
             }
             idle_starttime = get_sys_clock();
             // wait for all ets to finish
-            while (work_queue.batch_plan_comp_cnts[batch_slot].load() != g_thread_cnt){
+            while (work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(0) != g_thread_cnt){
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
@@ -90,7 +90,19 @@ public:
             };
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime =0;
-
+#if DEBUG_QUECC
+            // check that all transactions has completed, by checking txn status
+            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
+                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+                for (uint64_t j =0; j < planner_batch_size; ++j){
+                    DEBUG_Q("ET_%ld: end of planning phase, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
+                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
+                    M_ASSERT_V(planner_pg->txn_ctxs[j].completion_cnt.load() == planner_pg->txn_ctxs[j].txn_comp_cnt.load(),
+                               "ET_%ld: not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
+                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
+                }
+            }
+#endif
             // allow other ETs to proceed
             desired16 = 0;
             expected16 = g_thread_cnt;
@@ -108,7 +120,7 @@ public:
             }
             idle_starttime = get_sys_clock();
 //                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
-            while (work_queue.batch_plan_comp_cnts[batch_slot].load() != 0){
+            while (work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(0) != 0){
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
                     idle_starttime =0;
@@ -135,7 +147,9 @@ public:
 //                _thd_id, wbatch_id, expected16);
 //        DEBUG_Q("ET_%ld: after INC for batch_id = %ld, map_com_cnts = %d\n",
 //                _thd_id, wbatch_id, work_queue.batch_map_comp_cnts[batch_slot].load());
-
+#if DEBUG_QUECC
+        exec_active[_thd_id]->store(false);
+#endif
         if (_thd_id == 0){
 //            DEBUG_Q("ET_%ld: going to wait for other ETs for batch_id = %ld, map_com_cnts = %d\n",
 //                    _thd_id, wbatch_id, work_queue.batch_map_comp_cnts[batch_slot].load());
@@ -145,7 +159,7 @@ public:
             }
             idle_starttime = get_sys_clock();
             // wait for all ets to finish
-            while (work_queue.batch_map_comp_cnts[batch_slot].load() != g_thread_cnt){
+            while (work_queue.batch_map_comp_cnts[batch_slot].fetch_add(0) != g_thread_cnt){
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
@@ -155,6 +169,22 @@ public:
             };
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime =0;
+
+#if DEBUG_QUECC
+            // check that all transactions has completed, by checking txn status
+            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
+                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+                for (uint64_t j =0; j < planner_batch_size; ++j){
+                    if (planner_pg->txn_ctxs[j].completion_cnt.load() != planner_pg->txn_ctxs[j].txn_comp_cnt.load()){
+                        DEBUG_Q("ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
+                                planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
+                    }
+//                    M_ASSERT_V(planner_pg->txn_ctxs[j].completion_cnt.load() == planner_pg->txn_ctxs[j].txn_comp_cnt.load(),
+//                               "ET_%ld: not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
+//                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
+                }
+            }
+#endif
 
             // allow other ETs to proceed
             desired16 = 0;
@@ -173,7 +203,7 @@ public:
             }
             idle_starttime = get_sys_clock();
 //                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
-            while (work_queue.batch_map_comp_cnts[batch_slot].load() != 0){
+            while (work_queue.batch_map_comp_cnts[batch_slot].fetch_add(0) != 0){
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
                     idle_starttime =0;
@@ -186,7 +216,9 @@ public:
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime =0;
         }
-
+#if DEBUG_QUECC
+        commit_active[_thd_id]->store(true);
+#endif
         return SUCCESS;
     }
 
@@ -198,7 +230,9 @@ public:
         uint16_t expected16;
 
         work_queue.batch_commit_et_cnts[batch_slot].fetch_add(1);
-
+#if DEBUG_QUECC
+        commit_active[_thd_id]->store(false);
+#endif
         if (_thd_id == 0){
             // wait for others to finish
             if (idle_starttime > 0){
@@ -209,7 +243,7 @@ public:
             idle_starttime = get_sys_clock();
             // wait for all ets to finish
 //                DEBUG_Q("ET_%ld: going to wait for other ETs to finish their commit for all PGs\n", _thd_id);
-            while (work_queue.batch_commit_et_cnts[batch_slot].load() != g_thread_cnt){
+            while (work_queue.batch_commit_et_cnts[batch_slot].fetch_add(0) != g_thread_cnt){
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
                     idle_starttime =0;
@@ -255,7 +289,8 @@ public:
             }
             idle_starttime = get_sys_clock();
 //                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
-            while (work_queue.batch_commit_et_cnts[batch_slot].load() != 0){
+            std::atomic_thread_fence(std::memory_order_acquire);
+            while (work_queue.batch_commit_et_cnts[batch_slot].fetch_add(0) != 0){
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
                     idle_starttime =0;
@@ -268,7 +303,9 @@ public:
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime =0;
         }
-
+#if DEBUG_QUECC
+        exec_active[_thd_id]->store(true);
+#endif
         return SUCCESS;
     }
 
@@ -409,7 +446,7 @@ public:
 //                            _thd_id, wbatch_id, exec_qe_ptr->txn_id, wplanner_id);
 
             quecc_prof_time = get_sys_clock();
-            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
+//            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
             rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
 

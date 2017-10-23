@@ -64,9 +64,8 @@ struct transaction_context {
     uint64_t  ol_number;
 //    uint64_t ol_amount;
 #endif
-
-#if ROLL_BACK
     spinlock * access_lock = NULL;
+#if ROLL_BACK
     Array<Access*> * accesses;
 #endif
 };
@@ -268,6 +267,8 @@ private:
     uint8_t expected8 = 0;
     uint8_t desired8 = 0;
     uint64_t slot_num = 0;
+    bool eb = false;
+    bool db = true;
 
     // For txn dependency tracking
 #if BUILD_TXN_DEPS

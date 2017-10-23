@@ -168,10 +168,12 @@ public:
     inline void check_commit_ready(exec_queue_entry *entry) ALWAYS_INLINE {
 //        uint8_t e8;
 //        uint8_t d8;
+//        M_ASSERT_V(entry->txn_id == entry->txn_ctx->txn_id,"txn_id mismatch entry txn_id = %ld, txn_context txn_id = %ld\n", entry->txn_id, entry->txn_ctx->txn_id);
         uint64_t e8;
         uint64_t d8;
+        entry->txn_ctx->access_lock->lock();
         uint32_t comp_cnt = entry->txn_ctx->completion_cnt.fetch_add(1);
-        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt - 1)) {
+        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt.fetch_add(0) - 1)) {
 //            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load());
             // this is the last entry to be executed, we should be ready to commit
             e8 = TXN_STARTED;
@@ -180,6 +182,7 @@ public:
                 M_ASSERT_V(false,"Invalid txn state = %ld\n", entry->txn_ctx->txn_state.load());
             }
         }
+        entry->txn_ctx->access_lock->unlock();
     }
     void     row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid);
 

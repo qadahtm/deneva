@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 24
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -14,8 +14,8 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 48
-#define PART_CNT 64
+#define PLAN_THREAD_CNT 8
+#define PART_CNT 32
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -56,7 +56,7 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          true
+#define PROG_STATS          false
 #define TIME_ENABLE         false //STATS_ENABLE
 
 #define FIN_BY_TIME true
@@ -186,7 +186,7 @@
 //#define BATCH_SIZE 13440
 //#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
 //#define BATCH_SIZE 100000
-#define BATCH_SIZE 82944
+#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
@@ -309,7 +309,7 @@
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define SYNTH_TABLE_SIZE 16777152 // ~16M recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.99//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -319,7 +319,7 @@
 // Setting this to PART_CNT means that all transactions will access all partitions
 #define PART_PER_TXN PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
-#define REQ_PER_QUERY 10
+#define REQ_PER_QUERY 1//10
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
@@ -420,7 +420,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

@@ -283,6 +283,12 @@ extern const UInt32 g_batch_map_length;
 extern uint16_t g_pt_map[PLAN_THREAD_CNT];
 // For mapping between ETs and Cores
 extern uint16_t g_et_map[THREAD_CNT];
+
+#if DEBUG_QUECC
+extern volatile atomic<bool> ** plan_active;
+extern volatile atomic<bool> ** exec_active;
+extern volatile atomic<bool> ** commit_active;
+#endif
 #endif
 // Replication
 extern UInt32 g_repl_type;

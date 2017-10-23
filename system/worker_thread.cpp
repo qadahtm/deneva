@@ -1071,6 +1071,9 @@ RC WorkerThread::run_normal_mode() {
 #endif
 
 #if CC_ALG == QUECC
+#if DEBUG_QUECC
+    exec_active[_thd_id]->store(true);
+#endif
 #if !PIPELINED
     _planner_id = _thd_id;
     txn_prefix_planner_base = (_planner_id * txn_prefix_base);

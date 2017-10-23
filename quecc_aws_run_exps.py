@@ -16,8 +16,9 @@ from pprint import pprint
 import time
 from datetime import timedelta
 import multiprocessing
+from termcolor import colored, cprint
 
-def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict):
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt):
     
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -47,8 +48,11 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict):
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
-    print('set config: CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}'
-        .format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict))
+    if is_ycsb:
+        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt)    
+    else:
+        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict)
+    print(msg_out)
 
     for line in oconf:
     #     print(line, end='')
@@ -76,6 +80,11 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict):
         pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
             nline = '#define PART_CNT {}\n'.format(part_cnt)
+
+        pc_m =    re.search('#define REQ_PER_QUERY\s+(\d+)',line.strip())
+        if pc_m and is_ycsb:
+            nline = '#define REQ_PER_QUERY {}\n'.format(oppt)
+
         m =    re.search('#define PIPELINED\s+(true|false)',line.strip())
         if m:
             nline = '#define PIPELINED {}\n'.format(piplined)
@@ -181,7 +190,9 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, pref
                              cc_alg.replace('_',''), 's', trial, seq_num, core_cnt),env)  
             break
         print(fscmd)
-        if not dry_run:            
+
+        if not dry_run:
+            estime = time.time()
             sp = subprocess.Popen(fscmd, stdout=subprocess.PIPE, env=env, shell=True)
             # procs.append(sp);
             # else:
@@ -201,10 +212,10 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, pref
         #     p.wait(10)
         #Wait for for it to finish
             try:
-                outs, errs = sp.communicate(timeout=150)            
+                outs, errs = sp.communicate(timeout=300)            
                 if sp.returncode != 0:
                     raise subprocess.CalledProcessError(cmd=fscmd,returncode=sp.returncode)
-                print("Done Trial {}, rc = {}".format(trial, sp.returncode))
+                print("Done Trial {}, rc = {}, elapsed time = {}".format(trial, sp.returncode,str(timedelta(seconds=(time.time()-estime)))))
                 break
 
             except subprocess.TimeoutExpired:
@@ -212,7 +223,7 @@ def run_trial(trial, cc_alg, env, seq_num, server_only, fnode_list, outdir, pref
                 exec_cmd('rm {}/{}{}_{}_t{}_{}_{}.txt'.format(outdir,
                                  prefix,                         
                                  cc_alg.replace('_',''), 's', trial, seq_num, core_cnt),env)        
-                print("Timeout - Trial {}, rc = {}, retrying {} ...".format(trial, sp.returncode, tries))     
+                print("Timeout - Trial {}, rc = {}, elapsed time = {}, retrying {} ...".format(trial, sp.returncode, str(timedelta(seconds=(time.time()-estime))), tries))     
             except subprocess.CalledProcessError:
                 exec_cmd('rm {}/{}{}_{}_t{}_{}_{}.txt'.format(outdir,
                                  prefix,                         
@@ -356,7 +367,7 @@ env = dict(os.environ)
 
 time_enable = False;
 dry_run = False;
-vm_shut = False;
+vm_shut = True;
 vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
 num_trials = 2;
@@ -386,8 +397,8 @@ else:
     wthreads = [vm_cores]
 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
-cc_algs = ['SILO', 'WAIT_DIE', 'MVCC'] # set 2
-# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','CALVIN'] # both
+# cc_algs = ['SILO', 'WAIT_DIE', 'MVCC'] # set 2
+cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','CALVIN'] # both
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC'] # both
 # pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.25,0.5]
@@ -414,19 +425,24 @@ wthreads = [vm_cores]
 # wthreads = [32] # redo experiments
 num_trials = 2
 cc_algs = ['QUECC']
-zipftheta = [0.0]
-# zipftheta = [0.99]
+# zipftheta = [0.0]
+zipftheta = [0.99]
 # batch_sized = [5184,10368,20736,41472,82944]
 # batch_sized = [5184] // this causes problems, so we ommit it
 # batch_sized = [10368,20736,41472,82944]
-batch_sized = [82944]
-pt_perc = [0.75]
+# batch_sized = [41472]
+pt_perc = [0.25,0.5,0.75]
+# pt_perc = [1]
 
 # parts_accessed = [1,32]
 # parts_accessed = [0.5]
-parts_accessed = [0.5]
+parts_accessed = [8,16,24,32]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+# ycsb_op_per_txn = [1,10,16,32] #set to a single element if workload is not YCSB
+ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
+# ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
+is_ycsb = True
 procs = []
 seq_no = 0
 
@@ -467,14 +483,16 @@ notefile = open("{}/{}".format(outdir,'exp_note.txt'), 'w');
 notefile.write(note)
 notefile.close()
 
+colored('Time is enabled in experiments', 'red', attrs=['bold', 'blink'])
+
 if (time_enable):
-    print("Time is enabled in experiments")
+    print(colored('Time is enabled in experiments', 'red', attrs=['bold', 'blink']))
 else:
     print("Time is NOT enabled in experiments, no latency measurments")
 if (dry_run):
     print("Dry run .. no execution ...")
-if vm_shut:
-    print("VM will shut down at the end of the experiments!!!")
+if vm_shut:    
+    print(colored('VM will shut down at the end of the experiments!!!', 'red', attrs=['bold', 'blink']))
 else:
     print("VM will NOT shut down at the end of the experiments!!!")
 
@@ -489,66 +507,59 @@ for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:
             runexp = True
-            for pa in parts_accessed:
-                # if wthd == 20  and ncc_alg != 'QUECC':
-                    #Don't run other CCs with 1 thread 
-                    # runexp = False
+            for oppt in ycsb_op_per_txn:
+                for pa in parts_accessed:
+                    assert(pa > 0) 
+                    if pa < 1:
+                        pa = int(wthd*pa)
 
-                # if wthd > 30 and ncc_alg == 'QUECC': #for m4.16xlarge
-                # if wthd > 62 and ncc_alg == 'QUECC': #for x1.32xlarge
-                    #Don't run QueCC with more than 30 threads 
-                    # runexp = False 
-                assert(pa > 0) 
-                if pa < 1:
-                    pa = int(wthd*pa)
+                    for ppts in strict:
+                        exp_cnt = 0
+                        for pt in pt_perc:                    
+                            for bs in batch_sized:
+                                #use this condition if QUECC is included only
+                                if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                                    runexp = False
 
-                for ppts in strict:
-                    exp_cnt = 0
-                    for pt in pt_perc:                    
-                        for bs in batch_sized:
-                            #use this condition if QUECC is included only
-                            if ncc_alg != 'QUECC' and exp_cnt >= 1:
-                                runexp = False
-
-                            if runexp:
-                                exp_cnt = exp_cnt + 1        
-                                if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
-                                    pt = 1
-                                set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts)
-                                # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                                if not dry_run:
-                                    build_project()
-                                for trial in list(range(num_trials)):
-                                    if pt <= 1:
-                                        pt_cnt = str(int(pt*wthd))
-                                        et_cnt = str(wthd-int(pt*wthd));
-                                        pt_perc_str = str(int(pt*100))
-                                    else:
-                                        pt_cnt = str(pt)
-                                        et_cnt = str(wthd-pt);
-                                        pt_perc_str = str(0)
-                                    
-                                    if (wthd-int(pt*wthd)) == 0:
-                                        et_cnt = str(wthd);
-
-                                    if prefix != "":
-                                        if ppts:
-                                            nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                if runexp:
+                                    exp_cnt = exp_cnt + 1        
+                                    if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
+                                        pt = 1
+                                    set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt)
+                                    # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                                    if not dry_run:
+                                        build_project()
+                                    for trial in list(range(num_trials)):
+                                        if pt <= 1:
+                                            pt_cnt = str(int(pt*wthd))
+                                            et_cnt = str(wthd-int(pt*wthd));
+                                            pt_perc_str = str(int(pt*100))
                                         else:
-                                            nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
-                                    else:
-                                        if ppts:
-                                            nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                            pt_cnt = str(pt)
+                                            et_cnt = str(wthd-pt);
+                                            pt_perc_str = str(0)
+                                        
+                                        if (wthd-int(pt*wthd)) == 0:
+                                            et_cnt = str(wthd);
+
+                                        if prefix != "":
+                                            if ppts:
+                                                nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                            else:
+                                                nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
                                         else:
-                                            nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
-                                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                                    # print('Dry run: {}, {}, {}, t{}, {}'
-                                    #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
-                                    seq_no = seq_no + 1
-                                cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
-                                cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
-                                # print("cp {} {}".format(cfgfname, cfg_copy))
-                                exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
+                                            if ppts:
+                                                nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                            else:
+                                                nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                        run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                        # print('Dry run: {}, {}, {}, t{}, {}'
+                                        #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                        seq_no = seq_no + 1
+                                    cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                                    cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                                    # print("cp {} {}".format(cfgfname, cfg_copy))
+                                    exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)

@@ -199,6 +199,13 @@ const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;
 uint16_t g_pt_map[PLAN_THREAD_CNT];
 // For mapping between ETs and Cores
 uint16_t g_et_map[THREAD_CNT];
+
+#if DEBUG_QUECC
+volatile atomic<bool> ** plan_active;
+volatile atomic<bool> ** exec_active;
+volatile atomic<bool> ** commit_active;
+#endif
+
 #endif
 
 double g_mpr = MPR;

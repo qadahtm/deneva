@@ -242,6 +242,21 @@ int main(int argc, char* argv[])
     printf("Initializing QueCC pool... ");
     fflush(stdout);
     quecc_pool.init(m_wl,0);
+#if DEBUG_QUECC
+    plan_active = (volatile atomic<bool> **) mem_allocator.alloc(sizeof(volatile atomic<bool> *)*g_plan_thread_cnt);
+    exec_active = (volatile atomic<bool> **) mem_allocator.alloc(sizeof(volatile atomic<bool>*)*g_thread_cnt);
+    commit_active = (volatile atomic<bool> **) mem_allocator.alloc(sizeof(volatile atomic<bool>*)*g_thread_cnt);
+    for (UInt32 i =0; i < g_plan_thread_cnt; ++i){
+        plan_active[i] = (volatile atomic<bool> *) mem_allocator.align_alloc(sizeof(volatile atomic<bool>));
+        plan_active[i]->store(false,memory_order_release);
+    }
+    for (UInt32 i =0; i < g_thread_cnt; ++i){
+        exec_active[i] = (volatile atomic<bool> *) mem_allocator.align_alloc(sizeof(volatile atomic<bool>));
+        commit_active[i] = (volatile atomic<bool> *) mem_allocator.align_alloc(sizeof(volatile atomic<bool>));
+        exec_active[i]->store(false,memory_order_release);
+        commit_active[i]->store(false,memory_order_release);
+    }
+#endif
     printf("Done\n");
 #endif
 

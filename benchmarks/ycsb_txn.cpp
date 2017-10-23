@@ -425,7 +425,7 @@ RC YCSBTxnManager::run_calvin_txn() {
     return rc;
 }
 #if CC_ALG == QUECC
-inline RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
+RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     RC rc = RCOK;
 //    uint64_t starttime = get_sys_clock();
 //    uint64_t quecc_prof_time = 0;
