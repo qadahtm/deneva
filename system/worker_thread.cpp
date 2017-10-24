@@ -619,7 +619,8 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
     }
 
-
+    // use txn_dep from planner_pg
+    txn_dep_graph = planner_pg->txn_dep_graph;
 
 
     while (true){
@@ -756,7 +757,7 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 
 //        DEBUG_Q("ET_%ld: finished PG from planner %ld, batch_slot = %ld, batch_part = %lu\n",_thd_id, wplanner_id, batch_slot, (uint64_t) batch_part);
 
-        cleanup_batch_part(batch_slot, wplanner_id, batch_part);
+//        cleanup_batch_part(batch_slot, wplanner_id);
 
 //        DEBUG_Q("ET_%ld: cleanup PG from planner %ld, batch_slot = %ld\n",_thd_id, wplanner_id, batch_slot);
 
@@ -793,11 +794,7 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 
 inline SRC WorkerThread::wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id, batch_partition *& batch_part) {
 
-#if BATCH_MAP_ORDER == BATCH_ET_PT
-    batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
-#else
-    batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
-#endif
+    batch_part = get_batch_part(batch_slot, wplanner_id);
 
     if (((uint64_t) batch_part) == 0){
         if (idle_starttime == 0){
@@ -847,7 +844,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
             if (commit_et_id == _thd_id){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-                assert(planner_pg->status.load() == PG_READY);
+                assert(planner_pg->status.fetch_add(0) == PG_READY);
                 rc = commit_txn(planner_pg, j);
                 if (rc == Commit){
                     commit_time = get_sys_clock();
@@ -1072,7 +1069,7 @@ RC WorkerThread::run_normal_mode() {
 
 #if CC_ALG == QUECC
 #if DEBUG_QUECC
-    exec_active[_thd_id]->store(true);
+    exec_active[_thd_id]->store(0);
 #endif
 #if !PIPELINED
     _planner_id = _thd_id;
@@ -1147,7 +1144,7 @@ RC WorkerThread::run_normal_mode() {
     planner_txn_id = txn_prefix_planner_base;
 
 #if BUILD_TXN_DEPS
-    txn_dep_graph = new hash_table_t();
+//    txn_dep_graph = new hash_table_t();
 #endif
 
     batch_starting_txn_id = planner_txn_id;
@@ -1215,7 +1212,6 @@ RC WorkerThread::run_normal_mode() {
             if (sync_on_commit_phase_end(batch_slot) == BREAK){
                 goto end_et;
             }
-
 #else
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
             work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);
@@ -1390,7 +1386,6 @@ RC WorkerThread::run_normal_mode() {
         if (plan_batch(batch_slot, my_txn_man) == SUCCESS){
         //Sync
 //            DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
-
 #if BARRIER_SYNC
             pthread_barrier_wait(&plan_phase_end_bar);
 #endif

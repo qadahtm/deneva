@@ -907,7 +907,7 @@ RC PlannerThread::run_fixed_mode() {
                     expected = 0;
                     desired = (uint64_t) batch_part;
 #if BATCH_MAP_ORDER == BATCH_ET_PT
-                    while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0) {
+                    while(work_queue.batch_map[slot_num][i][_planner_id].fetch_add(0) != 0) {
                         if(idle_starttime == 0){
                             idle_starttime = get_sys_clock();
                             DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
@@ -1388,7 +1388,7 @@ RC PlannerThread::run_normal_mode() {
 
     uint64_t next_part = 0;
 #if DEBUG_QUECC
-    plan_active[_planner_id]->store(true);
+    plan_active[_planner_id]->store(0);
 #endif
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
@@ -1400,7 +1400,11 @@ RC PlannerThread::run_normal_mode() {
         // for now just dequeue and print notification
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
         prof_starttime = get_sys_clock();
+#if RANDOM_PLAN_DEQ
+        next_part = RAND(g_part_cnt);
+#else
         next_part = (_planner_id + (g_plan_thread_cnt * query_cnt)) % g_part_cnt;
+#endif
         query_cnt++;
 //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
         msg = work_queue.plan_dequeue(_thd_id, next_part);
@@ -1859,12 +1863,9 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 //                        final_assignment.top().curr_sum
 //                );
 
-            // In case batch slot is not ready, spin!
-            expected = 0;
-            desired = (uint64_t) batch_part;
 
 #if BATCH_MAP_ORDER == BATCH_ET_PT
-            while(work_queue.batch_map[slot_num][i][_planner_id].load() != 0) {
+            while(work_queue.batch_map[slot_num][i][_planner_id].fetch_add(0) != 0) {
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
 //                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
@@ -1879,7 +1880,13 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
                 }
             }
 #else
-            while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
+            while(work_queue.batch_map[slot_num][_planner_id][i].fetch_add(0) != 0) {
+#if DEBUG_QUECC
+                if (_planner_id == 0){
+                    print_threads_status();
+//                    M_ASSERT_V(false,"PT_%ld: non-zero batch map slot\n",_planner_id);
+                }
+#endif
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
 //                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
@@ -1901,6 +1908,9 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             }
 
             // Deliver batch partition to the repective ET
+            // In case batch slot is not ready, spin!
+            expected = 0;
+            desired = (uint64_t) batch_part;
 #if BATCH_MAP_ORDER == BATCH_ET_PT
             while(!work_queue.batch_map[slot_num][i][_planner_id].compare_exchange_strong(expected, desired)){
                     // this should not happen after spinning but can happen if simulation is done
@@ -1909,7 +1919,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 #else
             if(!work_queue.batch_map[slot_num][_planner_id][i].compare_exchange_strong(expected, desired)){
                 // this should not happen after spinning but can happen if simulation is done
-                    M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
+                    M_ASSERT_V(false, "For batch %ld : failing to SET batch map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
 //                SAMPLED_DEBUG_Q("PT_%ld: for batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id)
             }
 
@@ -2000,13 +2010,16 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             planner_pg->txn_ctxs = txn_ctxs;
 #else
 //            DEBUG_Q("PL_%ld : checking PG map for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
-        while(work_queue.batch_pg_map[slot_num][_planner_id].status.load() != PG_AVAILABLE) {
+        while(work_queue.batch_pg_map[slot_num][_planner_id].status.fetch_add(0) != PG_AVAILABLE) {
+#if DEBUG_QUECC
+            if (plan_active[_planner_id]->fetch_add(0) >= 0){
+//                DEBUG_Q("PT_%ld: will wait for its batch map slot %ld, batch_id=%ld\n",_planner_id, slot_num, batch_id);
+                plan_active[_planner_id]->store(-1);
+            }
+#endif
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
 //                DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is not available\n", _planner_id, batch_id, slot_num);
-#if DEBUG_QUECC
-                plan_active[_planner_id]->store(false);
-#endif
             }
 //                SAMPLED_DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
             if (simulation->is_done()){
@@ -2017,25 +2030,27 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
                 return BREAK;
             }
         }
-#if DEBUG_QUECC
-        // back to planning again
-        plan_active[_planner_id]->store(true);
-#endif
 //        DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is available now!! retarting planning again\n", _planner_id, batch_id, slot_num);
         // include idle time from spinning above
         if (idle_starttime > 0){
             INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
             idle_starttime = 0;
         }
+
+#if DEBUG_QUECC
+//        if (_planner_id == 0){
+//            print_threads_status();
+//        }
+        // back to planning again
+//            DEBUG_Q("PT_%ld: resuming planning with slot %ld, batch_id=%ld\n",_planner_id, slot_num, batch_id);
+        plan_active[_planner_id]->store(batch_id);
+#endif
+        // move to the next planner PG
         planner_pg = &work_queue.batch_pg_map[slot_num][_planner_id];
 //        DEBUG_Q("PL_%ld: Starting to work on planner_pg @%ld with batch_id = %ld, with slot_num =%ld\n",
 //                _planner_id, (uint64_t) planner_pg, batch_id, slot_num);
-//        memset(planner_pg,0,sizeof(priority_group)); // no need to zero out this
-        // maybe we don't need this if we are going to overwrite all fields
-//    memset(&planner_pg->txn_ctxs,0,BATCH_SIZE/PLAN_THREAD_CNT);
         txn_ctxs = planner_pg->txn_ctxs;
 #endif
-//            planner_pg->planner_id = _planner_id;
 
     }
     return SUCCESS;
@@ -2563,15 +2578,15 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
 //                _planner_id, exec_qs_ranges->size(), exec_qs_ranges_tmp->size());
 
         // release current mrange
-        quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
+        quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_thread_cnt));
 //        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
 
         // use the new ranges to assign the new execution entry
         idx = get_split(key, exec_qs_ranges);
         mrange = exec_queues->get(idx);
-
-//        print_eqs_ranges_after_swap();
-
+#if DEBUG_QUECC
+        print_eqs_ranges_after_swap();
+#endif
     }
     INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
 #else
@@ -2641,6 +2656,14 @@ void QueCCPool::init(Workload * wl, uint64_t size){
             exec_queue_free_list[i][j]     = new boost::lockfree::queue<Array<exec_queue_entry> *> (FREE_LIST_INITIAL_SIZE);
             batch_part_free_list[i][j]     = new boost::lockfree::queue<batch_partition *> (FREE_LIST_INITIAL_SIZE);
             exec_qs_status_free_list[i][j] = new boost::lockfree::queue<atomic<uint8_t> *>(FREE_LIST_INITIAL_SIZE);
+#if DEBUG_QUECC
+            exec_q_alloc_cnts[i][j].store(0);
+            exec_q_rel_cnts[i][j].store(0);
+            exec_q_reuse_cnts[i][j].store(0);
+            batch_part_rel_cnts[i][j].store(0);
+            batch_part_alloc_cnts[i][j].store(0);
+            batch_part_reuse_cnts[i][j].store(0);
+#endif
         }
 
 //        for (uint64_t j=0; j < FREE_LIST_INITIAL_SIZE+10; ++j){
@@ -2652,15 +2675,6 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 //            batch_partition * batch_part_tmp = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
 //            while(!batch_part_free_list[i]->push(batch_part_tmp));
 //        }
-#if DEBUG_QUECC
-        exec_q_alloc_cnts[i].store(0);
-        exec_q_rel_cnts[i].store(0);
-        exec_q_reuse_cnts[i].store(0);
-
-        batch_part_rel_cnts[i].store(0);
-        batch_part_alloc_cnts[i].store(0);
-        batch_part_reuse_cnts[i].store(0);
-#endif
     }
 
     exec_qs_free_list = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> * [g_plan_thread_cnt];
@@ -2700,28 +2714,33 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
     if (!exec_queue_free_list[et_id][planner_id]->pop(exec_q)){
         exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
         exec_q->init(exec_queue_capacity);
+        exec_q->set_et_id(et_id);
+        exec_q->set_pt_id(planner_id);
 #if DEBUG_QUECC
-        exec_q_alloc_cnts[et_id].fetch_add(1);
+        exec_q_alloc_cnts[et_id][planner_id].fetch_add(1);
+//        SAMPLED_DEBUG_Q("Allocating exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
 #endif
-//        DEBUG_Q("Allocating exec_q\n");
     }
     else{
         M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
         exec_q->clear();
 #if DEBUG_QUECC
-        exec_q_reuse_cnts[et_id].fetch_add(1);
+        exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
+//        SAMPLED_DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
 #endif
-//        DEBUG_Q("Reusing exec_q\n");
     }
 }
 
 void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
     M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
     exec_q->clear();
-//    DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
-    while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
+    int64_t qet_id = exec_q->et_id();
+    int64_t qpt_id = exec_q->pt_id();
+//    while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
+    while(!exec_queue_free_list[qet_id][qpt_id]->push(exec_q)){};
 #if DEBUG_QUECC
-    exec_q_rel_cnts[et_id].fetch_add(1);
+//    SAMPLED_DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
+    exec_q_rel_cnts[et_id][planner_id].fetch_add(1);
 #endif
 }
 
@@ -2729,14 +2748,14 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 void QueCCPool::batch_part_get_or_create(batch_partition *&batch_part, uint64_t planner_id, uint64_t et_id){
     if (!batch_part_free_list[et_id][planner_id]->pop(batch_part)){
         batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
-//        DEBUG_Q("Allocating batch_p\n");
 #if DEBUG_QUECC
-        batch_part_alloc_cnts[et_id].fetch_add(1);
+//        DEBUG_Q("Allocating batch_p, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
+        batch_part_alloc_cnts[et_id][planner_id].fetch_add(1);
 
     }
     else {
-//        DEBUG_Q("Reusing batch_p\n");
-        batch_part_reuse_cnts[et_id].fetch_add(1);
+//        DEBUG_Q("Reusing batch_p, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
+        batch_part_reuse_cnts[et_id][planner_id].fetch_add(1);
 #endif
     }
     batch_part->single_q = true;
@@ -2747,7 +2766,7 @@ void QueCCPool::batch_part_get_or_create(batch_partition *&batch_part, uint64_t 
 void QueCCPool::batch_part_release(batch_partition *&batch_p, uint64_t planner_id, uint64_t et_id){
     while(!batch_part_free_list[et_id][planner_id]->push(batch_p));
 #if DEBUG_QUECC
-    batch_part_rel_cnts[et_id].fetch_add(1);
+    batch_part_rel_cnts[et_id][planner_id].fetch_add(1);
 #endif
 }
 
@@ -2757,12 +2776,12 @@ void QueCCPool::exec_qs_get_or_create(Array<Array<exec_queue_entry> *> *&exec_qs
     if (!exec_qs_free_list[planner_id]->pop(exec_qs)){
         exec_qs = new Array<Array<exec_queue_entry> *>();
         exec_qs->init(g_exec_qs_max_size);
-//        DEBUG_Q("Allocating new exec_qs\n");
 #if DEBUG_QUECC
+//        DEBUG_Q("Allocating new exec_qs, pt_id=%ld\n", planner_id);
         exec_qs_alloc_cnts[planner_id].fetch_add(1);
     }
     else{
-//        DEBUG_Q("Reusing exec_qs\n");
+//        DEBUG_Q("Reusing exec_qs, pt_id=%ld\n", planner_id);
         exec_qs_reuse_cnts[planner_id].fetch_add(1);
 #endif
     }
@@ -2781,9 +2800,11 @@ void QueCCPool::exec_qs_status_get_or_create(atomic<uint8_t> *&execqs_status, ui
         execqs_status = (atomic<uint8_t> *) mem_allocator.alloc(
                 sizeof(uint64_t)*g_exec_qs_max_size);
     }
-//    else{
-//        DEBUG_Q("Reusing exec_qs\n");
-//    }
+#if DEBUG_QUECC
+    else{
+        DEBUG_Q("Reusing exec_qs\n");
+    }
+#endif
     memset(execqs_status, 0, sizeof(uint64_t)*g_exec_qs_max_size);
 }
 void QueCCPool::exec_qs_status_release(atomic<uint8_t> *&execqs_status, uint64_t planner_id, uint64_t et_id){
@@ -2837,8 +2858,8 @@ void QueCCPool::pg_release(priority_group * &pg, uint64_t planner_id){
 #endif
 }
 
-void QueCCPool::print_stats() {
-    printf("QueCC pool stats ... \n");
+void QueCCPool::print_stats(uint64_t batch_id) {
+    printf("QueCC pool stats ... batch_id = %ld\n", batch_id);
     fflush(stdout);
     uint64_t total_exec_q_alloc_cnt = 0;
     uint64_t total_exec_q_reuse_cnt = 0;
@@ -2861,26 +2882,36 @@ void QueCCPool::print_stats() {
     uint64_t total_pg_rel_cnt = 0;
 
 
-
-    for (uint64_t i=0; i < g_thread_cnt; ++i){
-//        printf("exec_q alloc for ET_%ld = %ld\n", i, exec_q_alloc_cnts[i].load());
-//        printf("exec_q reuse for ET_%ld = %ld\n", i, exec_q_reuse_cnts[i].load());
-//        printf("exec_q release for ET_%ld = %ld\n", i, exec_q_rel_cnts[i].load());
-
-//        printf("batch_part alloc for ET_%ld = %ld\n", i, batch_part_alloc_cnts[i].load());
-//        printf("batch_part reuse for ET_%ld = %ld\n", i, batch_part_reuse_cnts[i].load());
-//        printf("batch_part release for ET_%ld = %ld\n", i, batch_part_rel_cnts[i].load());
-//        fflush(stdout);
 #if DEBUG_QUECC
-        total_exec_q_alloc_cnt += exec_q_alloc_cnts[i].load();
-        total_exec_q_reuse_cnt += exec_q_reuse_cnts[i].load();
-        total_exec_q_rel_cnt += exec_q_rel_cnts[i].load();
+    for (uint64_t i=0; i < g_thread_cnt; ++i){
+        for (uint64_t j=0; j < g_plan_thread_cnt; ++j){
+//            printf("exec_q alloc cnt for ET_%ld, PT_%ld = %ld, batch_id = %ld\n", i,j, exec_q_alloc_cnts[i][j].fetch_add(0), batch_id);
+//            printf("exec_q reuse cnt for ET_%ld, PT_%ld = %ld, batch_id = %ld\n", i,j, exec_q_reuse_cnts[i][j].fetch_add(0), batch_id);
+//            printf("exec_q release cnt for ET_%ld, PT_%ld = %ld, batch_id = %ld\n", i,j, exec_q_rel_cnts[i][j].fetch_add(0), batch_id);
 
-        total_bp_alloc_cnt += batch_part_alloc_cnts[i].load();
-        total_bp_reuse_cnt += batch_part_reuse_cnts[i].load();
-        total_bp_rel_cnt += batch_part_rel_cnts[i].load();
-#endif
+//            printf("batch_part alloc for ET_%ld, PT_%ld = %ld\n", i,j, batch_part_alloc_cnts[i][j].load());
+//            printf("batch_part reuse for ET_%ld, PT_%ld = %ld\n", i,j, batch_part_reuse_cnts[i][j].load());
+//            printf("batch_part release for ET_%ld, PT_%ld = %ld\n", i,j, batch_part_rel_cnts[i][j].load());
+//            fflush(stdout);
+
+            total_exec_q_alloc_cnt += exec_q_alloc_cnts[i][j].fetch_add(0);
+            total_exec_q_reuse_cnt += exec_q_reuse_cnts[i][j].fetch_add(0);
+            total_exec_q_rel_cnt += exec_q_rel_cnts[i][j].fetch_add(0);
+
+            total_bp_alloc_cnt += batch_part_alloc_cnts[i][j].fetch_add(0);
+            total_bp_reuse_cnt += batch_part_reuse_cnts[i][j].fetch_add(0);
+            total_bp_rel_cnt += batch_part_rel_cnts[i][j].fetch_add(0);
+
+            exec_q_alloc_cnts[i][j].store(0);
+            exec_q_reuse_cnts[i][j].store(0);
+            exec_q_rel_cnts[i][j].store(0);
+
+            batch_part_alloc_cnts[i][j].store(0);
+            batch_part_reuse_cnts[i][j].store(0);
+            batch_part_rel_cnts[i][j].store(0);
+        }
     }
+#endif
 
     for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
 //        printf("exec_qs alloc for ET_%ld = %ld\n", i, exec_qs_alloc_cnts[i].load());

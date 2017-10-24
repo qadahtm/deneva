@@ -285,9 +285,9 @@ extern uint16_t g_pt_map[PLAN_THREAD_CNT];
 extern uint16_t g_et_map[THREAD_CNT];
 
 #if DEBUG_QUECC
-extern volatile atomic<bool> ** plan_active;
-extern volatile atomic<bool> ** exec_active;
-extern volatile atomic<bool> ** commit_active;
+extern volatile atomic<int64_t> ** plan_active;
+extern volatile atomic<int64_t> ** exec_active;
+extern volatile atomic<int64_t> ** commit_active;
 #endif
 #endif
 // Replication

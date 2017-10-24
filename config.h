@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 24
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -14,7 +14,7 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 8
+#define PLAN_THREAD_CNT 32
 #define PART_CNT 32
 
 
@@ -42,8 +42,8 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-//#define CPU_FREQ          2.0 // FOR GS32
-#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
+#define CPU_FREQ          2.0 // FOR GS32
+//#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
 //#define CPU_FREQ            2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
@@ -56,7 +56,7 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          false
+#define PROG_STATS          true
 #define TIME_ENABLE         false //STATS_ENABLE
 
 #define FIN_BY_TIME true
@@ -184,9 +184,9 @@
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
-//#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
+#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
 //#define BATCH_SIZE 100000
-#define BATCH_SIZE 10368
+//#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
@@ -194,7 +194,7 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED true
+#define PIPELINED false
 #define BARRIER_SYNC false
 #define STATIC_TXN_CTXS true
 
@@ -232,9 +232,9 @@
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
 
-#define SAMPLING_FACTOR 0.000001
+#define SAMPLING_FACTOR 0.0001
 
-
+#define RANDOM_PLAN_DEQ false
 // used for building histogram for planning
 #define HIST_BUCKET_CNT 100
 
@@ -288,7 +288,7 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    (0.1/PART_CNT) * MILLION
+#define MAX_TXN_PER_PART    100//(0.1/PART_CNT) * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -301,15 +301,15 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM THREAD_CNT
-//#define SYNTH_TABLE_SIZE 1024
-//#define SYNTH_TABLE_SIZE 65536
+#define SYNTH_TABLE_SIZE 1024*2
+//#define SYNTH_TABLE_SIZ  65536
 //#define SYNTH_TABLE_SIZE 1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 //#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
-#define SYNTH_TABLE_SIZE 16777152 // ~16M recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.99//0.3 0.0 -> Uniform
+//#define SYNTH_TABLE_SIZE 16777152 // ~16M recs so that it is divisiable by different batch sizes values
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -317,9 +317,9 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN PART_CNT
+#define PART_PER_TXN 1//PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
-#define REQ_PER_QUERY 1//10
+#define REQ_PER_QUERY 32
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false

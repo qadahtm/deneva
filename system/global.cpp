@@ -201,9 +201,9 @@ uint16_t g_pt_map[PLAN_THREAD_CNT];
 uint16_t g_et_map[THREAD_CNT];
 
 #if DEBUG_QUECC
-volatile atomic<bool> ** plan_active;
-volatile atomic<bool> ** exec_active;
-volatile atomic<bool> ** commit_active;
+volatile atomic<int64_t> ** plan_active;
+volatile atomic<int64_t> ** exec_active;
+volatile atomic<int64_t> ** commit_active;
 #endif
 
 #endif

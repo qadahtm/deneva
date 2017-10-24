@@ -219,7 +219,18 @@ public:
     inline void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
     inline void process_client_msg(Message *msg, transaction_context * txn_ctxs);
     inline SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
+#if DEBUG_QUECC
+    void print_threads_status() const {// print phase status
+        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
+            DEBUG_Q("PT_%ld: planner_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, plan_active[ii]->fetch_add(0), batch_id);
+        }
 
+        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
+            DEBUG_Q("PT_%ld: exec_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, exec_active[ii]->fetch_add(0), batch_id);
+            DEBUG_Q("PT_%ld: commit_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, commit_active[ii]->fetch_add(0), batch_id);
+        }
+    }
+#endif
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
     uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
@@ -354,7 +365,7 @@ public:
 
     //TODO(tq): implement free_all()
     void free_all();
-    void print_stats();
+    void print_stats(uint64_t batch_id);
 
     uint64_t exec_queue_capacity;
     uint64_t planner_batch_size;
@@ -374,13 +385,13 @@ private:
     // Stats for debugging
     // TODO(tq): remove or use a macro to turn them off
 #if DEBUG_QUECC
-    atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT];
-    atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT];
-    atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT];
+    atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT][PLAN_THREAD_CNT];
+    atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT][PLAN_THREAD_CNT];
+    atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT][PLAN_THREAD_CNT];
 
-    atomic<uint64_t> exec_q_alloc_cnts[THREAD_CNT];
-    atomic<uint64_t> exec_q_reuse_cnts[THREAD_CNT];
-    atomic<uint64_t> exec_q_rel_cnts[THREAD_CNT];
+    atomic<uint64_t> exec_q_alloc_cnts[THREAD_CNT][PLAN_THREAD_CNT];
+    atomic<uint64_t> exec_q_reuse_cnts[THREAD_CNT][PLAN_THREAD_CNT];
+    atomic<uint64_t> exec_q_rel_cnts[THREAD_CNT][PLAN_THREAD_CNT];
 
     atomic<uint64_t> exec_qs_alloc_cnts[PLAN_THREAD_CNT];
     atomic<uint64_t> exec_qs_reuse_cnts[PLAN_THREAD_CNT];

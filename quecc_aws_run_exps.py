@@ -367,7 +367,7 @@ env = dict(os.environ)
 
 time_enable = False;
 dry_run = False;
-vm_shut = True;
+vm_shut = False;
 vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
 num_trials = 2;
@@ -431,12 +431,14 @@ zipftheta = [0.99]
 # batch_sized = [5184] // this causes problems, so we ommit it
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
-pt_perc = [0.25,0.5,0.75]
+pt_perc = [0.25,0.5,0.75,1]
+# pt_perc = [0.5,1]
 # pt_perc = [1]
 
 # parts_accessed = [1,32]
 # parts_accessed = [0.5]
-parts_accessed = [8,16,24,32]
+parts_accessed = [1,8,16,24,32]
+# parts_accessed = [1]
 write_perc = [0.0,0.25,0.5,0.75,1.0]
 mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 # ycsb_op_per_txn = [1,10,16,32] #set to a single element if workload is not YCSB

@@ -408,14 +408,16 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
 //        uint64_t primary_key = row_id * g_part_cnt + partition_id;
 
 #if !RECORD_ZIPF
-
+        table_size = g_synth_table_size / g_part_cnt;
         row_id = zipf(table_size - 1, g_zipf_theta);
         assert(row_id < table_size);
         primary_key = row_id + (partition_id * table_size);
         assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
 #else
-        if (FIRST_PART_LOCAL && rid == 0) {
+        if ((FIRST_PART_LOCAL && rid == 0) || g_part_per_txn == 1) {
+//        if (FIRST_PART_LOCAL && rid == 0) {
             table_size = g_synth_table_size / g_part_cnt;
+            M_ASSERT_V(table_size > g_req_per_query, "partition size must be > g_req_per_query, parition size = %ld, req_per_query = %d\n",table_size, g_req_per_query);
             partition_id = home_partition_id;;
             row_id = zipf(table_size - 1, g_zipf_theta);
             assert(row_id < table_size);
