@@ -113,7 +113,9 @@ struct priority_group{
 //    uint64_t batch_txn_cnt;
     volatile bool initialized = false;
     volatile atomic<uint8_t> status;
+#if BUILD_TXN_DEPS
     hash_table_t * txn_dep_graph;
+#endif
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
     transaction_context txn_ctxs[BATCH_SIZE/PLAN_THREAD_CNT];
@@ -158,7 +160,7 @@ struct assign_entry{
     uint64_t exec_thd_id;
 };
 
-inline void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list);
+void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list);
 void assign_entry_init(assign_entry * &a_entry, uint64_t thd_id);
 void assign_entry_add(assign_entry * a_entry, Array<exec_queue_entry> * exec_q);
 void assign_entry_clear(assign_entry * &a_entry);
@@ -200,9 +202,11 @@ typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCom
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCompareStartRange>> split_min_heap_t;
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<AssignEntryCompareSum>> assign_ptr_min_heap_t;
 
-//inline void exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
-//void exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id);
-
+struct sync_block{
+    int64_t done;
+    int64_t next_stage;
+    char padding[48];
+};
 
 inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
 void txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id);

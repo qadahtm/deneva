@@ -239,6 +239,15 @@ public:
     double * exec_txn_wait_time;
     double * exec_eq_swtich_time;
 
+    double * wt_hl_plan_time;
+    double * wt_hl_exec_time;
+    double * wt_hl_commit_time;
+
+    double * wt_hl_sync_plan_time;
+    double * wt_hl_sync_exec_time;
+    double * wt_hl_sync_commit_time;
+
+
 
   // OCC
   double occ_validate_time;

@@ -73,6 +73,14 @@ void Stats_thd::init(uint64_t thd_id) {
   exec_entry_deq_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_txn_wait_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   exec_eq_swtich_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+
+  wt_hl_plan_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_hl_exec_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_hl_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_hl_sync_plan_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_hl_sync_exec_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_hl_sync_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+
 #endif
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
@@ -280,6 +288,13 @@ void Stats_thd::clear() {
     exec_entry_deq_time[i]=0;
     exec_txn_wait_time[i]=0;
     exec_eq_swtich_time[i]=0;
+    wt_hl_plan_time[i] =0;
+    wt_hl_exec_time[i] =0;
+    wt_hl_commit_time[i] =0;
+
+    wt_hl_sync_plan_time[i] =0;
+    wt_hl_sync_exec_time[i] =0;
+    wt_hl_sync_commit_time[i] =0;
   }
 #endif
 
@@ -1157,8 +1172,41 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,i
             ,exec_txn_wait_time[i] /BILLION
     );
-
-
+    fprintf(outf,
+            ",quecc_exec%ld_eq_swtich_time=%f"
+            ,i
+            ,exec_eq_swtich_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_wt%ld_hl_plan_time=%f"
+            ,i
+            ,wt_hl_plan_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_wt%ld_hl_exec_time=%f"
+            ,i
+            ,wt_hl_exec_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_wt%ld_hl_commit_time=%f"
+            ,i
+            ,wt_hl_commit_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_wt%ld_hl_sync_plan_time=%f"
+            ,i
+            ,wt_hl_sync_plan_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_wt%ld_hl_sync_exec_time=%f"
+            ,i
+            ,wt_hl_sync_exec_time[i] /BILLION
+    );
+    fprintf(outf,
+            ",quecc_wt%ld_hl_sync_commit_time=%f"
+            ,i
+            ,wt_hl_sync_commit_time[i] /BILLION
+    );
   }
 #endif
 
@@ -1689,6 +1737,14 @@ void Stats_thd::combine(Stats_thd * stats) {
     exec_entry_deq_time[i] += stats->exec_entry_deq_time[i];
     exec_txn_wait_time[i] += stats->exec_txn_wait_time[i];
     exec_eq_swtich_time[i] += stats->exec_eq_swtich_time[i];
+
+    wt_hl_plan_time[i] += stats->wt_hl_plan_time[i];
+    wt_hl_exec_time[i] += stats->wt_hl_exec_time[i];
+    wt_hl_commit_time[i] += stats->wt_hl_commit_time[i];
+
+    wt_hl_sync_plan_time[i] += stats->wt_hl_sync_plan_time[i];
+    wt_hl_sync_exec_time[i] += stats->wt_hl_sync_exec_time[i];
+    wt_hl_sync_commit_time[i] += stats->wt_hl_sync_commit_time[i];
   }
 #endif
 

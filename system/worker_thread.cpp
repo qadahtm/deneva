@@ -610,6 +610,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
     plan_starttime = get_sys_clock();
     planner_pg = &work_queue.batch_pg_map[batch_slot][_planner_id];
+#if BUILD_TXN_DEPS
     if (!planner_pg->initialized){
         // since we are doing effectively one batch at a time.
         planner_pg->txn_dep_graph = new hash_table_t();
@@ -618,10 +619,9 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
     else{
         M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
     }
-
     // use txn_dep from planner_pg
     txn_dep_graph = planner_pg->txn_dep_graph;
-
+#endif
 
     while (true){
 
@@ -661,7 +661,9 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
         if (pbatch_cnt == 0){
             // first transaction in batch
+#if BUILD_TXN_DEPS
             M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0,"WT_%ld: first txn in batch_id = %ld\n", _thd_id, wbatch_id);
+#endif
         }
 
         switch (msg->get_rtype()) {
@@ -844,7 +846,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
             if (commit_et_id == _thd_id){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-                assert(planner_pg->status.fetch_add(0) == PG_READY);
+                assert(planner_pg->status.load() == PG_READY);
                 rc = commit_txn(planner_pg, j);
                 if (rc == Commit){
                     commit_time = get_sys_clock();
@@ -1177,6 +1179,8 @@ RC WorkerThread::run_normal_mode() {
 //        }
 //    }
     idle_starttime = 0;
+    SRC src = SUCCESS;
+    uint64_t batch_proc_starttime = 0;
 #endif
 
     while (!simulation->is_done()) {
@@ -1185,7 +1189,7 @@ RC WorkerThread::run_normal_mode() {
         progress_stats();
 
 #if CC_ALG == QUECC
-
+        batch_proc_starttime = get_sys_clock();
         // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
 
@@ -1380,57 +1384,75 @@ RC WorkerThread::run_normal_mode() {
         // Plan
 //        DEBUG_Q("WT_%ld: going to plan batch_id = %ld at batch_slot = %ld, plan_comp_cnt = %d\n",
 //                _thd_id, wbatch_id, batch_slot, work_queue.batch_plan_comp_cnts[batch_slot].load());
+        DEBUG_Q("WT_%ld: going to plan batch_id = %ld at batch_slot = %ld\n",
+                _thd_id, wbatch_id, batch_slot);
 #if BARRIER_SYNC
         pthread_barrier_wait(&plan_phase_start_bar);
 #endif
-        if (plan_batch(batch_slot, my_txn_man) == SUCCESS){
+        prof_starttime = get_sys_clock();
+        src = plan_batch(batch_slot, my_txn_man);
+        INC_STATS(_thd_id, wt_hl_plan_time[_thd_id], get_sys_clock()-prof_starttime);
+        if (src == SUCCESS){
         //Sync
-//            DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
+            DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
 #if BARRIER_SYNC
             pthread_barrier_wait(&plan_phase_end_bar);
 #endif
-            if (sync_on_planning_phase_end(batch_slot) == BREAK){
+            prof_starttime = get_sys_clock();
+            src = sync_on_planning_phase_end(batch_slot);
+            INC_STATS(_thd_id, wt_hl_sync_plan_time[_thd_id], get_sys_clock()-prof_starttime);
+            if (src == BREAK){
                 goto end_et;
             }
 
-//                DEBUG_Q("WT_%ld: Starting execution phase, batch_id = %ld at batch_slot = %ld, idle_time = %f\n",
-//                        _thd_id, wbatch_id, batch_slot, stats._stats[_thd_id]->exec_idle_time[_thd_id]/BILLION);
+                DEBUG_Q("WT_%ld: Starting execution phase, batch_id = %ld at batch_slot = %ld, idle_time = %f\n",
+                        _thd_id, wbatch_id, batch_slot, stats._stats[_thd_id]->exec_idle_time[_thd_id]/BILLION);
 #if BARRIER_SYNC
             pthread_barrier_wait(&exec_phase_start_bar);
 #endif
         // Execute
-            if (execute_batch(batch_slot,eq_comp_cnts, my_txn_man) == SUCCESS) {
+            prof_starttime = get_sys_clock();
+            src = execute_batch(batch_slot,eq_comp_cnts, my_txn_man);
+            INC_STATS(_thd_id, wt_hl_exec_time[_thd_id], get_sys_clock()-prof_starttime);
+            if (src == SUCCESS) {
 
 #if PARALLEL_COMMIT
                 // ET is done with its PGs for the current batch
 //            DEBUG_Q("ET_%ld: done with my batch partition, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
 
-//                DEBUG_Q("WT_%ld: going to sync for execution phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
+                DEBUG_Q("WT_%ld: going to sync for execution phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
                 // Sync
                 // spin on map_comp_cnts
 #if BARRIER_SYNC
                 pthread_barrier_wait(&exec_phase_end_bar);
 #endif
-                if (sync_on_execution_phase_end(batch_slot) == BREAK){
+                prof_starttime = get_sys_clock();
+                src = sync_on_execution_phase_end(batch_slot);
+                INC_STATS(_thd_id, wt_hl_sync_exec_time[_thd_id], get_sys_clock()-prof_starttime);
+                if (src == BREAK){
                     goto end_et;
                 }
                 //Commit
 #if BARRIER_SYNC
                 pthread_barrier_wait(&commit_phase_start_bar);
 #endif
-//                DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
+                DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
 
                 // process txn contexts in the current batch that are assigned to me (deterministically)
+                prof_starttime = get_sys_clock();
                 commit_batch(batch_slot);
+                INC_STATS(_thd_id, wt_hl_commit_time[_thd_id], get_sys_clock()-prof_starttime);
 
                 // indicate that I am done with all commit phase
-//                DEBUG_Q("ET_%ld: is done with commit task, going to sync for commit\n", _thd_id);
+                DEBUG_Q("ET_%ld: is done with commit task, going to sync for commit\n", _thd_id);
 
 #if BARRIER_SYNC
                 pthread_barrier_wait(&commit_phase_end_bar);
 #endif
-
-                if (sync_on_commit_phase_end(batch_slot) == BREAK){
+                prof_starttime = get_sys_clock();
+                src = sync_on_commit_phase_end(batch_slot);
+                INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-prof_starttime);
+                if (src == BREAK){
                     goto end_et;
                 }
 
@@ -1595,13 +1617,13 @@ RC WorkerThread::run_normal_mode() {
 
 #endif // if PARALLEL_COMMIT
                 wbatch_id++;
-//                DEBUG_Q("ET_%ld : ** Committed batch %ld, and moving to next batch %ld\n",
-//                    _thd_id, wbatch_id-1, wbatch_id);
+                DEBUG_Q("ET_%ld : ** Committed batch %ld, and moving to next batch %ld\n",
+                    _thd_id, wbatch_id-1, wbatch_id);
 
             }
 
         }
-
+        INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock()-batch_proc_starttime);
 #endif //if PIPELINED
 
 #elif CC_ALG == DUMMY_CC

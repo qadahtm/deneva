@@ -110,10 +110,24 @@ public:
 //    volatile atomic<uint16_t> batch_plan_comp_cnts[BATCH_MAP_LENGTH];
 //    volatile atomic<uint16_t> batch_map_comp_cnts[BATCH_MAP_LENGTH];
 //    volatile atomic<uint16_t> batch_commit_et_cnts[BATCH_MAP_LENGTH];
-// need to make not to use stale values of these counts.
-    volatile atomic<uint16_t> * batch_plan_comp_cnts;
-    volatile atomic<uint16_t> * batch_map_comp_cnts;
-    volatile atomic<uint16_t> * batch_commit_et_cnts;
+#if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC || WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
+    // need to make not to use stale values of these counts.
+    atomic<uint16_t> * batch_plan_comp_cnts;
+    atomic<uint16_t> * batch_map_comp_cnts;
+    atomic<uint16_t> * batch_commit_et_cnts;
+#elif WT_SYNC_METHOD == SYNC_BLOCK
+    sync_block plan_sblocks[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
+    sync_block exec_sblocks[BATCH_MAP_LENGTH][THREAD_CNT];
+    sync_block commit_sblocks[BATCH_MAP_LENGTH][THREAD_CNT];
+#elif WT_SYNC_METHOD == CAS_GLOBAL_SC
+    atomic<uint16_t> ** batch_plan_comp_status;
+    atomic<uint16_t> ** batch_exec_comp_status;
+    atomic<uint16_t> ** batch_commit_comp_status;
+
+    atomic<uint16_t> ** batch_plan_sync_status;
+    atomic<uint16_t> ** batch_exec_sync_status;
+    atomic<uint16_t> ** batch_commit_sync_status;
+#endif
 #endif
 
 

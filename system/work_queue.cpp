@@ -72,22 +72,52 @@ void QWorkQueue::init() {
     }
   }
 
+#if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC || WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
   batch_plan_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
   batch_map_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
   batch_commit_et_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
+#elif WT_SYNC_METHOD == CAS_GLOBAL_SC
+  batch_plan_comp_status = (atomic<uint16_t> **) mem_allocator.align_alloc(sizeof(atomic<uint16_t>*)*BATCH_MAP_LENGTH);
+  batch_exec_comp_status = (atomic<uint16_t> **) mem_allocator.align_alloc(sizeof(atomic<uint16_t>*)*BATCH_MAP_LENGTH);
+  batch_commit_comp_status = (atomic<uint16_t> **) mem_allocator.align_alloc(sizeof(atomic<uint16_t>*)*BATCH_MAP_LENGTH);
+  batch_plan_sync_status = (atomic<uint16_t> **) mem_allocator.align_alloc(sizeof(atomic<uint16_t>*)*BATCH_MAP_LENGTH);
+  batch_exec_sync_status = (atomic<uint16_t> **) mem_allocator.align_alloc(sizeof(atomic<uint16_t>*)*BATCH_MAP_LENGTH);
+  batch_commit_sync_status = (atomic<uint16_t> **) mem_allocator.align_alloc(sizeof(atomic<uint16_t>*)*BATCH_MAP_LENGTH);
+#endif
 
   for (uint64_t i=0; i < g_batch_map_length ; i++){
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC || WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
       (batch_plan_comp_cnts[i]).store(0);
       (batch_map_comp_cnts[i]).store(0);
       (batch_commit_et_cnts[i]).store(0);
+#elif WT_SYNC_METHOD == CAS_GLOBAL_SC
+    batch_plan_comp_status[i] = (atomic<uint16_t> *) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*g_plan_thread_cnt);
+    batch_plan_sync_status[i] = (atomic<uint16_t> *) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*g_plan_thread_cnt);
+    batch_exec_comp_status[i] = (atomic<uint16_t> *) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*g_thread_cnt);
+    batch_commit_comp_status[i] = (atomic<uint16_t> *) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*g_thread_cnt);
+    batch_exec_sync_status[i] = (atomic<uint16_t> *) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*g_thread_cnt);
+    batch_commit_sync_status[i] = (atomic<uint16_t> *) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*g_thread_cnt);
+
+    for (uint64_t j=0; j < g_thread_cnt; j++){
+      batch_exec_comp_status[i][j].store(0);
+      batch_commit_comp_status[i][j].store(0);
+      batch_exec_sync_status[i][j].store(0);
+      batch_commit_sync_status[i][j].store(0);
+    }
+#endif // WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
 #endif
     for (uint64_t j=0; j < g_plan_thread_cnt; j++){
+#if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC || WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
 #if COMMIT_BEHAVIOR == AFTER_PG_COMP
       (batch_map_comp_cnts[i][j]).store(0);
 #endif
-        // pointer-based implementation of PG_MAP
-        // with static allocation there is no need fo this
+#elif WT_SYNC_METHOD == CAS_GLOBAL_SC
+      batch_plan_comp_status[i][j].store(0);
+      batch_plan_sync_status[i][j].store(0);
+#endif
+      // pointer-based implementation of PG_MAP
+      // with static allocation there is no need fo this
 #if BATCHING_MODE == SIZE_BASED
       (batch_pg_map[i][j]).status.store(PG_AVAILABLE);
 #else

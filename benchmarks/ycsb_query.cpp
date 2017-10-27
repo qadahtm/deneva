@@ -370,6 +370,14 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
     double r_twr = (double) (mrand->next() % 10000) / 10000;
 
     int rid = 0;
+
+    double r_mpt = (double) (mrand->next() % 10000) / 10000;
+    uint64_t part_limit;
+    if (r_mpt < g_mpr)
+        part_limit = g_part_per_txn;
+    else
+        part_limit = 1;
+
     for (UInt32 i = 0; i < g_req_per_query; i++) {
         double r = (double) (mrand->next() % 10000) / 10000;
         uint64_t partition_id;
@@ -384,9 +392,9 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
 #else
             partition_id = mrand->next() % g_part_cnt;
 #endif
-            if (g_strict_ppt && g_part_per_txn <= g_part_cnt) {
-                while ((partitions_accessed.size() < g_part_per_txn && partitions_accessed.count(partition_id) > 0) ||
-                       (partitions_accessed.size() == g_part_per_txn && partitions_accessed.count(partition_id) == 0)) {
+            if (g_strict_ppt && part_limit <= g_part_cnt) {
+                while ((partitions_accessed.size() < part_limit && partitions_accessed.count(partition_id) > 0) ||
+                       (partitions_accessed.size() == part_limit && partitions_accessed.count(partition_id) == 0)) {
 #if PART_ZIPF
                     partition_id = zipf_part(g_part_cnt, g_zipf_theta) % g_part_cnt;
 #else
@@ -414,7 +422,7 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
         primary_key = row_id + (partition_id * table_size);
         assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
 #else
-        if ((FIRST_PART_LOCAL && rid == 0) || g_part_per_txn == 1) {
+        if ((FIRST_PART_LOCAL && rid == 0) || part_limit == 1) {
 //        if (FIRST_PART_LOCAL && rid == 0) {
             table_size = g_synth_table_size / g_part_cnt;
             M_ASSERT_V(table_size > g_req_per_query, "partition size must be > g_req_per_query, parition size = %ld, req_per_query = %d\n",table_size, g_req_per_query);
@@ -439,9 +447,9 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
 //            primary_key = row_id * g_part_cnt + partition_id;
             primary_key = row_id;
             partition_id= (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key);
-            if (g_strict_ppt && g_part_per_txn <= g_part_cnt) {
-                while ((partitions_accessed.size() < g_part_per_txn && partitions_accessed.count(partition_id) > 0) ||
-                       (partitions_accessed.size() == g_part_per_txn && partitions_accessed.count(partition_id) == 0)) {
+            if (g_strict_ppt && part_limit <= g_part_cnt) {
+                while ((partitions_accessed.size() < part_limit && partitions_accessed.count(partition_id) > 0) ||
+                       (partitions_accessed.size() == part_limit && partitions_accessed.count(partition_id) == 0)) {
 //                    DEBUG_Q("this is not good, generting another access, "
 //                            "part_id = %ld, row_id=%ld, key=%ld, key_to_part=%ld, key rem g_part_cnt = %ld, "
 //                                    "we are accessing %ld partitions\n",

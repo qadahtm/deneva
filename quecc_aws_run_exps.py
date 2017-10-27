@@ -18,7 +18,7 @@ from datetime import timedelta
 import multiprocessing
 from termcolor import colored, cprint
 
-def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt):
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp):
     
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -49,9 +49,9 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt):
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
     if is_ycsb:
-        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt)    
+        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp)    
     else:
-        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict)
+        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv)
     print(msg_out)
 
     for line in oconf:
@@ -65,12 +65,20 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt):
         #changing cc_alg
         ccalg_m = re.search('#define CC_ALG\s+(\S+)', line.strip())
         if (ccalg_m):
-            # print(ccalg_m.group(1))
             nline = '#define CC_ALG {}\n'.format(ncc_alg)
         theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d+)', line.strip())
+
         if (theta_m):
-            # print(theta_m.group(1))
             nline = '#define ZIPF_THETA {}\n'.format(theta)
+
+        m = re.search('#define WRITE_PERC\s+(\d\.\d+)', line.strip())
+        if (m):
+            nline = '#define WRITE_PERC {}\n'.format(wp)
+
+        m = re.search('#define MPR\s+(\d\.\d+)', line.strip())
+        if (m):
+            nline = '#define MPR {}\n'.format(mprv)
+
         pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
         if (pt_m):
             nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))            
@@ -424,26 +432,36 @@ batch_sized = [40320]
 wthreads = [vm_cores]
 # wthreads = [32] # redo experiments
 num_trials = 2
-cc_algs = ['QUECC']
+cc_algs = ['HSTORE','SILO','OCC']
+# cc_algs = ['QUECC']
+# zipftheta = [0.0,0.4,0.6,0.8,0.9,0.99]
 # zipftheta = [0.0]
-zipftheta = [0.99]
+zipftheta = [0.0,0.8]
+# zipftheta = [0.8] #high contention
+# zipftheta = [0.99]
 # batch_sized = [5184,10368,20736,41472,82944]
 # batch_sized = [5184] // this causes problems, so we ommit it
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
-pt_perc = [0.25,0.5,0.75,1]
+# pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.5,1]
-# pt_perc = [1]
+pt_perc = [1]
 
 # parts_accessed = [1,32]
-# parts_accessed = [0.5]
-parts_accessed = [1,8,16,24,32]
-# parts_accessed = [1]
-write_perc = [0.0,0.25,0.5,0.75,1.0]
-mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+parts_accessed = [1,3,5,10] # for OPT=10
+# parts_accessed = [1,4,8,16] # for OPT=16
+# parts_accessed = [1,8,16,24,32] # for pptvar
+# parts_accessed = [32]
+# write_perc = [0.0,0.25,0.5,0.75,1.0]
+write_perc = [0.5]
+# mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+# mpt_perc = [0.0,0.25,0.5,0.75,1.0]
+# mpt_perc = [1.0]
+mpt_perc = [0.1] #10% multi partition transactions
 # ycsb_op_per_txn = [1,10,16,32] #set to a single element if workload is not YCSB
-ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
+# ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
+ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 is_ycsb = True
 procs = []
 seq_no = 0
@@ -509,59 +527,61 @@ for ncc_alg in cc_algs:
     for wthd in wthreads:
         for theta in zipftheta:
             runexp = True
-            for oppt in ycsb_op_per_txn:
-                for pa in parts_accessed:
-                    assert(pa > 0) 
-                    if pa < 1:
-                        pa = int(wthd*pa)
+            for wp in write_perc:
+                for mprv in mpt_perc:
+                    for oppt in ycsb_op_per_txn:
+                        for pa in parts_accessed:
+                            assert(pa > 0) 
+                            if pa < 1:
+                                pa = int(wthd*pa)
 
-                    for ppts in strict:
-                        exp_cnt = 0
-                        for pt in pt_perc:                    
-                            for bs in batch_sized:
-                                #use this condition if QUECC is included only
-                                if ncc_alg != 'QUECC' and exp_cnt >= 1:
-                                    runexp = False
+                            for ppts in strict:
+                                exp_cnt = 0
+                                for pt in pt_perc:                    
+                                    for bs in batch_sized:
+                                        #use this condition if QUECC is included only
+                                        if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                                            runexp = False
 
-                                if runexp:
-                                    exp_cnt = exp_cnt + 1        
-                                    if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
-                                        pt = 1
-                                    set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt)
-                                    # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                                    if not dry_run:
-                                        build_project()
-                                    for trial in list(range(num_trials)):
-                                        if pt <= 1:
-                                            pt_cnt = str(int(pt*wthd))
-                                            et_cnt = str(wthd-int(pt*wthd));
-                                            pt_perc_str = str(int(pt*100))
-                                        else:
-                                            pt_cnt = str(pt)
-                                            et_cnt = str(wthd-pt);
-                                            pt_perc_str = str(0)
-                                        
-                                        if (wthd-int(pt*wthd)) == 0:
-                                            et_cnt = str(wthd);
+                                        if runexp:
+                                            exp_cnt = exp_cnt + 1        
+                                            if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
+                                                pt = 1
+                                            set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt,mprv,wp)
+                                            # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                                            if not dry_run:
+                                                build_project()
+                                            for trial in list(range(num_trials)):
+                                                if pt <= 1:
+                                                    pt_cnt = str(int(pt*wthd))
+                                                    et_cnt = str(wthd-int(pt*wthd));
+                                                    pt_perc_str = str(int(pt*100))
+                                                else:
+                                                    pt_cnt = str(pt)
+                                                    et_cnt = str(wthd-pt);
+                                                    pt_perc_str = str(0)
+                                                
+                                                if (wthd-int(pt*wthd)) == 0:
+                                                    et_cnt = str(wthd);
 
-                                        if prefix != "":
-                                            if ppts:
-                                                nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
-                                            else:
-                                                nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
-                                        else:
-                                            if ppts:
-                                                nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
-                                            else:
-                                                nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
-                                        run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                                        # print('Dry run: {}, {}, {}, t{}, {}'
-                                        #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
-                                        seq_no = seq_no + 1
-                                    cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
-                                    cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
-                                    # print("cp {} {}".format(cfgfname, cfg_copy))
-                                    exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
+                                                if prefix != "":
+                                                    if ppts:
+                                                        nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                    else:
+                                                        nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                else:
+                                                    if ppts:
+                                                        nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                    else:
+                                                        nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                                # print('Dry run: {}, {}, {}, t{}, {}'
+                                                #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                                seq_no = seq_no + 1
+                                            cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                                            cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                                            # print("cp {} {}".format(cfgfname, cfg_copy))
+                                            exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)

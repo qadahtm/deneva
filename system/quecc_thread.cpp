@@ -51,7 +51,7 @@ void assign_entry_init(assign_entry * &a_entry, uint64_t pt_thd_id){
     }
 }
 
-inline void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list){
+void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list){
     if (!assign_entry_free_list->pop(a_entry)){
         a_entry = (assign_entry *) mem_allocator.alloc(sizeof(assign_entry));
 //        DEBUG_Q("Allocating a_entry\n");
@@ -1471,7 +1471,9 @@ RC PlannerThread::run_normal_mode() {
 inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs){
 
     if (force_batch_delivery) {
-
+#if DEBUG_QUECC
+        print_eqs_ranges_after_swap();
+#endif
         if (BATCHING_MODE == TIME_BASED) {
             INC_STATS(_thd_id, plan_time_batch_cnts[_planner_id], 1)
             force_batch_delivery = false;
@@ -1882,10 +1884,10 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 #else
             while(work_queue.batch_map[slot_num][_planner_id][i].fetch_add(0) != 0) {
 #if DEBUG_QUECC
-                if (_planner_id == 0){
-                    print_threads_status();
+//                if (_planner_id == 0){
+//                    print_threads_status();
 //                    M_ASSERT_V(false,"PT_%ld: non-zero batch map slot\n",_planner_id);
-                }
+//                }
 #endif
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
@@ -2595,6 +2597,7 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
 }
 
 void PlannerThread::print_eqs_ranges_after_swap() const {//        // print contents after split
+#if SPLIT_MERGE_ENABLED
     for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
         DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
     }
@@ -2603,7 +2606,7 @@ void PlannerThread::print_eqs_ranges_after_swap() const {//        // print cont
         DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
                 _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
     }
-
+#endif
     for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
         DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
     }
@@ -2614,6 +2617,7 @@ void PlannerThread::print_eqs_ranges_after_swap() const {//        // print cont
 }
 
 void PlannerThread::print_eqs_ranges_before_swap() const {//        // print contents after split
+#if SPLIT_MERGE_ENABLED
     for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
         DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
     }
@@ -2622,7 +2626,7 @@ void PlannerThread::print_eqs_ranges_before_swap() const {//        // print con
         DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
                 _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
     }
-
+#endif
     for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
         DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
     }
@@ -2641,9 +2645,13 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     exec_queue_capacity = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * (EXECQ_CAP_FACTOR);
 #elif WORKLOAD == TPCC
     exec_queue_capacity = (planner_batch_size)*(EXECQ_CAP_FACTOR);
-    printf("\nEQ Max size = %ld",exec_queue_capacity);
 #else
     assert(false);
+#endif
+#if DEBUG_QUECC
+    printf("\nEQ Max size = %ld\n",exec_queue_capacity);
+    fflush(stdout);
+//    assert(false);
 #endif
 //    exec_queue_free_list = new boost::lockfree::queue<Array<exec_queue_entry> *> * [THREAD_CNT];
 //    batch_part_free_list = new boost::lockfree::queue<batch_partition *> * [THREAD_CNT];
