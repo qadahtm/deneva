@@ -431,12 +431,12 @@ batch_sized = [40320]
 
 wthreads = [vm_cores]
 # wthreads = [32] # redo experiments
-num_trials = 2
-cc_algs = ['HSTORE','SILO','OCC']
-# cc_algs = ['QUECC']
+num_trials = 1
+# cc_algs = ['NO_WAIT','TIMESTAMP']
+cc_algs = ['QUECC']
 # zipftheta = [0.0,0.4,0.6,0.8,0.9,0.99]
-# zipftheta = [0.0]
-zipftheta = [0.0,0.8]
+zipftheta = [0.0]
+# zipftheta = [0.0,0.8]
 # zipftheta = [0.8] #high contention
 # zipftheta = [0.99]
 # batch_sized = [5184,10368,20736,41472,82944]
@@ -444,20 +444,23 @@ zipftheta = [0.0,0.8]
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
 # pt_perc = [0.25,0.5,0.75,1]
+pt_perc = [0.5,1]
 # pt_perc = [0.5,1]
-pt_perc = [1]
+# pt_perc = [1]
 
 # parts_accessed = [1,32]
-parts_accessed = [1,3,5,10] # for OPT=10
+# parts_accessed = [1,3,5,10] # for OPT=10
 # parts_accessed = [1,4,8,16] # for OPT=16
+# parts_accessed = [1] # for OPT=16
 # parts_accessed = [1,8,16,24,32] # for pptvar
-# parts_accessed = [32]
+parts_accessed = [16]
 # write_perc = [0.0,0.25,0.5,0.75,1.0]
 write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 # mpt_perc = [0.0,0.25,0.5,0.75,1.0]
 # mpt_perc = [1.0]
-mpt_perc = [0.1] #10% multi partition transactions
+# mpt_perc = [0.1] #10% multi partition transactions
+mpt_perc = [1.0] #100% multi partition transactions
 # ycsb_op_per_txn = [1,10,16,32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 

@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 20
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -14,8 +14,8 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 20
-#define PART_CNT 20
+#define PLAN_THREAD_CNT 16
+#define PART_CNT 32
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -56,8 +56,9 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          true
-#define TIME_ENABLE         true //STATS_ENABLE
+#define PROG_STATS          false
+#define TIME_ENABLE         false //STATS_ENABLE
+#define ASSERT_ENABLED      true
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -194,7 +195,7 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED false
+#define PIPELINED true
 #define BARRIER_SYNC false
 #define STATIC_TXN_CTXS true
 
@@ -219,13 +220,20 @@
 #define RR  3
 
 #define QUECC_DB_ACCESS true
+#define SYNC_MASTER_BATCH_CLEANUP false
+#define SYNC_MASTER_RR true
+#define TDG_ENTRY_TYPE  ARRAY_ENTRY
+#define ARRAY_ENTRY     0
+#define VECTOR_ENTRY    1
+
 
 #define CT_ENABLED false
-#define BUILD_TXN_DEPS false
+#define BUILD_TXN_DEPS true
+#define TDG_ENTRY_LENGTH EXEC_QS_MAX_SIZE
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 40//10
+#define EXECQ_CAP_FACTOR 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
@@ -295,7 +303,8 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    (0.1) * MILLION
+//#define MAX_TXN_PER_PART    (0.1) * MILLION
+#define MAX_TXN_PER_PART    (0.1/PART_CNT) * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -316,7 +325,7 @@
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define SYNTH_TABLE_SIZE 16777152 // ~16M recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.8//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -324,9 +333,9 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN 8//PART_CNT
+#define PART_PER_TXN 16//PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
-#define REQ_PER_QUERY 16
+#define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
@@ -350,7 +359,7 @@
 #define WH_UPDATE         true
 #define NUM_WH PART_CNT
 // % of transactions that access multiple partitions
-#define MPR 0.1 // used for TPCC and YCSB
+#define MPR 1.0 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 

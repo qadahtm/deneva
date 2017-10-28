@@ -197,15 +197,19 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
 #else
 BaseQuery * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread_id) {
     assert(server_id < size);
-    qlock->lock();
+//    if (!(CC_ALG == QUECC && THREAD_CNT == PART_CNT)){
+//        qlock->lock();
+//    }
     uint64_t query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     if (query_id > g_max_txn_per_part) {
         __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
         query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     }
     BaseQuery *query = queries[server_id][query_id];
-    qlock->unlock();
-    assert(query);
+//    if (!(CC_ALG == QUECC && THREAD_CNT == PART_CNT)){
+//        qlock->unlock();
+//    }
+    M_ASSERT_V(query, "could not get next query???\n");
     return query;
 }
 #endif

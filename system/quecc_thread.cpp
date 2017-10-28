@@ -1160,8 +1160,7 @@ RC PlannerThread::run_fixed_mode() {
                     //      if access type is read:
                     //          get the last txnd id from vector and insert into tdg
 
-
-
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
                     auto search = access_table.find(key);
                     if (search != access_table.end()){
                         // found
@@ -1182,7 +1181,8 @@ RC PlannerThread::run_fixed_mode() {
                             }
                             else{
                                 // first operation for this txn_id
-                                std::vector<uint64_t> * txn_list = new std::vector<uint64_t>();
+                                std::vector<uint64_t> * txn_list;
+                                quecc_pool.txn_list_get_or_create(txn_list, _planner_id);
 
                                 txn_list->push_back(search->second->back());
                                 txn_dep_graph->insert({planner_txn_id, txn_list});
@@ -1193,12 +1193,51 @@ RC PlannerThread::run_fixed_mode() {
                     else{
                         // not found
                         if (ycsb_req->acctype == WR){
-                            std::vector<uint64_t> * txn_list = new std::vector<uint64_t>();
+                            std::vector<uint64_t> * txn_list;
+                            quecc_pool.txn_list_get_or_create(txn_list, _planner_id);
                             txn_list->push_back(planner_txn_id);
                             access_table.insert({ycsb_req->key, txn_list});
                         }
                     }
-#endif
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                        auto search = access_table.find(key);
+                        if (search != access_table.end()){
+                            // found
+                            if (ycsb_req->acctype == WR){
+                                search->second->add(planner_txn_id);
+                                // this is a write-write conflict,
+                                // but since this is a single record operation, no need for dependencies
+                            }
+                            else{
+                                M_ASSERT_V(search->second->last() >= batch_starting_txn_id,
+                                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
+                                           search->second->last(), batch_starting_txn_id
+                                );
+                                auto search_txn = txn_dep_graph->find(planner_txn_id);
+                                if (search_txn != txn_dep_graph->end()){
+                                    search_txn->second->add(search->second->last());
+                                }
+                                else{
+                                    // first operation for this txn_id
+                                    Array<uint64_t> * txn_list;
+                                    quecc_pool.txn_list_get_or_create(txn_list, _planner_id);
+                                    txn_list->add(search->second->last());
+                                    txn_dep_graph->insert({planner_txn_id, txn_list});
+                                }
+//                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
+                            }
+                        }
+                        else{
+                            // not found
+                            if (ycsb_req->acctype == WR){
+                                Array<uint64_t> * txn_list;
+                                quecc_pool.txn_list_get_or_create(txn_list, _planner_id);
+                                txn_list->add(planner_txn_id);
+                                access_table.insert({ycsb_req->key, txn_list});
+                            }
+                        }
+#endif // -#if TDG_ENTRY_TYPE == VECTOR_TYPE
+#endif // -#if BUILD_TXN_DEPS
                     }
 
 #if DEBUG_QUECC
@@ -1972,7 +2011,12 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 #if BUILD_TXN_DEPS
         prof_starttime = get_sys_clock();
         for (auto it = access_table.begin(); it != access_table.end(); ++it){
-            delete it->second;
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+            std::vector<uint64_t> * txn_list_tmp = it->second;
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+            Array<uint64_t> * txn_list_tmp = it->second;
+#endif
+            quecc_pool.txn_list_release(txn_list_tmp,_planner_id);
         }
         access_table.clear();
 
@@ -1980,7 +2024,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
         txn_dep_graph = new hash_table_t();
         M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
         M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");
-        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
+//        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
 #endif
         // batch delivered
         batch_id++;
@@ -2184,12 +2228,17 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
         if (search != access_table.end()){
             // found
             if (ycsb_req->acctype == WR){
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
                 search->second->push_back(planner_txn_id);
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                search->second->add(planner_txn_id);
+#endif
                 // this is a write-write conflict,
                 // but since this is a single record operation, no need for dependencies
             }
             else{
                 M_ASSERT_V(ycsb_req->acctype == RD, "only RD access type is supported");
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
                 M_ASSERT_V(search->second->back() >= batch_starting_txn_id,
                            "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
                            search->second->back(), batch_starting_txn_id
@@ -2200,19 +2249,46 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
                 }
                 else{
                     // first operation for this txn_id
-                    std::vector<uint64_t> * txn_list = new std::vector<uint64_t>();
+                    std::vector<uint64_t> * txn_list;
+                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
 
                     txn_list->push_back(search->second->back());
                     txn_dep_graph->insert({planner_txn_id, txn_list});
                 }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                M_ASSERT_V(search->second->last() >= batch_starting_txn_id,
+                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
+                           search->second->last(), batch_starting_txn_id
+                );
+                auto search_txn = txn_dep_graph->find(planner_txn_id);
+                if (search_txn != txn_dep_graph->end()){
+                    search_txn->second->add(search->second->last());
+                }
+                else{
+                    // first operation for this txn_id
+                    Array<uint64_t> * txn_list;
+                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
+
+                    txn_list->add(search->second->last());
+                    txn_dep_graph->insert({planner_txn_id, txn_list});
+                }
+#endif
+
 //                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
             }
         }
         else{
             // not found
             if (ycsb_req->acctype == WR){
-                std::vector<uint64_t> * txn_list = new std::vector<uint64_t>();
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+                std::vector<uint64_t> * txn_list;
+                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
                 txn_list->push_back(planner_txn_id);
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                Array<uint64_t> * txn_list;
+                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
+                txn_list->add(planner_txn_id);
+#endif
                 access_table.insert({ycsb_req->key, txn_list});
             }
         }
@@ -2690,6 +2766,12 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
     pg_free_list = new boost::lockfree::queue<priority_group *> * [g_plan_thread_cnt];
     for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+        vector_free_list[i] = new boost::lockfree::queue<std::vector<uint64_t> *>(FREE_LIST_INITIAL_SIZE);
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+        vector_free_list[i] = new boost::lockfree::queue<Array<uint64_t> *>(FREE_LIST_INITIAL_SIZE);
+#endif
+
         exec_qs_free_list[i] = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *>(FREE_LIST_INITIAL_SIZE);
 //        exec_qs_status_free_list[i] = new boost::lockfree::queue<atomic<uint8_t> *>(FREE_LIST_INITIAL_SIZE);
         txn_ctxs_free_list[i] = new boost::lockfree::queue<transaction_context *> (FREE_LIST_INITIAL_SIZE);

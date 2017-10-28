@@ -17,11 +17,14 @@
 #include <boost/lockfree/spsc_queue.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
 #include <boost/random.hpp>
-
+#include <boost/unordered_map.hpp>
 #if CC_ALG == QUECC
 class Workload;
-
-typedef std::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+typedef boost::unordered::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+typedef boost::unordered::unordered_map<uint64_t, Array<uint64_t> *> hash_table_t;
+#endif
 
 /**
  * TODO(tq): makes this more dynamic in terms of the number of fields and support TPCC
@@ -111,6 +114,10 @@ struct priority_group{
 //    uint64_t planner_id;
 //    uint64_t batch_id;
 //    uint64_t batch_txn_cnt;
+    int64_t ready;
+    int64_t done;
+    char padding[48];
+
     volatile bool initialized = false;
     volatile atomic<uint8_t> status;
 #if BUILD_TXN_DEPS
@@ -367,6 +374,29 @@ public:
     void pg_get_or_create(priority_group * &pg, uint64_t planner_id);
     void pg_release(priority_group * &pg, uint64_t planner_id);
 
+    // TDG
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+    void txn_list_get_or_create(std::vector<uint64_t> *& list, uint64_t planner_id){
+        if (!vector_free_list[planner_id]->pop(list)){
+            list = new std::vector<uint64_t>();
+        }
+    }
+    void txn_list_release(std::vector<uint64_t> *& list, uint64_t planner_id){
+        list->clear();
+        while(!vector_free_list[planner_id]->push(list)){};
+    }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+    void txn_list_get_or_create(Array<uint64_t> *& list, uint64_t planner_id){
+        if (!vector_free_list[planner_id]->pop(list)){
+            list = (Array<uint64_t> *) mem_allocator.alloc(sizeof(Array<uint64_t>));
+            list->init(TDG_ENTRY_LENGTH);
+        }
+    }
+    void txn_list_release(Array<uint64_t> *& list, uint64_t planner_id){
+        list->clear();
+        while(!vector_free_list[planner_id]->push(list)){};
+    }
+#endif // #if TDG_ENTRY_TYPE == VECTOR_ENTRY
     //TODO(tq): implement free_all()
     void free_all();
     void print_stats(uint64_t batch_id);
@@ -380,6 +410,12 @@ private:
     boost::lockfree::queue<Array<exec_queue_entry> *> * exec_queue_free_list[THREAD_CNT][PLAN_THREAD_CNT];
     boost::lockfree::queue<batch_partition *> * batch_part_free_list[THREAD_CNT][PLAN_THREAD_CNT];
     boost::lockfree::queue<atomic<uint8_t> *> * exec_qs_status_free_list[THREAD_CNT][PLAN_THREAD_CNT];
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+    boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+    boost::lockfree::queue<Array<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
+#endif
+
 
 //    boost::lockfree::queue<atomic<uint8_t> *> ** exec_qs_status_free_list;
 

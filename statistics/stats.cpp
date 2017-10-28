@@ -77,6 +77,7 @@ void Stats_thd::init(uint64_t thd_id) {
   wt_hl_plan_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_exec_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_hl_cleanup_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_sync_plan_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_sync_exec_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_sync_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
@@ -291,6 +292,7 @@ void Stats_thd::clear() {
     wt_hl_plan_time[i] =0;
     wt_hl_exec_time[i] =0;
     wt_hl_commit_time[i] =0;
+    wt_hl_cleanup_time[i] =0;
 
     wt_hl_sync_plan_time[i] =0;
     wt_hl_sync_exec_time[i] =0;
@@ -622,7 +624,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,parts_touched
   ,avg_parts_touched
   );
-
+#if CC_ALG != QUECC
   // Breakdown
   fprintf(outf,
   ",ts_alloc_time=%f"
@@ -879,7 +881,8 @@ void Stats_thd::print(FILE * outf, bool prog) {
     ,txn_wait_cnt
     ,txn_conflict_cnt
   );
-
+#endif // if CC_ALG != QUECC
+#if !SINGLE_NODE
   // 2PL
   double twopl_sh_owned_avg_time = 0;
   if(twopl_sh_owned_cnt > 0)
@@ -921,6 +924,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
     ,twopl_release_cnt 
     ,twopl_release_time / BILLION
   );
+#endif // - if !SINGLE_NODE
 #if CC_ALG == CALVIN
   // Calvin
   double seq_queue_wait_avg_time = 0;
@@ -1193,6 +1197,11 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,wt_hl_commit_time[i] /BILLION
     );
     fprintf(outf,
+            ",quecc_wt%ld_hl_cleanup_time=%f"
+            ,i
+            ,wt_hl_cleanup_time[i] /BILLION
+    );
+    fprintf(outf,
             ",quecc_wt%ld_hl_sync_plan_time=%f"
             ,i
             ,wt_hl_sync_plan_time[i] /BILLION
@@ -1281,7 +1290,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,maat_range_avg
   );
 #endif
-
+#if CC_ALG != QUECC
   // Logging
   double log_write_avg_time = 0;
   if(log_write_cnt > 0)
@@ -1429,6 +1438,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,lat_s_rem_cc_time/BILLION
   ,lat_s_rem_process_time/BILLION
       );
+#endif
 
   if (!prog) {
       last_start_commit_latency.quicksort(0,last_start_commit_latency.cnt-1);
@@ -1741,6 +1751,7 @@ void Stats_thd::combine(Stats_thd * stats) {
     wt_hl_plan_time[i] += stats->wt_hl_plan_time[i];
     wt_hl_exec_time[i] += stats->wt_hl_exec_time[i];
     wt_hl_commit_time[i] += stats->wt_hl_commit_time[i];
+    wt_hl_cleanup_time[i] += stats->wt_hl_cleanup_time[i];
 
     wt_hl_sync_plan_time[i] += stats->wt_hl_sync_plan_time[i];
     wt_hl_sync_exec_time[i] += stats->wt_hl_sync_exec_time[i];

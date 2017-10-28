@@ -595,7 +595,8 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
     Message * msg = NULL;
     transaction_context * txn_ctxs = NULL;
     priority_group * planner_pg;
-
+    uint64_t pidle_starttime = 0;
+    uint64_t pbprof_starttime = 0;
     /*
      * Client buffers holding transactions are parititoned based on their home paritions
      * Planners will determinitically dequeue transactions from these client buffers based on their query count
@@ -620,7 +621,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
     }
     // use txn_dep from planner_pg
-    txn_dep_graph = planner_pg->txn_dep_graph;
+//    txn_dep_graph = planner_pg->txn_dep_graph;
 #endif
 
     while (true){
@@ -632,17 +633,21 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 //            DEBUG_Q("WT_%ld: Delivered a batch at slot = %ld\n", _thd_id, batch_slot);
             break;
         }
-
-        next_part = (_planner_id + (g_thread_cnt * query_cnt)) % g_part_cnt;
+        if (g_thread_cnt == g_part_cnt){
+            next_part = _thd_id;
+        }
+        else{
+            next_part = (_planner_id + (g_thread_cnt * query_cnt)) % g_part_cnt;
+        }
     //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
         query_cnt++;
-        prof_starttime = get_sys_clock();
+        pbprof_starttime = get_sys_clock();
         msg = work_queue.plan_dequeue(_thd_id, next_part);
-        INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-prof_starttime);
+        INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-pbprof_starttime);
         if(!msg) {
 //            SAMPLED_DEBUG_Q("PL_%ld: no message??\n", _planner_id);
-            if(idle_starttime == 0){
-                idle_starttime = get_sys_clock();
+            if(pidle_starttime == 0){
+                pidle_starttime = get_sys_clock();
             }
             // we have not recieved a transaction
                 continue;
@@ -651,10 +656,10 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 //        DEBUG_Q("PL_%ld: got a query message, query_cnt = %ld\n", _planner_id, query_cnt);
         INC_STATS(_thd_id,plan_queue_deq_cnt[_planner_id],1);
 
-        if (idle_starttime > 0){
+        if (pidle_starttime > 0){
             // plan_idle_time includes dequeue time, which should be subtracted from it
-            INC_STATS(_thd_id,exec_idle_time[_planner_id],get_sys_clock() - idle_starttime);
-            idle_starttime = 0;
+            INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - pidle_starttime);
+            pidle_starttime = 0;
         }
 
         txn_ctxs = planner_pg->txn_ctxs;
@@ -668,9 +673,9 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
         switch (msg->get_rtype()) {
             case CL_QRY: {
-                prof_starttime = get_sys_clock();
+//                pbprof_starttime = get_sys_clock();
                 plan_client_msg(msg, txn_ctxs, my_txn_man);
-                INC_STATS(_thd_id, exec_txn_proc_time[_thd_id], get_sys_clock()-prof_starttime);
+//                INC_STATS(_thd_id, exec_txn_proc_time[_thd_id], get_sys_clock()-pbprof_starttime);
                 break;
             }
             default:
@@ -680,9 +685,6 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
 
 #endif
-
-
-
     return SUCCESS;
 }
 
@@ -975,8 +977,9 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
         auto search = planner_pg->txn_dep_graph->find(txn_ctxs[j].txn_id);
         if (search != planner_pg->txn_dep_graph->end()){
             // print dependenent transactions for now.
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
             if (search->second->size() > 0){
-                // there are dependen transactions
+                // there are dependent transactions
 //                DEBUG_Q("ET_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[j].txn_id, search->second->size());
 //                for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
 //                    DEBUG_Q("ET_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[j].txn_id, (uint64_t) *it);
@@ -990,6 +993,19 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
                            d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
                            (uint64_t)txn_ctxs, wbatch_id, j
                 );
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                if (search->second->size() > 0){
+                // there are dependent transactions
+                uint64_t d_txn_id = search->second->last();
+                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
+                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
+                           "ET_%ld: Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
+                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld), batch_id=%ld, j = %ld \n", _thd_id,
+                           txn_ctxs[d_txn_ctx_idx].txn_id,
+                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
+                           (uint64_t)txn_ctxs, wbatch_id, j
+                );
+#endif
                 if (txn_ctxs[d_txn_ctx_idx].txn_state == TXN_READY_TO_ABORT){
                     // abort due to dependencies on an aborted txn
                     //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
@@ -1181,6 +1197,7 @@ RC WorkerThread::run_normal_mode() {
     idle_starttime = 0;
     SRC src = SUCCESS;
     uint64_t batch_proc_starttime = 0;
+    uint64_t hl_prof_starttime = 0;
 #endif
 
     while (!simulation->is_done()) {
@@ -1189,32 +1206,71 @@ RC WorkerThread::run_normal_mode() {
         progress_stats();
 
 #if CC_ALG == QUECC
-        batch_proc_starttime = get_sys_clock();
+        if( batch_proc_starttime == 0 && simulation->is_warmup_done()){
+            batch_proc_starttime = get_sys_clock();
+        }
+        else {
+            batch_proc_starttime =0;
+        }
         // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
 
 #if PIPELINED
-        if (execute_batch(batch_slot, eq_comp_cnts, my_txn_man) == SUCCESS) {
+        if (batch_proc_starttime > 0){
+            hl_prof_starttime = get_sys_clock();
+        }
+        src = execute_batch(batch_slot, eq_comp_cnts, my_txn_man);
+        if (batch_proc_starttime > 0) {
+            INC_STATS(_thd_id, wt_hl_exec_time[_thd_id], get_sys_clock() - hl_prof_starttime);
+        }
+        if (src == SUCCESS) {
 
 #if PARALLEL_COMMIT
             // ET is done with its PGs for the current batch
 //            DEBUG_Q("ET_%ld: done with my batch partition, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
 
-            // spin on map_comp_cnts
-            if (sync_on_execution_phase_end(batch_slot) == BREAK){
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
+            src = sync_on_execution_phase_end(batch_slot);
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_sync_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
+            if (src == BREAK){
                 goto end_et;
             }
 
 //            DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
 
             // process txn contexts in the current batch that are assigned to me (deterministically)
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
             commit_batch(batch_slot);
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
 
             // indicate that I am done with all commit phase
 //            DEBUG_Q("ET_%ld: is done with commit task for batch_slot = %ld\n", _thd_id, batch_slot);
 
-            if (sync_on_commit_phase_end(batch_slot) == BREAK){
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
+            src = sync_on_commit_phase_end(batch_slot);
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
+            if (src == BREAK){
                 goto end_et;
+            }
+
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
+            batch_cleanup(batch_slot);
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
             }
 #else
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
@@ -1389,18 +1445,26 @@ RC WorkerThread::run_normal_mode() {
 #if BARRIER_SYNC
         pthread_barrier_wait(&plan_phase_start_bar);
 #endif
-        prof_starttime = get_sys_clock();
+        if (batch_proc_starttime > 0){
+            hl_prof_starttime = get_sys_clock();
+        }
         src = plan_batch(batch_slot, my_txn_man);
-        INC_STATS(_thd_id, wt_hl_plan_time[_thd_id], get_sys_clock()-prof_starttime);
+        if (batch_proc_starttime > 0) {
+            INC_STATS(_thd_id, wt_hl_plan_time[_thd_id], get_sys_clock() - hl_prof_starttime);
+        }
         if (src == SUCCESS){
         //Sync
             DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
 #if BARRIER_SYNC
             pthread_barrier_wait(&plan_phase_end_bar);
 #endif
-            prof_starttime = get_sys_clock();
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
             src = sync_on_planning_phase_end(batch_slot);
-            INC_STATS(_thd_id, wt_hl_sync_plan_time[_thd_id], get_sys_clock()-prof_starttime);
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_sync_plan_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
             if (src == BREAK){
                 goto end_et;
             }
@@ -1411,9 +1475,13 @@ RC WorkerThread::run_normal_mode() {
             pthread_barrier_wait(&exec_phase_start_bar);
 #endif
         // Execute
-            prof_starttime = get_sys_clock();
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
             src = execute_batch(batch_slot,eq_comp_cnts, my_txn_man);
-            INC_STATS(_thd_id, wt_hl_exec_time[_thd_id], get_sys_clock()-prof_starttime);
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
             if (src == SUCCESS) {
 
 #if PARALLEL_COMMIT
@@ -1426,9 +1494,13 @@ RC WorkerThread::run_normal_mode() {
 #if BARRIER_SYNC
                 pthread_barrier_wait(&exec_phase_end_bar);
 #endif
-                prof_starttime = get_sys_clock();
+                if (batch_proc_starttime > 0){
+                    hl_prof_starttime = get_sys_clock();
+                }
                 src = sync_on_execution_phase_end(batch_slot);
-                INC_STATS(_thd_id, wt_hl_sync_exec_time[_thd_id], get_sys_clock()-prof_starttime);
+                if (batch_proc_starttime > 0){
+                    INC_STATS(_thd_id, wt_hl_sync_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
                 if (src == BREAK){
                     goto end_et;
                 }
@@ -1439,9 +1511,13 @@ RC WorkerThread::run_normal_mode() {
                 DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
 
                 // process txn contexts in the current batch that are assigned to me (deterministically)
-                prof_starttime = get_sys_clock();
+                if (batch_proc_starttime > 0){
+                    hl_prof_starttime = get_sys_clock();
+                }
                 commit_batch(batch_slot);
-                INC_STATS(_thd_id, wt_hl_commit_time[_thd_id], get_sys_clock()-prof_starttime);
+                if (batch_proc_starttime > 0){
+                    INC_STATS(_thd_id, wt_hl_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
 
                 // indicate that I am done with all commit phase
                 DEBUG_Q("ET_%ld: is done with commit task, going to sync for commit\n", _thd_id);
@@ -1449,13 +1525,24 @@ RC WorkerThread::run_normal_mode() {
 #if BARRIER_SYNC
                 pthread_barrier_wait(&commit_phase_end_bar);
 #endif
-                prof_starttime = get_sys_clock();
+                if (batch_proc_starttime > 0){
+                    hl_prof_starttime = get_sys_clock();
+                }
                 src = sync_on_commit_phase_end(batch_slot);
-                INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-prof_starttime);
+                if (batch_proc_starttime > 0){
+                    INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
                 if (src == BREAK){
                     goto end_et;
                 }
 
+                if (batch_proc_starttime > 0){
+                    hl_prof_starttime = get_sys_clock();
+                }
+                batch_cleanup(batch_slot);
+                if (batch_proc_starttime > 0){
+                    INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
 #else
                 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
             work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);
@@ -1621,10 +1708,12 @@ RC WorkerThread::run_normal_mode() {
                     _thd_id, wbatch_id-1, wbatch_id);
 
             }
-
         }
-        INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock()-batch_proc_starttime);
 #endif //if PIPELINED
+        if(batch_proc_starttime > 0){
+            INC_STATS(_thd_id, exec_batch_proc_time[_thd_id], get_sys_clock()-batch_proc_starttime);
+            batch_proc_starttime =0;
+        }
 
 #elif CC_ALG == DUMMY_CC
         Message * msg = work_queue.dequeue(get_thd_id());

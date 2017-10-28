@@ -242,6 +242,7 @@ public:
     double * wt_hl_plan_time;
     double * wt_hl_exec_time;
     double * wt_hl_commit_time;
+    double * wt_hl_cleanup_time;
 
     double * wt_hl_sync_plan_time;
     double * wt_hl_sync_exec_time;

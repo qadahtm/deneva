@@ -64,6 +64,7 @@ public:
 #if CC_ALG == QUECC
 
     inline SRC sync_on_planning_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
+        uint64_t sync_idlestarttime = 0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint16_t desired16;
         uint16_t expected16;
@@ -86,7 +87,13 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can SET batch_plan_comp_status\n", _thd_id);
         }
 #endif
-        if (_thd_id == 0){
+
+#if SYNC_MASTER_RR
+        bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
+#else
+        bool is_master = (_thd_id == 0);
+#endif
+        if (is_master){
 //            DEBUG_Q("WT_%ld: going to wait for other WTs for batch_slot = %ld, plan_comp_cnt = %d\n",
 //                    _thd_id, batch_slot, work_queue.batch_plan_comp_cnts[batch_slot].load());
 //            if (idle_starttime > 0){
@@ -133,14 +140,13 @@ public:
                 if (done_cnt == g_plan_thread_cnt){
                     break;
                 }
-                if (idle_starttime ==0){
-                    idle_starttime = get_sys_clock();
+                if (sync_idlestarttime ==0){
+                    sync_idlestarttime = get_sys_clock();
                     DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
-                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                    idle_starttime =0;
+                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                     return BREAK;
                 }
             }
@@ -166,10 +172,10 @@ public:
 
             }
 #endif
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-                idle_starttime = 0;
+            if (sync_idlestarttime > 0){
+                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+                sync_idlestarttime = 0;
             }
 //#if DEBUG_QUECC
 //            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
@@ -198,7 +204,7 @@ public:
             };
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             DEBUG_Q("WT_%ld: plan_stage - going to set next_stage for WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
-            for (uint32_t i=1; i < g_plan_thread_cnt; ++i){
+            for (uint32_t i=0; i < g_plan_thread_cnt; ++i){
                 work_queue.plan_sblocks[batch_slot][i].next_stage = 1;
             }
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
@@ -244,13 +250,12 @@ public:
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             while(work_queue.plan_sblocks[batch_slot][_thd_id].next_stage != 1){
-                if (idle_starttime ==0){
-                    idle_starttime = get_sys_clock();
+                if (sync_idlestarttime ==0){
+                    sync_idlestarttime = get_sys_clock();
                     DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 if (simulation->is_done()){
-                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                    idle_starttime =0;
+                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                     return BREAK;
                 }
             };
@@ -268,10 +273,9 @@ public:
                 SAMPLED_DEBUG_Q("WT_%ld: waiting for WT_0 to SET batch_plan_sync_status, batch_id = %ld\n", _thd_id,wbatch_id);
             }
 #endif
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-                idle_starttime = 0;
+            if (sync_idlestarttime > 0){
+                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
@@ -297,6 +301,7 @@ public:
     }
 
     inline SRC sync_on_execution_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
+        uint64_t sync_idlestarttime =0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint16_t desired16;
         uint16_t expected16;
@@ -325,7 +330,12 @@ public:
 #if DEBUG_QUECC
         exec_active[_thd_id]->store(-1);
 #endif
-        if (_thd_id == 0){
+#if SYNC_MASTER_RR
+        bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
+#else
+        bool is_master = (_thd_id == 0);
+#endif
+        if (is_master){
 //            DEBUG_Q("ET_%ld: going to wait for other ETs for batch_id = %ld, map_com_cnts = %d\n",
 //                    _thd_id, wbatch_id, work_queue.batch_map_comp_cnts[batch_slot].load());
             // wait for all ets to finish
@@ -366,14 +376,13 @@ public:
                 if (done_cnt == g_thread_cnt){
                     break;
                 }
-                if (idle_starttime ==0){
-                    idle_starttime = get_sys_clock();
+                if (sync_idlestarttime ==0){
+                    sync_idlestarttime = get_sys_clock();
                     DEBUG_Q("WT_%ld: exec_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
-                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                    idle_starttime =0;
+                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                     return BREAK;
                 }
 
@@ -400,10 +409,10 @@ public:
 
             }
 #endif
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-                idle_starttime = 0;
+            if (sync_idlestarttime > 0){
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+                sync_idlestarttime = 0;
             }
 
 #if DEBUG_QUECC
@@ -442,7 +451,7 @@ public:
             };
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             DEBUG_Q("WT_%ld: exec_stage - going to SET next_stage WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
-            for (uint32_t i=1; i < g_thread_cnt; ++i){
+            for (uint32_t i=0; i < g_thread_cnt; ++i){
                 work_queue.exec_sblocks[batch_slot][i].next_stage = 1;
             }
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
@@ -488,13 +497,12 @@ public:
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             while (work_queue.exec_sblocks[batch_slot][_thd_id].next_stage != 1){
-                if (idle_starttime ==0){
-                    idle_starttime = get_sys_clock();
+                if (sync_idlestarttime ==0){
+                    sync_idlestarttime = get_sys_clock();
                     DEBUG_Q("WT_%ld: exec_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 if (simulation->is_done()){
-                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                    idle_starttime =0;
+                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                     return BREAK;
                 }
             }
@@ -511,10 +519,10 @@ public:
                 SAMPLED_DEBUG_Q("WT_%ld: waiting for WT_0 to SET batch_exec_sync_status, batch_id = %ld\n", _thd_id,wbatch_id);
             }
 #endif
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-                idle_starttime =0;
+            if (sync_idlestarttime > 0){
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+                sync_idlestarttime =0;
             }
 //                DEBUG_Q("ET_%ld: execution phase is done, starting commit phase for batch_id = %ld\n", _thd_id, wbatch_id);
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
@@ -558,6 +566,7 @@ public:
 #endif
 
     inline SRC sync_on_commit_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
+        uint64_t sync_idlestarttime =0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint8_t desired8;
         uint8_t expected8;
@@ -583,7 +592,12 @@ public:
 #if DEBUG_QUECC
         commit_active[_thd_id]->store(-1);
 #endif
-        if (_thd_id == 0){
+#if SYNC_MASTER_RR
+        bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
+#else
+        bool is_master = (_thd_id == 0);
+#endif
+        if (is_master){
             // wait for others to finish
 
             // wait for all ets to finish
@@ -623,18 +637,17 @@ public:
                 if (done_cnt == g_thread_cnt){
                     break;
                 }
-                if (idle_starttime ==0){
-                    idle_starttime = get_sys_clock();
+                if (sync_idlestarttime ==0){
+                    sync_idlestarttime = get_sys_clock();
                     DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
-                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                    idle_starttime =0;
+                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                     return BREAK;
                 }
             }
-            DEBUG_Q("WT_%ld: commit_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
+//            DEBUG_Q("WT_%ld: commit_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
             while (true){
                 done_cnt = 0;
@@ -655,28 +668,31 @@ public:
                 }
             }
 #endif
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-                idle_starttime = 0;
+            if (sync_idlestarttime > 0){
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
 //                DEBUG_Q("ET_%ld: all other ETs has finished their commit\n", _thd_id);
-//            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-//            idle_starttime =0;
 //#if DEBUG_QUECC
 //            quecc_pool.print_stats(wbatch_id);
 //#endif
+            //TODO(tq): remove this later
+#if SYNC_MASTER_BATCH_CLEANUP
             for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
-                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+                planner_pg = &work_queue.batch_pg_map[batch_slot][i];
 #if BUILD_TXN_DEPS
 //                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
 //                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
                 // Clean up and clear txn_graph
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
                 for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-                    delete it->second;
+//                    delete it->second;
+                    std::vector<uint64_t> * tmp = it->second;
+                    quecc_pool.txn_list_release(tmp, _planner_id);
                 }
+#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
                 planner_pg->txn_dep_graph->clear();
-                assert(planner_pg->txn_dep_graph->size() == 0);
+//                assert(planner_pg->txn_dep_graph->size() == 0);
 #endif
                 // Reset PG map so that planners can continue
                 desired8 = PG_AVAILABLE;
@@ -685,7 +701,7 @@ public:
                     M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
                 };
             }
-
+#endif // -- #if SYNC_MASTER_BATCH_CLEANUP
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
@@ -700,8 +716,8 @@ public:
                 M_ASSERT_V(false, "ET_%ld: this should not happen, I am the only one who can reset commit_et_cnt\n", _thd_id);
             };
 #elif WT_SYNC_METHOD == SYNC_BLOCK
-            DEBUG_Q("WT_%ld: commit_stage going to SET next_stage for WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
-            for (uint32_t i=1; i < g_thread_cnt; ++i){
+//            DEBUG_Q("WT_%ld: commit_stage going to SET next_stage for WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
+            for (uint32_t i=0; i < g_thread_cnt; ++i){
                 work_queue.commit_sblocks[batch_slot][i].next_stage = 1;
             }
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
@@ -744,13 +760,12 @@ public:
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             while (work_queue.commit_sblocks[batch_slot][_thd_id].next_stage != 1){
-                if (idle_starttime ==0){
-                    idle_starttime = get_sys_clock();
+                if (sync_idlestarttime ==0){
+                    sync_idlestarttime = get_sys_clock();
                     DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 if (simulation->is_done()){
-                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                    idle_starttime =0;
+                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                     return BREAK;
                 }
             }
@@ -767,20 +782,14 @@ public:
                 SAMPLED_DEBUG_Q("WT_%ld: waiting for WT_0 to SET batch_commit_sync_status, batch_id = %ld\n", _thd_id,wbatch_id);
             }
 #endif
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-                idle_starttime = 0;
+            if (sync_idlestarttime > 0){
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
 //                DEBUG_Q("ET_%ld: commit phase is done for batch_slot=%ld, going to work on the next batch\n", _thd_id,batch_slot);
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
 //            idle_starttime =0;
-        }
-
-        // cleanup my batch part and allow planners waiting on me to
-        for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
-            cleanup_batch_part(batch_slot, i);
         }
 #if DEBUG_QUECC
         commit_active[_thd_id]->store(wbatch_id);
@@ -800,6 +809,87 @@ public:
         work_queue.commit_sblocks[batch_slot][_thd_id].done = 0;
         work_queue.commit_sblocks[batch_slot][_thd_id].next_stage = 0;
 #endif
+        return SUCCESS;
+    }
+
+    inline SRC batch_cleanup(uint64_t batch_slot) ALWAYS_INLINE{
+
+#if !SYNC_MASTER_BATCH_CLEANUP
+        priority_group * planner_pg;
+        uint8_t desired8;
+        uint8_t expected8;
+        if (g_thread_cnt >= g_plan_thread_cnt){
+            if (_thd_id < g_plan_thread_cnt) {
+                planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
+#if BUILD_TXN_DEPS
+//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
+//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
+                // Clean up and clear txn_graph
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+//                    delete it->second;
+                std::vector<uint64_t> * tmp = it->second;
+                quecc_pool.txn_list_release(tmp, _thd_id);
+            }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+                    Array<uint64_t> * tmp = it->second;
+                    quecc_pool.txn_list_release(tmp, _thd_id);
+                }
+#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
+                planner_pg->txn_dep_graph->clear();
+//                assert(planner_pg->txn_dep_graph->size() == 0);
+#endif
+                // Reset PG map so that planners can continue
+                desired8 = PG_AVAILABLE;
+                expected8 = PG_READY;
+                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+                    M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+                };
+            }
+        }
+        else{
+            // there are more planners than executors
+            uint64_t s_et = 0;
+            for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
+                s_et = i % g_thread_cnt;
+                if (_thd_id == s_et) {
+                    planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
+#if BUILD_TXN_DEPS
+//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
+//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
+                    // Clean up and clear txn_graph
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+//                    delete it->second;
+                std::vector<uint64_t> * tmp = it->second;
+                quecc_pool.txn_list_release(tmp, _thd_id);
+            }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+                        Array<uint64_t> * tmp = it->second;
+                        quecc_pool.txn_list_release(tmp, _thd_id);
+                    }
+#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
+                    planner_pg->txn_dep_graph->clear();
+//                assert(planner_pg->txn_dep_graph->size() == 0);
+#endif
+                    // Reset PG map so that planners can continue
+                    desired8 = PG_AVAILABLE;
+                    expected8 = PG_READY;
+                    if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+                        M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+                    };
+                }
+            }
+        }
+
+#endif // -- #if SYNC_MASTER_BATCH_CLEANUP
+
+        // cleanup my batch part and allow planners waiting on me to
+        for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
+            cleanup_batch_part(batch_slot, i);
+        }
         return SUCCESS;
     }
 
@@ -1277,12 +1367,13 @@ public:
 
 
     inline void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man) ALWAYS_INLINE{
-
+        uint64_t pmprof_starttime = 0;
 // Query from client
 //        DEBUG_Q("PT_%ld planning txn %ld, pbatch_cnt=%ld\n", _planner_id, planner_txn_id,pbatch_cnt);
         txn_prof_starttime = get_sys_clock();
 
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
+        priority_group * planner_pg =  &work_queue.batch_pg_map[(wbatch_id%g_batch_map_length)][_planner_id];
 
         // reset transaction context
 //        uint64_t ctx_status = tctx->txn_state.load();
@@ -1365,9 +1456,9 @@ public:
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 //        et_id = eq_idx_rand->operator()(plan_rng);
         et_id = _thd_id;
-        prof_starttime = get_sys_clock();
+        pmprof_starttime = get_sys_clock();
         checkMRange(mrange, key, et_id);
-        INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
+        INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
 #endif
 
         // Dirty code
@@ -1399,8 +1490,9 @@ public:
         //          get the last txnd id from vector and insert into tdg
 
 
-        prof_starttime = get_sys_clock();
+        pmprof_starttime = get_sys_clock();
         auto search = access_table.find(key);
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
         if (search != access_table.end()){
             // found
             if (ycsb_req->acctype == WR){
@@ -1409,21 +1501,21 @@ public:
                 // but since this is a single record operation, no need for dependencies
             }
             else{
-                M_ASSERT_V(ycsb_req->acctype == RD, "only RD access type is supported");
                 M_ASSERT_V(search->second->back() >= batch_starting_txn_id,
                            "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
                            search->second->back(), batch_starting_txn_id
                 );
-                auto search_txn = txn_dep_graph->find(planner_txn_id);
-                if (search_txn != txn_dep_graph->end()){
+
+                auto search_txn = planner_pg->txn_dep_graph->find(planner_txn_id);
+                if (search_txn != planner_pg->txn_dep_graph->end()){
                     search_txn->second->push_back(search->second->back());
                 }
                 else{
                     // first operation for this txn_id
-                    std::vector<uint64_t> * txn_list = new std::vector<uint64_t>();
-
+                    std::vector<uint64_t> * txn_list;
+                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
                     txn_list->push_back(search->second->back());
-                    txn_dep_graph->insert({planner_txn_id, txn_list});
+                    planner_pg->txn_dep_graph->insert({planner_txn_id, txn_list});
                 }
 //                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
             }
@@ -1431,13 +1523,51 @@ public:
         else{
             // not found
             if (ycsb_req->acctype == WR){
-                std::vector<uint64_t> * txn_list = new std::vector<uint64_t>();
+                std::vector<uint64_t> * txn_list;
+                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
                 txn_list->push_back(planner_txn_id);
                 access_table.insert({ycsb_req->key, txn_list});
             }
         }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+        if (search != access_table.end()){
+            // found
+            if (ycsb_req->acctype == WR){
+                search->second->add(planner_txn_id);
+                // this is a write-write conflict,
+                // but since this is a single record operation, no need for dependencies
+            }
+            else{
+                M_ASSERT_V(search->second->last() >= batch_starting_txn_id,
+                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
+                           search->second->last(), batch_starting_txn_id
+                );
 
-        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
+                auto search_txn = planner_pg->txn_dep_graph->find(planner_txn_id);
+                if (search_txn != planner_pg->txn_dep_graph->end()){
+                    search_txn->second->add(search->second->last());
+                }
+                else{
+                    // first operation for this txn_id
+                    Array<uint64_t> * txn_list;
+                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
+                    txn_list->add(search->second->last());
+                    planner_pg->txn_dep_graph->insert({planner_txn_id, txn_list});
+                }
+//                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
+            }
+        }
+        else{
+            // not found
+            if (ycsb_req->acctype == WR){
+                Array<uint64_t> * txn_list;
+                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
+                txn_list->add(planner_txn_id);
+                access_table.insert({ycsb_req->key, txn_list});
+            }
+        }
+#endif // end - if TDG_ENTRY_TYPE == VECTOR_ENTRY
+        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-pmprof_starttime);
 #endif
         // will always return RCOK, should we convert it to void??
     }
@@ -1461,7 +1591,7 @@ public:
 #endif
         switch (tpcc_msg->txn_type) {
             case TPCC_PAYMENT:
-                prof_starttime = get_sys_clock();
+                pmprof_starttime = get_sys_clock();
 
                 if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
                     assert(false);
@@ -1929,11 +2059,7 @@ public:
 
 //            planner_pg->batch_txn_cnt = batch_cnt;
 //            planner_pg->batch_id = batch_id;
-#if BUILD_TXN_DEPS
-//        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET%ld:  planner_pg->txn_dep_graph size is non-zero, batch_id=%ld\n",
-//                   _thd_id, wbatch_id);
-//        planner_pg->txn_dep_graph = txn_dep_graph;
-#endif
+
         planner_pg->batch_starting_txn_id = batch_starting_txn_id;
 
         // deilvery  phase
@@ -2045,17 +2171,19 @@ public:
         INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
         INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
 #if BUILD_TXN_DEPS
-        prof_starttime = get_sys_clock();
+//        prof_starttime = get_sys_clock();
         for (auto it = access_table.begin(); it != access_table.end(); ++it){
-            delete it->second;
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+            std::vector<uint64_t> * tmp = it->second;
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+            Array<uint64_t> * tmp = it->second;
+#endif
+            quecc_pool.txn_list_release(tmp, _planner_id);
         }
         //TODO(tq): FIXME
         access_table.clear();
-//        txn_dep_graph = new hash_table_t();
 
         M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
-//        M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");
-        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
 #endif
         batch_starting_txn_id = planner_txn_id;
         pbatch_cnt = 0;
@@ -2120,7 +2248,6 @@ private:
     // For txn dependency tracking
 #if BUILD_TXN_DEPS
     hash_table_t access_table;
-    hash_table_t * txn_dep_graph;
 #endif
 
     // create and and pre-allocate execution queues

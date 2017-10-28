@@ -336,7 +336,7 @@ RC IndexHashSimple::index_insert(idx_key_t key, itemid_t *item, int part_id) {
 RC IndexHashSimple::index_insert_nonunique(idx_key_t key, itemid_t *item, int part_id) {
 
 	M_ASSERT_V(false, "Inserting non-unique is not supported by HashIndexSimple");
-
+	return RCOK;
 //	RC rc = RCOK;
 //	uint64_t bkt_idx = hash(key);
 //	assert(bkt_idx < _bucket_cnt_per_part);
