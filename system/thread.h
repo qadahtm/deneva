@@ -27,7 +27,7 @@ public:
     void send_init_done_to_all_nodes();
     void progress_stats();
     void heartbeat();
-    uint64_t _thd_id;
+    volatile uint64_t _thd_id;
     uint64_t _node_id;
     Workload * _wl;
     myrand rdm;

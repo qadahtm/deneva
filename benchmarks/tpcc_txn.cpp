@@ -991,6 +991,7 @@ RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 }
 #endif
 
+#if CC_ALG == HSTORE
 RC TPCCTxnManager::run_hstore_txn() {
     RC rc = RCOK;
     assert(CC_ALG == HSTORE);
@@ -1066,7 +1067,9 @@ RC TPCCTxnManager::run_hstore_txn() {
     commit_stats();
     return rc;
 }
+#endif
 
+#if CC_ALG == LADS
 RC TPCCTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
     RC rc = RCOK;
     // not implemented yet
@@ -1078,7 +1081,7 @@ RC TPCCTxnManager::resolve_txn_dependencies(Message* msg){
     assert(false);
     return RCOK;
 }
-
+#endif
 RC TPCCTxnManager::run_calvin_txn() {
   RC rc = RCOK;
   uint64_t starttime = get_sys_clock();

@@ -146,6 +146,7 @@ RC Workload::init_schema(const char *schema_file) {
         }
     }
     fin.close();
+    schema->print_schema();
     return RCOK;
 }
 

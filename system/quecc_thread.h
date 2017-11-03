@@ -39,8 +39,9 @@ struct transaction_context {
     uint64_t txn_id;
     uint64_t starttime;
 // this need to be reset on reuse
-    volatile atomic<uint32_t> completion_cnt; // used at execution time to track operations that have completed
-    volatile atomic<uint32_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
+    volatile atomic<uint64_t> completion_cnt; // used at execution time to track operations that have completed
+//    uint32_t completion_cnt;
+    volatile atomic<uint64_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
 #endif
@@ -114,12 +115,14 @@ struct priority_group{
 //    uint64_t planner_id;
 //    uint64_t batch_id;
 //    uint64_t batch_txn_cnt;
+#if !ATOMIC_PG_STATUS
     int64_t ready;
     int64_t done;
     char padding[48];
-
-    volatile bool initialized = false;
+#else
     volatile atomic<uint8_t> status;
+#endif
+    volatile bool initialized = false;
 #if BUILD_TXN_DEPS
     hash_table_t * txn_dep_graph;
 #endif
@@ -212,7 +215,7 @@ typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<AssignEntryCo
 struct sync_block{
     int64_t done;
     int64_t next_stage;
-    char padding[48];
+    char padding[40];
 };
 
 inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
@@ -232,14 +235,14 @@ public:
     inline SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
 #if DEBUG_QUECC
     void print_threads_status() const {// print phase status
-        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
-            DEBUG_Q("PT_%ld: planner_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, plan_active[ii]->fetch_add(0), batch_id);
-        }
-
-        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
-            DEBUG_Q("PT_%ld: exec_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, exec_active[ii]->fetch_add(0), batch_id);
-            DEBUG_Q("PT_%ld: commit_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, commit_active[ii]->fetch_add(0), batch_id);
-        }
+//        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
+//            DEBUG_Q("PT_%ld: planner_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, plan_active[ii]->fetch_add(0), batch_id);
+//        }
+//
+//        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
+//            DEBUG_Q("PT_%ld: exec_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, exec_active[ii]->fetch_add(0), batch_id);
+//            DEBUG_Q("PT_%ld: commit_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, commit_active[ii]->fetch_add(0), batch_id);
+//        }
     }
 #endif
 #if WORKLOAD == YCSB

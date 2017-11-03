@@ -18,7 +18,7 @@ from datetime import timedelta
 import multiprocessing
 from termcolor import colored, cprint
 
-def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp):
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, maxtpp, m_strat,rs):
     
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -49,9 +49,9 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp):
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
     if is_ycsb:
-        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp)    
+        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}, MAXTPP={}, MERGE_STRAT={}, REC_SIZE={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp, maxtpp, m_strat, int(rs*100))    
     else:
-        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv)
+        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, PAYMENT_PERC={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}, MAXTPP={}, MERGE_STRAT={}'.format(ncc_alg, wthd_cnt, wp, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv, maxtpp, m_strat)
     print(msg_out)
 
     for line in oconf:
@@ -67,13 +67,17 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp):
         if (ccalg_m):
             nline = '#define CC_ALG {}\n'.format(ncc_alg)
         theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d+)', line.strip())
-
         if (theta_m):
             nline = '#define ZIPF_THETA {}\n'.format(theta)
 
-        m = re.search('#define WRITE_PERC\s+(\d\.\d+)', line.strip())
-        if (m):
-            nline = '#define WRITE_PERC {}\n'.format(wp)
+        if is_ycsb:
+            m = re.search('#define WRITE_PERC\s+(\d\.\d+)', line.strip())
+            if (m):
+                nline = '#define WRITE_PERC {}\n'.format(wp)
+        else:
+            m = re.search('#define PERC_PAYMENT\s+(\d\.\d+)', line.strip())
+            if (m):
+                nline = '#define PERC_PAYMENT {}\n'.format(wp)
 
         m = re.search('#define MPR\s+(\d\.\d+)', line.strip())
         if (m):
@@ -81,7 +85,12 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp):
 
         pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
         if (pt_m):
-            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))            
+            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))      
+            
+        m =    re.search('#define MAX_TXN_PER_PART\s+(\d+)',line.strip())
+        if m:
+            nline = '#define MAX_TXN_PER_PART {}\n'.format(maxtpp)
+
         etsync_m =    re.search('#define BATCH_SIZE\s+(\d+)',line.strip())
         if etsync_m:
             nline = '#define BATCH_SIZE {}\n'.format(bs)
@@ -93,9 +102,20 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp):
         if pc_m and is_ycsb:
             nline = '#define REQ_PER_QUERY {}\n'.format(oppt)
 
+        m =    re.search('#define MERGE_STRATEGY\s+(RR|BALANCE_EQ_SIZE)',line.strip())
+        if m:
+            nline = '#define MERGE_STRATEGY {}\n'.format(m_strat)
+
         m =    re.search('#define PIPELINED\s+(true|false)',line.strip())
         if m:
             nline = '#define PIPELINED {}\n'.format(piplined)
+
+        m =    re.search('#define WORKLOAD\s+(YCSB|TPCC|PPS)',line.strip())
+        if m:
+            if is_ycsb:
+                nline = '#define WORKLOAD YCSB\n'
+            else: 
+                nline = '#define WORKLOAD TPCC\n'
 
         m =    re.search('#define TIME_ENABLE\s+(true|false)',line.strip())
         if m:
@@ -328,6 +348,24 @@ def get_df_csv(outdir):
     df = pd.DataFrame(e_data)
     return df.to_csv()
 
+
+def set_ycsb_schema(rs):
+    ycsb_schema = "//size, type, name\nTABLE=MAIN_TABLE\n"
+
+    if rs < 1:
+        frs = 1
+    else:   
+        frs = rs
+    for i in range(frs):
+        ycsb_schema += "\t{},string,F{}\n".format(int(rs*100),i)
+    ycsb_schema += "\nINDEX=MAIN_INDEX\n"
+    ycsb_schema += "\tMAIN_TABLE,0\n"
+    print(ycsb_schema)
+    sfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'/benchmarks/YCSB_schema.txt'
+    schema_file = open(sfname, 'w')
+    schema_file.write(ycsb_schema)
+    schema_file.close()
+
 DENEVA_DIR_PREFIX = 'deneva/'
 HOME_DIR = '/home/tqadah'
 WORK_DIR = '/quecc/deneva_project' #AWS
@@ -376,6 +414,12 @@ env = dict(os.environ)
 time_enable = False;
 dry_run = False;
 vm_shut = False;
+
+is_ycsb = True
+
+is_azure = True
+
+
 vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
 num_trials = 2;
@@ -396,7 +440,8 @@ num_trials = 2;
 # 8,12,16,20,24,32,48,56,64,96,112,128
 if (vm_cores == 32):
     # wthreads = [8,12,16,20,24,32] # 32 core machine
-    wthreads = [8,16,20,24,32] # 32 core machine - 12 cores gives problems
+    # wthreads = [8,16,20,24,32] # 32 core machine - 12 cores gives problems
+    wthreads = [4,8,16,24,32] # 32 core machine - 12 cores gives problems
 elif vm_cores == 64:    
     wthreads = [8,16,32,48,56,64] # 64 core machine
 elif vm_cores == 128:
@@ -406,7 +451,8 @@ else:
 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE'] # set 1
 # cc_algs = ['SILO', 'WAIT_DIE', 'MVCC'] # set 2
-cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','CALVIN'] # both
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','CALVIN'] # both
+# cc_algs = ['OCC', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','CALVIN'] # both
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC'] # both
 # pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.25,0.5]
@@ -420,59 +466,86 @@ cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','C
 # strict = [True, False]
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
-# zipftheta = [0.0,0.6,0.99]
-# zipftheta = [0.0]
-# zipftheta = [0.6]
-# zipftheta = [0.99]
-batch_sized = [40320]
-# batch_sized = [13440,26880,40320,53760,107520]
-# batch_sized = [13440,26880,53760,107520]
-# batch_sized = [5184,10368,20736,41472,82944]
 
 wthreads = [vm_cores]
 # wthreads = [32] # redo experiments
-num_trials = 1
-# cc_algs = ['NO_WAIT','TIMESTAMP']
-cc_algs = ['QUECC']
-# zipftheta = [0.0,0.4,0.6,0.8,0.9,0.99]
-zipftheta = [0.0]
-# zipftheta = [0.0,0.8]
-# zipftheta = [0.8] #high contention
-# zipftheta = [0.99]
+# num_trials = 1
+# cc_algs = ['HSTORE']
+cc_algs = ['QUECC']  
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
+# cc_algs = ['OCC', 'NO_WAIT'] # set 11
+# cc_algs = ['TIMESTAMP', 'HSTORE'] # set 12
+#Common parameters
+# merge_strats = ['RR','BALANCE_EQ_SIZE'] # for Quecc Only - set ot a single value if using others
+merge_strats = ['RR'] # for Quecc Only - set ot a single value if using others
+# mtpps = [100000,int(100000/vm_cores)] # MAX_TXN_PER_PART
+# mtpps = [int(100000/vm_cores)] # MAX_TXN_PER_PART
+# mtpps = [int(100000/vm_cores),int(500000/vm_cores),int(1600000/vm_cores)] # MAX_TXN_PER_PART
+mtpps = [int(500000/vm_cores)] # MAX_TXN_PER_PART
+
 # batch_sized = [5184,10368,20736,41472,82944]
 # batch_sized = [5184] // this causes problems, so we ommit it
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
+batch_sized = [40320]
+# batch_sized = [13440,26880,40320,53760,107520]
+# batch_sized = [13440,26880,53760,107520]
+# batch_sized = [5184,10368,20736,41472,82944,165888]
+# batch_sized = [5184,10368,20736,41472,82944]
+
 # pt_perc = [0.25,0.5,0.75,1]
-pt_perc = [0.5,1]
+pt_perc = [0.25,0.5]
 # pt_perc = [0.5,1]
+# pt_perc = [0.5]
 # pt_perc = [1]
 
 # parts_accessed = [1,32]
-# parts_accessed = [1,3,5,10] # for OPT=10
+# parts_accessed = [1,2,4,8,10]
+# parts_accessed = [1,2,4,8,10,16]
+# parts_accessed = [8,10,16] # redoing
+# parts_accessed = [1,2,5,8,10] # for OPT=10
 # parts_accessed = [1,4,8,16] # for OPT=16
 # parts_accessed = [1] # for OPT=16
 # parts_accessed = [1,8,16,24,32] # for pptvar
-parts_accessed = [16]
-# write_perc = [0.0,0.25,0.5,0.75,1.0]
-write_perc = [0.5]
+# parts_accessed = [10]
+parts_accessed = [5]
+
+
+############### YCSB specific
+# zipftheta = [0.0,0.3,0.6,0.8,0.9]
+zipftheta = [0.0]
+# zipftheta = [0.0,0.8]
+# zipftheta = [0.8] #high contention
+# zipftheta = [0.99]
+
+write_perc = [0.05,0.2,0.5,0.8,0.95]
+# write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
-# mpt_perc = [0.0,0.25,0.5,0.75,1.0]
+# mpt_perc = [0.1,0.2,0.5,0.8,1.0]
 # mpt_perc = [1.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 mpt_perc = [1.0] #100% multi partition transactions
-# ycsb_op_per_txn = [1,10,16,32] #set to a single element if workload is not YCSB
+# ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
 ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
-is_ycsb = True
+# ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
+# recsizes = [1,5,10,20,40]
+# recsizes = [5,10,20,40] # skip 1 since we already have results for it
+# recsizes = [0.2,0.5,1] # skip 1 since we already have results for it
+recsizes = [1]
+
+
+############### TPCC specific
+payment_perc = [0.5]
+# payment_perc = [0.0,0.2,0.5,0.8,1.0]
+mpt_perc = [0.1] #10% multi partition transactions
+
 procs = []
 seq_no = 0
 
 #read ifconfig.txt
 node_list = []
-
-is_azure = True
 
 with open('/quecc/deneva_project/secrets.json') as data_file:    
     secrets = json.load(data_file)
@@ -496,7 +569,7 @@ if (len(sys.argv) == 2):
 exec_cmd('cat /proc/meminfo > {}/{}'.format(outdir,'meminfo.txt'), env)
 exec_cmd('cat /proc/cpuinfo > {}/{}'.format(outdir,'cpuinfo.txt'), env)
 exec_cmd('lscpu > {}/{}'.format(outdir,'lscpu.txt'), env)
-
+    
 note = "uname:\n{}\nlscpu output:\n{}\nquecc-{} with CC_ALG: {}".format(
     exec_cmd_capture_output("uname -a",env),
     exec_cmd_capture_output("lscpu",env),
@@ -524,67 +597,133 @@ if is_azure:
     exec_cmd('az login -u {}'.format(secrets['azlogin']), env)
     exec_cmd('az account set -s {}'.format(secrets['azsub_id']), env)
     exec_cmd('az account list', env)
+if is_ycsb:
+    for rs in recsizes:
+        set_ycsb_schema(rs)
+        for ncc_alg in cc_algs:
+            for wthd in wthreads:
+                for theta in zipftheta:
+                    for maxtppv in mtpps:
+                        for wp in write_perc:
+                            for m_stratv in merge_strats:
+                                for mprv in mpt_perc:
+                                    for oppt in ycsb_op_per_txn:
+                                        for pa in parts_accessed:
+                                            assert(pa > 0) 
+                                            if pa < 1:
+                                                pa = int(wthd*pa)
+                                            for ppts in strict:
+                                                for bs in batch_sized:
+                                                    runexp = True
+                                                    exp_cnt = 0
+                                                    for pt in pt_perc:                                                                    
+                                                        #use this condition if QUECC is included only
+                                                        if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                                                            runexp = False
 
+                                                        if runexp:
+                                                            exp_cnt = exp_cnt + 1        
+                                                            if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
+                                                                pt = 1
+                                                            set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt,mprv,wp, maxtppv, m_stratv,rs)
+                                                            # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                                                            if not dry_run:
+                                                                build_project()
+                                                            for trial in list(range(num_trials)):
+                                                                if pt <= 1:
+                                                                    pt_cnt = str(int(pt*wthd))
+                                                                    et_cnt = str(wthd-int(pt*wthd));
+                                                                    pt_perc_str = str(int(pt*100))
+                                                                else:
+                                                                    pt_cnt = str(pt)
+                                                                    et_cnt = str(wthd-pt);
+                                                                    pt_perc_str = str(0)
+                                                                
+                                                                if (wthd-int(pt*wthd)) == 0:
+                                                                    et_cnt = str(wthd);
 
-for ncc_alg in cc_algs:
-    for wthd in wthreads:
-        for theta in zipftheta:
-            runexp = True
-            for wp in write_perc:
-                for mprv in mpt_perc:
-                    for oppt in ycsb_op_per_txn:
-                        for pa in parts_accessed:
-                            assert(pa > 0) 
-                            if pa < 1:
-                                pa = int(wthd*pa)
+                                                                if prefix != "":
+                                                                    if ppts:
+                                                                        nprefix = prefix + '_'+ str(rs) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                    else:
+                                                                        nprefix = prefix + '_'+ str(rs) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                                else:
+                                                                    if ppts:
+                                                                        nprefix = str(rs*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                    else:
+                                                                        nprefix = str(rs*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                                run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                                                # print('Dry run: {}, {}, {}, t{}, {}'
+                                                                #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                                                seq_no = seq_no + 1
+                                                            cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                                                            cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                                                            # print("cp {} {}".format(cfgfname, cfg_copy))
+                                                            exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
+else: #TPC-C
+    for ncc_alg in cc_algs:
+        for wthd in wthreads:
+            for theta in zipftheta:
+                for maxtppv in mtpps:
+                    for wp in payment_perc:
+                        for m_stratv in merge_strats:                        
+                            for mprv in mpt_perc:
+                                for oppt in ycsb_op_per_txn:
+                                    for pa in parts_accessed:
+                                        assert(pa > 0) 
+                                        if pa < 1:
+                                            pa = int(wthd*pa)
+                                        for ppts in strict:
+                                            for bs in batch_sized:
+                                                runexp = True
+                                                exp_cnt = 0
+                                                for pt in pt_perc:                                                                    
+                                                    #use this condition if QUECC is included only
+                                                    if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                                                        runexp = False
 
-                            for ppts in strict:
-                                exp_cnt = 0
-                                for pt in pt_perc:                    
-                                    for bs in batch_sized:
-                                        #use this condition if QUECC is included only
-                                        if ncc_alg != 'QUECC' and exp_cnt >= 1:
-                                            runexp = False
+                                                    if runexp:
+                                                        exp_cnt = exp_cnt + 1        
+                                                        if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
+                                                            pt = 1
+                                                        # TPCC-set config
+                                                        # use wp for payment_perc
+                                                        rs = 0
+                                                        set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt,mprv,wp, maxtppv, m_stratv,rs)
+                                                        # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                                                        if not dry_run:
+                                                            build_project()
+                                                        for trial in list(range(num_trials)):
+                                                            if pt <= 1:
+                                                                pt_cnt = str(int(pt*wthd))
+                                                                et_cnt = str(wthd-int(pt*wthd));
+                                                                pt_perc_str = str(int(pt*100))
+                                                            else:
+                                                                pt_cnt = str(pt)
+                                                                et_cnt = str(wthd-pt);
+                                                                pt_perc_str = str(0)
+                                                            
+                                                            if (wthd-int(pt*wthd)) == 0:
+                                                                et_cnt = str(wthd);
 
-                                        if runexp:
-                                            exp_cnt = exp_cnt + 1        
-                                            if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
-                                                pt = 1
-                                            set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt,mprv,wp)
-                                            # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                                            if not dry_run:
-                                                build_project()
-                                            for trial in list(range(num_trials)):
-                                                if pt <= 1:
-                                                    pt_cnt = str(int(pt*wthd))
-                                                    et_cnt = str(wthd-int(pt*wthd));
-                                                    pt_perc_str = str(int(pt*100))
-                                                else:
-                                                    pt_cnt = str(pt)
-                                                    et_cnt = str(wthd-pt);
-                                                    pt_perc_str = str(0)
-                                                
-                                                if (wthd-int(pt*wthd)) == 0:
-                                                    et_cnt = str(wthd);
-
-                                                if prefix != "":
-                                                    if ppts:
-                                                        nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
-                                                    else:
-                                                        nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
-                                                else:
-                                                    if ppts:
-                                                        nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
-                                                    else:
-                                                        nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
-                                                run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                                                # print('Dry run: {}, {}, {}, t{}, {}'
-                                                #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
-                                                seq_no = seq_no + 1
-                                            cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
-                                            cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
-                                            # print("cp {} {}".format(cfgfname, cfg_copy))
-                                            exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
+                                                            if prefix != "":
+                                                                if ppts:
+                                                                    nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                else:
+                                                                    nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                            else:
+                                                                if ppts:
+                                                                    nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                else:
+                                                                    nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                            run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                                            # print('Dry run: {}, {}, {}, t{}, {}'
+                                                            #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                                            seq_no = seq_no + 1
+                                                        cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                                                        cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                                                        # print("cp {} {}".format(cfgfname, cfg_copy))
+                                                        exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
 # res = get_df_csv(outdir)
 eltime = time.time() - stime
 subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)

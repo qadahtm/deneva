@@ -75,7 +75,13 @@ public:
 
         // indicate that I am done planning my transactions, and ready to start committing
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-        expected16 = work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(1);
+//        expected16 = work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(1);
+        do{
+            expected16 = work_queue.batch_plan_comp_cnts[batch_slot].load(memory_order_acq_rel);
+            desired16 = expected16 + 1;
+        }while (!work_queue.batch_plan_comp_cnts[batch_slot].compare_exchange_strong(expected16,desired16,memory_order_acq_rel));
+
+
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         expected16 = work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(1,memory_order_acq_rel);
 #elif WT_SYNC_METHOD == SYNC_BLOCK
@@ -92,6 +98,8 @@ public:
         bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
 #else
         bool is_master = (_thd_id == 0);
+//        M_ASSERT_V(work_queue.gbatch_id == wbatch_id,
+//                   "ET_%ld: Missmatch plan phase gbatch_id = %ld, wbatch_id=%ld\n",_thd_id, work_queue.gbatch_id, wbatch_id);
 #endif
         if (is_master){
 //            DEBUG_Q("WT_%ld: going to wait for other WTs for batch_slot = %ld, plan_comp_cnt = %d\n",
@@ -104,7 +112,9 @@ public:
 
             // wait for all ets to finish
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-            expected16 = work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(0);
+
+            expected16 = work_queue.batch_plan_comp_cnts[batch_slot].load(memory_order_acq_rel);
+
             while (expected16 != g_thread_cnt){
                 if (idle_starttime ==0){
                     idle_starttime = get_sys_clock();
@@ -115,7 +125,7 @@ public:
                     idle_starttime =0;
                     return BREAK;
                 }
-                expected16 = work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(0);
+                expected16 = work_queue.batch_plan_comp_cnts[batch_slot].load(memory_order_acq_rel);
             };
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
             expected16 = work_queue.batch_plan_comp_cnts[batch_slot].load(memory_order_acq_rel);
@@ -134,6 +144,7 @@ public:
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             while (true){
                 done_cnt = 0;
+                atomic_thread_fence(memory_order_acquire);
                 for (uint32_t i=0; i < g_plan_thread_cnt; ++i){
                     done_cnt += work_queue.plan_sblocks[batch_slot][i].done;
                 }
@@ -142,7 +153,7 @@ public:
                 }
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
-                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+//                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
@@ -150,7 +161,7 @@ public:
                     return BREAK;
                 }
             }
-            DEBUG_Q("WT_%ld: exec_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
+//            DEBUG_Q("WT_%ld: exec_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
             while (true){
                 done_cnt = 0;
@@ -175,7 +186,6 @@ public:
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
-                sync_idlestarttime = 0;
             }
 //#if DEBUG_QUECC
 //            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
@@ -193,7 +203,7 @@ public:
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
             expected16 = g_thread_cnt;
-            if(!work_queue.batch_plan_comp_cnts[batch_slot].compare_exchange_strong(expected16, desired16)){
+            if(!work_queue.batch_plan_comp_cnts[batch_slot].compare_exchange_strong(expected16, desired16,memory_order_acq_rel)){
                 M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can reset batch_plan_comp_cnts\n", _thd_id);
             };
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
@@ -203,9 +213,10 @@ public:
                 M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can reset batch_plan_comp_cnts\n", _thd_id);
             };
 #elif WT_SYNC_METHOD == SYNC_BLOCK
-            DEBUG_Q("WT_%ld: plan_stage - going to set next_stage for WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
+//            DEBUG_Q("WT_%ld: plan_stage - going to set next_stage for WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
             for (uint32_t i=0; i < g_plan_thread_cnt; ++i){
                 work_queue.plan_sblocks[batch_slot][i].next_stage = 1;
+                atomic_thread_fence(memory_order_release);
             }
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
             expected16 = 0;
@@ -224,7 +235,7 @@ public:
 
 //                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-            while (work_queue.batch_plan_comp_cnts[batch_slot].fetch_add(0) != 0){
+            while (work_queue.batch_plan_comp_cnts[batch_slot].load(memory_order_acq_rel) != 0){
                 if (idle_starttime ==0){
                     idle_starttime = get_sys_clock();
                 }
@@ -249,10 +260,11 @@ public:
                 // SPINN Here untill all ETs are done and batch is committed
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
+            atomic_thread_fence(memory_order_acquire);
             while(work_queue.plan_sblocks[batch_slot][_thd_id].next_stage != 1){
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
-                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+//                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
@@ -293,9 +305,11 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can RESET batch_plan_sync_status\n", _thd_id);
         }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
-//        DEBUG_Q("WT_%ld: plan_stage - going to RESET both done, next_stage and moving to the next stage, batch_id = %ld\n", _thd_id,wbatch_id);
         work_queue.plan_sblocks[batch_slot][_thd_id].done = 0;
         work_queue.plan_sblocks[batch_slot][_thd_id].next_stage = 0;
+//        DEBUG_Q("WT_%ld: plan_stage - going to RESET both done, next_stage and moving to the next stage, batch_id = %ld, gbatch_id=%ld\n",
+//                _thd_id,wbatch_id,work_queue.gbatch_id);
+        atomic_thread_fence(memory_order_release);
 #endif
         return SUCCESS;
     }
@@ -311,11 +325,16 @@ public:
 #endif
         // indicate that I am done processing my transactions, and ready to start committing
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-        expected16 = work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);
+//        expected16 = work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);
+        do{
+            expected16 = work_queue.batch_map_comp_cnts[batch_slot].load(memory_order_acq_rel);
+            desired16 = expected16 + 1;
+        }while (!work_queue.batch_map_comp_cnts[batch_slot].compare_exchange_strong(expected16,desired16,memory_order_acq_rel));
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         expected16 = work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1,memory_order_acq_rel);
 #elif WT_SYNC_METHOD == SYNC_BLOCK
         work_queue.exec_sblocks[batch_slot][_thd_id].done = 1;
+        atomic_thread_fence(memory_order_release);
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
         expected16 = 0;
         desired16 = 1;
@@ -327,20 +346,22 @@ public:
 //                _thd_id, wbatch_id, expected16);
 //        DEBUG_Q("ET_%ld: after INC for batch_id = %ld, map_com_cnts = %d\n",
 //                _thd_id, wbatch_id, work_queue.batch_map_comp_cnts[batch_slot].load());
-#if DEBUG_QUECC
-        exec_active[_thd_id]->store(-1);
-#endif
+//#if DEBUG_QUECC
+//        exec_active[_thd_id]->store(-1);
+//#endif
 #if SYNC_MASTER_RR
         bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
 #else
         bool is_master = (_thd_id == 0);
+//        M_ASSERT_V(work_queue.gbatch_id == wbatch_id,
+//                   "ET_%ld: Missmatch gbatch_id = %ld, wbatch_id=%ld\n",_thd_id, work_queue.gbatch_id, wbatch_id);
 #endif
         if (is_master){
 //            DEBUG_Q("ET_%ld: going to wait for other ETs for batch_id = %ld, map_com_cnts = %d\n",
 //                    _thd_id, wbatch_id, work_queue.batch_map_comp_cnts[batch_slot].load());
             // wait for all ets to finish
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-            expected16 = work_queue.batch_map_comp_cnts[batch_slot].fetch_add(0);
+            expected16 = work_queue.batch_map_comp_cnts[batch_slot].load(memory_order_acq_rel);
             while (expected16 != g_thread_cnt){
                 if (idle_starttime == 0){
                     idle_starttime = get_sys_clock();
@@ -351,7 +372,7 @@ public:
                     idle_starttime =0;
                     return BREAK;
                 }
-                expected16 = work_queue.batch_map_comp_cnts[batch_slot].fetch_add(0);
+                expected16 = work_queue.batch_map_comp_cnts[batch_slot].load(memory_order_acq_rel);
             };
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
             expected16 = work_queue.batch_map_comp_cnts[batch_slot].load(memory_order_acq_rel);
@@ -370,6 +391,7 @@ public:
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             while (true){
                 done_cnt = 0;
+                atomic_thread_fence(memory_order_acquire);
                 for (uint32_t i=0; i < g_thread_cnt; ++i){
                     done_cnt += work_queue.exec_sblocks[batch_slot][i].done;
                 }
@@ -378,7 +400,7 @@ public:
                 }
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
-                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+//                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
@@ -387,7 +409,7 @@ public:
                 }
 
             }
-            DEBUG_Q("WT_%ld: exec_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
+//            DEBUG_Q("WT_%ld: exec_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
             while (true){
                 done_cnt = 0;
@@ -412,35 +434,54 @@ public:
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
-                sync_idlestarttime = 0;
             }
 
 #if DEBUG_QUECC
 //            print_threads_status();
             // check that all transactions has completed, by checking txn status
-//            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
-//                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-//                for (uint64_t j =0; j < planner_batch_size; ++j){
-//                    if (planner_pg->txn_ctxs[j].completion_cnt.fetch_add(0) != planner_pg->txn_ctxs[j].txn_comp_cnt.fetch_add(0)){
+            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
+                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+                for (uint64_t j =0; j < planner_batch_size; ++j){
+                    if (planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel) != TXN_READY_TO_COMMIT){
+                        uint64_t total_executed_entries = 0;
+                        uint64_t total_executed_txns = 0;
+                        for (uint64_t i =0; i < g_thread_cnt; ++i){
+                            total_executed_entries+= stats._stats[i]->exec_txn_frag_cnt[i];
+                            total_executed_txns += stats._stats[i]->exec_txn_cnts[i];
+                        }
+                        DEBUG_Q("ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %ld, txn_comp_cnt=%ld,"
+                                        "batch_id = %ld, txn_id = %ld, txn_stat=%ld, total_executed_entries = %ld, total_executed_txns = %ld"
+                                        "\n",
+                                _thd_id,planner_pg->txn_ctxs[j].completion_cnt.load(),
+                                planner_pg->txn_ctxs[j].txn_comp_cnt.load(memory_order_acq_rel),wbatch_id, planner_pg->txn_ctxs[j].txn_id,
+                                planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel),total_executed_entries,total_executed_txns);
+                    }
+                    M_ASSERT_V(planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT,
+                               "ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %ld, txn_comp_cnt=%ld,"
+                                        "batch_id = %ld, txn_id = %ld, txn_stat=%ld"
+                                        "\n",
+                                _thd_id,planner_pg->txn_ctxs[j].completion_cnt.load(),
+                                planner_pg->txn_ctxs[j].txn_comp_cnt.load(memory_order_acq_rel),wbatch_id, planner_pg->txn_ctxs[j].txn_id,
+                               planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel))
+//                    if (planner_pg->txn_ctxs[j].completion_cnt.load() != planner_pg->txn_ctxs[j].txn_comp_cnt.load()){
 //                        DEBUG_Q("ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d,"
-//                                        "work_queue.batch_map_comp_cnts = %d, batch_id = %ld, txn_id = %ld"
+//                                        "batch_id = %ld, txn_id = %ld"
 //                                        "\n",
 //                                _thd_id,planner_pg->txn_ctxs[j].completion_cnt.fetch_add(0),
-//                                planner_pg->txn_ctxs[j].txn_comp_cnt.fetch_add(0),
-//                                work_queue.batch_map_comp_cnts[batch_slot].fetch_add(0), wbatch_id, planner_pg->txn_ctxs[j].txn_id);
+//                                planner_pg->txn_ctxs[j].txn_comp_cnt.load(),wbatch_id, planner_pg->txn_ctxs[j].txn_id);
 //                    }
-////                    M_ASSERT_V(planner_pg->txn_ctxs[j].completion_cnt.load() == planner_pg->txn_ctxs[j].txn_comp_cnt.load(),
-////                               "ET_%ld: not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
-////                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
-//                }
-//            }
+//                    M_ASSERT_V(planner_pg->txn_ctxs[j].completion_cnt.load() == planner_pg->txn_ctxs[j].txn_comp_cnt.load(),
+//                               "ET_%ld: not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
+//                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
+                }
+            }
 #endif
 
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
             expected16 = g_thread_cnt;
-            if(!work_queue.batch_map_comp_cnts[batch_slot].compare_exchange_strong(expected16, desired16)){
+            if(!work_queue.batch_map_comp_cnts[batch_slot].compare_exchange_strong(expected16, desired16,memory_order_acq_rel)){
                 M_ASSERT_V(false, "ET_%ld: this should not happen, I am the only one who can reset batch_map_comp_cnts\n", _thd_id);
             };
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
@@ -450,9 +491,10 @@ public:
                 M_ASSERT_V(false, "ET_%ld: this should not happen, I am the only one who can reset batch_map_comp_cnts\n", _thd_id);
             };
 #elif WT_SYNC_METHOD == SYNC_BLOCK
-            DEBUG_Q("WT_%ld: exec_stage - going to SET next_stage WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
+//            DEBUG_Q("WT_%ld: exec_stage - going to SET next_stage WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
             for (uint32_t i=0; i < g_thread_cnt; ++i){
                 work_queue.exec_sblocks[batch_slot][i].next_stage = 1;
+                atomic_thread_fence(memory_order_release);
             }
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
             expected16 = 0;
@@ -472,7 +514,7 @@ public:
 
 //                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-            while (work_queue.batch_map_comp_cnts[batch_slot].fetch_add(0) != 0){
+            while (work_queue.batch_map_comp_cnts[batch_slot].load(memory_order_acq_rel) != 0){
                 if (idle_starttime == 0){
                     idle_starttime = get_sys_clock();
                 }
@@ -496,10 +538,11 @@ public:
                 // SPINN Here untill all ETs are done and batch is committed
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
+            atomic_thread_fence(memory_order_acquire);
             while (work_queue.exec_sblocks[batch_slot][_thd_id].next_stage != 1){
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
-                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+//                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
@@ -522,16 +565,15 @@ public:
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
-                sync_idlestarttime =0;
             }
 //                DEBUG_Q("ET_%ld: execution phase is done, starting commit phase for batch_id = %ld\n", _thd_id, wbatch_id);
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
 //            idle_starttime =0;
         }
-#if DEBUG_QUECC
-        exec_active[_thd_id]->store(wbatch_id);
-#endif
+//#if DEBUG_QUECC
+//        exec_active[_thd_id]->store(wbatch_id);
+//#endif
 
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC
         // Reset batch_exec_comp_status for next time since sync is done
@@ -544,9 +586,11 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can RESET batch_exec_sync_status\n", _thd_id);
         }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
-        DEBUG_Q("WT_%ld: exec_stage - going to RESET both done, next_stage and moving to the next stage, batch_id = %ld\n", _thd_id,wbatch_id);
         work_queue.exec_sblocks[batch_slot][_thd_id].done = 0;
         work_queue.exec_sblocks[batch_slot][_thd_id].next_stage = 0;
+//        DEBUG_Q("WT_%ld: exec_stage - going to RESET both done, next_stage and moving to the next stage, batch_id = %ld, gbatch_id=%ld\n",
+//                _thd_id,wbatch_id,work_queue.gbatch_id);
+        atomic_thread_fence(memory_order_release);
 #endif
         return SUCCESS;
     }
@@ -554,22 +598,22 @@ public:
 
 #if DEBUG_QUECC
     void print_threads_status() const {// print phase status
-        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
-            DEBUG_Q("ET_%ld: planner_%d active : %ld, wbatch_id=%ld\n", _thd_id, ii, plan_active[ii]->load(), wbatch_id);
-        }
-
-        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
-            DEBUG_Q("ET_%ld: exec_%d active : %ld, wbatch_id=%ld\n", _thd_id, ii, exec_active[ii]->load(), wbatch_id);
-            DEBUG_Q("ET_%ld: commit_%d active : %ld, wbatch_id=%ld\n", _thd_id, ii, commit_active[ii]->load(), wbatch_id);
-        }
+//        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
+//            DEBUG_Q("ET_%ld: planner_%d active : %ld, wbatch_id=%ld\n", _thd_id, ii, plan_active[ii]->load(), wbatch_id);
+//        }
+//
+//        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
+//            DEBUG_Q("ET_%ld: exec_%d active : %ld, wbatch_id=%ld\n", _thd_id, ii, exec_active[ii]->load(), wbatch_id);
+//            DEBUG_Q("ET_%ld: commit_%d active : %ld, wbatch_id=%ld\n", _thd_id, ii, commit_active[ii]->load(), wbatch_id);
+//        }
     }
 #endif
 
     inline SRC sync_on_commit_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
         uint64_t sync_idlestarttime =0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
-        uint8_t desired8;
-        uint8_t expected8;
+//        uint8_t desired8;
+//        uint8_t expected8;
         uint16_t desired16;
         uint16_t expected16;
 #endif
@@ -577,11 +621,16 @@ public:
         UInt32 done_cnt = 0;
 #endif
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-        expected16 = work_queue.batch_commit_et_cnts[batch_slot].fetch_add(1);
+//        expected16 = work_queue.batch_commit_et_cnts[batch_slot].fetch_add(1);
+        do{
+            expected16 = work_queue.batch_commit_et_cnts[batch_slot].load(memory_order_acq_rel);
+            desired16 = expected16 + 1;
+        }while (!work_queue.batch_commit_et_cnts[batch_slot].compare_exchange_strong(expected16,desired16,memory_order_acq_rel));
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         expected16 = work_queue.batch_commit_et_cnts[batch_slot].fetch_add(1,memory_order_acq_rel);
 #elif WT_SYNC_METHOD == SYNC_BLOCK
         work_queue.commit_sblocks[batch_slot][_thd_id].done = 1;
+        atomic_thread_fence(memory_order_release);
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
         expected16 = 0;
         desired16 = 1;
@@ -589,13 +638,15 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can SET batch_commit_comp_status\n", _thd_id);
         }
 #endif
-#if DEBUG_QUECC
-        commit_active[_thd_id]->store(-1);
-#endif
+//#if DEBUG_QUECC
+//        commit_active[_thd_id]->store(-1);
+//#endif
 #if SYNC_MASTER_RR
         bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
 #else
         bool is_master = (_thd_id == 0);
+//        M_ASSERT_V(work_queue.gbatch_id == wbatch_id,
+//                   "ET_%ld: Missmatch commit stage gbatch_id = %ld, wbatch_id=%ld\n",_thd_id, work_queue.gbatch_id, wbatch_id);
 #endif
         if (is_master){
             // wait for others to finish
@@ -603,7 +654,7 @@ public:
             // wait for all ets to finish
 //                DEBUG_Q("ET_%ld: going to wait for other ETs to finish their commit for all PGs\n", _thd_id);
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-            expected16 = work_queue.batch_commit_et_cnts[batch_slot].fetch_add(0);
+            expected16 = work_queue.batch_commit_et_cnts[batch_slot].load(memory_order_acq_rel);
             while (expected16 != g_thread_cnt){
                 if (idle_starttime ==0){
                     idle_starttime = get_sys_clock();
@@ -613,7 +664,7 @@ public:
                     idle_starttime =0;
                     return BREAK;
                 }
-                expected16 = work_queue.batch_commit_et_cnts[batch_slot].fetch_add(0);
+                expected16 = work_queue.batch_commit_et_cnts[batch_slot].load(memory_order_acq_rel);
             };
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
             expected16 = work_queue.batch_commit_et_cnts[batch_slot].load(memory_order_acq_rel);
@@ -631,6 +682,7 @@ public:
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             while (true){
                 done_cnt = 0;
+                atomic_thread_fence(memory_order_acquire);
                 for (uint32_t i=0; i < g_thread_cnt; ++i){
                     done_cnt += work_queue.commit_sblocks[batch_slot][i].done;
                 }
@@ -639,7 +691,7 @@ public:
                 }
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
-                    DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+//                    DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
@@ -702,11 +754,14 @@ public:
                 };
             }
 #endif // -- #if SYNC_MASTER_BATCH_CLEANUP
+
+            // incrementing global batch id
+//            work_queue.gbatch_id++;
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
             expected16 = g_thread_cnt;
-            if(!work_queue.batch_commit_et_cnts[batch_slot].compare_exchange_strong(expected16, desired16)){
+            if(!work_queue.batch_commit_et_cnts[batch_slot].compare_exchange_strong(expected16, desired16, memory_order_acq_rel)){
                 M_ASSERT_V(false, "ET_%ld: this should not happen, I am the only one who can reset commit_et_cnt\n", _thd_id);
             };
 #elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
@@ -719,7 +774,9 @@ public:
 //            DEBUG_Q("WT_%ld: commit_stage going to SET next_stage for WT_*, batch_id = %ld\n", _thd_id,wbatch_id);
             for (uint32_t i=0; i < g_thread_cnt; ++i){
                 work_queue.commit_sblocks[batch_slot][i].next_stage = 1;
+                atomic_thread_fence(memory_order_release);
             }
+
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
             expected16 = 0;
             desired16 = 1;
@@ -735,7 +792,7 @@ public:
 //                DEBUG_Q("ET_%ld: going to wait for ET_0 to finalize the commit phase\n", _thd_id);
 //                DEBUG_Q("ET_%ld: Done with my batch partition going to wait for others\n", _thd_id);
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
-            while (work_queue.batch_commit_et_cnts[batch_slot].fetch_add(0) != 0){
+            while (work_queue.batch_commit_et_cnts[batch_slot].load(memory_order_acq_rel) != 0){
                 if (idle_starttime == 0){
                     idle_starttime = get_sys_clock();
                 }
@@ -759,10 +816,11 @@ public:
                 // SPINN Here untill all ETs are done and batch is committed
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
+            atomic_thread_fence(memory_order_acquire);
             while (work_queue.commit_sblocks[batch_slot][_thd_id].next_stage != 1){
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
-                    DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+//                    DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
                 if (simulation->is_done()){
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
@@ -791,9 +849,9 @@ public:
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
 //            idle_starttime =0;
         }
-#if DEBUG_QUECC
-        commit_active[_thd_id]->store(wbatch_id);
-#endif
+//#if DEBUG_QUECC
+//        commit_active[_thd_id]->store(wbatch_id);
+//#endif
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC
         // Reset batch_exec_comp_status for next time since sync is done
         expected16 = 1;
@@ -805,9 +863,11 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can RESET batch_commit_sync_status\n", _thd_id);
         }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
-        DEBUG_Q("WT_%ld: commit_stage RESET both done and next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
         work_queue.commit_sblocks[batch_slot][_thd_id].done = 0;
         work_queue.commit_sblocks[batch_slot][_thd_id].next_stage = 0;
+//        DEBUG_Q("WT_%ld: commit_stage RESET both done and next_stage, batch_id = %ld, gbatch_id = %ld\n",
+//                _thd_id,wbatch_id, work_queue.gbatch_id);
+        atomic_thread_fence(memory_order_release);
 #endif
         return SUCCESS;
     }
@@ -816,8 +876,10 @@ public:
 
 #if !SYNC_MASTER_BATCH_CLEANUP
         priority_group * planner_pg;
+#if ATOMIC_PG_STATUS
         uint8_t desired8;
         uint8_t expected8;
+#endif
         if (g_thread_cnt >= g_plan_thread_cnt){
             if (_thd_id < g_plan_thread_cnt) {
                 planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
@@ -841,11 +903,17 @@ public:
 //                assert(planner_pg->txn_dep_graph->size() == 0);
 #endif
                 // Reset PG map so that planners can continue
+#if ATOMIC_PG_STATUS
                 desired8 = PG_AVAILABLE;
                 expected8 = PG_READY;
                 if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
                     M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
                 };
+#else
+                // indicate that his PG is done
+                planner_pg->done = 1;
+                atomic_thread_fence(memory_order_release);
+#endif
             }
         }
         else{
@@ -875,11 +943,16 @@ public:
 //                assert(planner_pg->txn_dep_graph->size() == 0);
 #endif
                     // Reset PG map so that planners can continue
+#if ATOMIC_PG_STATUS
                     desired8 = PG_AVAILABLE;
                     expected8 = PG_READY;
                     if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
                         M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
                     };
+#else
+                    planner_pg->done = 1;
+                    atomic_thread_fence(memory_order_release);
+#endif
                 }
             }
         }
@@ -900,7 +973,11 @@ public:
 #if BATCH_MAP_ORDER == BATCH_ET_PT
         return (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].fetch_add(0);
 #else
+#if ATOMIC_PG_STATUS
         return (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].fetch_add(0);
+#else
+        return (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
+#endif
 #endif
     }
 
@@ -954,7 +1031,6 @@ public:
     inline SRC execute_batch_part(batch_partition * batch_part, uint64_t *eq_comp_cnts, TxnManager * my_txn_man, uint64_t wplanner_id)
     ALWAYS_INLINE{
         Array<exec_queue_entry> * exec_q;
-
         //        M_ASSERT_V(batch_part->batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
 //                " wbatch_id=%ld, batch_part_batch_id = %ld\n",
 //                   batch_slot,_thd_id, wplanner_id, wbatch_id, batch_part->batch_id);
@@ -1031,6 +1107,7 @@ public:
 
             }
             else{
+                // empty EQ
                 batch_part_eq_cnt--;
                 quecc_prof_time = get_sys_clock();
                 quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
@@ -1048,6 +1125,7 @@ public:
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
 
             while (rc == RCOK){
+                INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
                 if (quecc_txn_wait_starttime > 0){
                     INC_STATS(_thd_id,exec_txn_wait_time[_thd_id],get_sys_clock() - quecc_txn_wait_starttime);
                     quecc_txn_wait_starttime = 0;
@@ -1373,8 +1451,9 @@ public:
         txn_prof_starttime = get_sys_clock();
 
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
+#if WORKLOAD == YCSB
         priority_group * planner_pg =  &work_queue.batch_pg_map[(wbatch_id%g_batch_map_length)][_planner_id];
-
+#endif
         // reset transaction context
 //        uint64_t ctx_status = tctx->txn_state.load();
 //        if (wbatch_id > BATCH_MAP_LENGTH){
@@ -1384,9 +1463,9 @@ public:
 //        }
 
         tctx->txn_id = planner_txn_id;
-        tctx->txn_state.store(TXN_INITIALIZED);
-        tctx->completion_cnt.store(0);
-        tctx->txn_comp_cnt.store(0);
+        tctx->txn_state.store(TXN_INITIALIZED,memory_order_acq_rel);
+        tctx->completion_cnt.store(0,memory_order_acq_rel);
+        tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
         tctx->starttime = get_sys_clock(); // record start time of transaction
         //TODO(tq): move to repective benchmark transaction manager implementation
 #if WORKLOAD == TPCC
@@ -1439,7 +1518,7 @@ public:
         uint64_t e8 = TXN_INITIALIZED;
         uint64_t d8 = TXN_STARTED;
 
-        if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+        if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
             assert(false);
         }
     YCSBClientQueryMessage *ycsb_msg = ((YCSBClientQueryMessage *) msg);
@@ -1470,7 +1549,7 @@ public:
         // add entry into range/bucket queue
         // entry is a sturct, need to double check if this works
         // this actually performs a full memcopy when adding entries
-        tctx->txn_comp_cnt.fetch_add(1);
+        tctx->txn_comp_cnt.fetch_add(1,memory_order_acq_rel);
         mrange->add(*entry);
 //        prof_starttime = get_sys_clock();
 
@@ -1582,8 +1661,8 @@ public:
 //    uint64_t idx;
         uint64_t rid;
 
-        uint8_t e8 = TXN_INITIALIZED;
-        uint8_t d8 = TXN_STARTED;
+        uint64_t e8 = TXN_INITIALIZED;
+        uint64_t d8 = TXN_STARTED;
 #if PIPLINED
         et_id = _planner_id;
 #else
@@ -1591,8 +1670,6 @@ public:
 #endif
         switch (tpcc_msg->txn_type) {
             case TPCC_PAYMENT:
-                pmprof_starttime = get_sys_clock();
-
                 if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
                     assert(false);
                 }
@@ -1600,7 +1677,9 @@ public:
                 tpcc_txn_man->payment_lookup_w(tpcc_msg->w_id, r_local);
                 rid = r_local->get_row_id();
                 // check range for warehouse and split if needed
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 // create exec_qe for updating  warehouse record
                 tpcc_txn_man->plan_payment_update_w(tpcc_msg->h_amount,r_local, entry);
                 mrange->add(*entry);
@@ -1608,7 +1687,9 @@ public:
                 // plan read/update district record
                 tpcc_txn_man->payment_lookup_d(tpcc_msg->w_id,tpcc_msg->d_id,tpcc_msg->d_w_id,r_local);
                 rid = r_local->get_row_id();
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 tpcc_txn_man->plan_payment_update_d(tpcc_msg->h_amount, r_local,entry);
                 mrange->add(*entry);
 
@@ -1617,14 +1698,18 @@ public:
                                                tpcc_msg->by_last_name, r_local);
 
                 rid = r_local->get_row_id();
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 tpcc_txn_man->plan_payment_update_c(tpcc_msg->h_amount, r_local, entry);
                 mrange->add(*entry);
 
                 // plan insert into history
                 tpcc_txn_man->plan_payment_insert_h(tpcc_msg->w_id, tpcc_msg->d_id, tpcc_msg->c_id, tpcc_msg->c_w_id, tpcc_msg->d_w_id, tpcc_msg->h_amount, entry);
                 rid = entry->rid;
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 mrange->add(*entry);
 
                 break;
@@ -1637,14 +1722,18 @@ public:
                 tpcc_txn_man->neworder_lookup_w(tpcc_msg->w_id,r_local);
                 rid = r_local->get_row_id();
                 // check range for warehouse and split if needed
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 tpcc_txn_man->plan_neworder_read_w(r_local,entry);
                 mrange->add(*entry);
 
                 // plan read on cust. record
                 tpcc_txn_man->neworder_lookup_c(tpcc_msg->w_id,tpcc_msg->d_id,tpcc_msg->c_id, r_local);
                 rid = r_local->get_row_id();
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 tpcc_txn_man->plan_neworder_read_c(r_local, entry);
                 mrange->add(*entry);
 
@@ -1652,20 +1741,26 @@ public:
                 //plan update on district table
                 tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
                 rid = r_local->get_row_id();
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 tpcc_txn_man->plan_neworder_update_d(r_local,entry);
                 mrange->add(*entry);
 
                 // plan insert into orders
                 tpcc_txn_man->plan_neworder_insert_o(tpcc_msg->w_id, tpcc_msg->d_id,tpcc_msg->c_id,tpcc_msg->remote,tpcc_msg->ol_cnt,tpcc_msg->o_entry_d,entry);
                 rid = entry->rid;
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 mrange->add(*entry);
 
                 // plan insert into new order
                 tpcc_txn_man->plan_neworder_insert_no(tpcc_msg->w_id,tpcc_msg->d_id, tpcc_msg->c_id, entry);
                 rid = entry->rid;
+                pmprof_starttime = get_sys_clock();
                 checkMRange(mrange, rid, et_id);
+                INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                 mrange->add(*entry);
 
                 for (uint64_t i =0; i < tpcc_msg->ol_cnt; ++i){
@@ -1678,21 +1773,27 @@ public:
                     // plan read an item from items
                     tpcc_txn_man->neworder_lookup_i(ol_i_id,r_local);
                     rid = r_local->get_row_id();
+                    pmprof_starttime = get_sys_clock();
                     checkMRange(mrange, rid, et_id);
+                    INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                     tpcc_txn_man->plan_neworder_read_i(r_local,entry);
                     mrange->add(*entry);
 
                     // plan update to a item's stock record
                     tpcc_txn_man->neworder_lookup_s(ol_i_id,ol_supply_w_id,r_local);
                     rid = r_local->get_row_id();
+                    pmprof_starttime = get_sys_clock();
                     checkMRange(mrange, rid, et_id);
+                    INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                     tpcc_txn_man->plan_neworder_update_s(ol_quantity, tpcc_msg->remote, r_local,entry);
                     mrange->add(*entry);
 
                     // plan insert into order_line
                     tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, r_local, entry);
                     rid = entry->rid;
+                    pmprof_starttime = get_sys_clock();
                     checkMRange(mrange, rid, et_id);
+                    INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-pmprof_starttime);
                     mrange->add(*entry);
                 }
 
@@ -1740,6 +1841,14 @@ public:
         Array<Array<exec_queue_entry> *> *exec_qs_tmp UNUSED = NULL;
         Array<exec_queue_entry> *exec_q_tmp = NULL;
         assign_entry *a_tmp UNUSED = NULL;
+//#if DEBUG_QUECC
+//        uint64_t total_eq_entries = 0;
+//        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//            DEBUG_Q("ET_%ld: plan_batch - ET[%ld] = %ld\n",_thd_id,i,exec_queues->get(i)->size());
+//            total_eq_entries += exec_queues->get(i)->size();
+//        }
+//        DEBUG_Q("ET_%ld: plan_batch - total eq entries = %ld\n",_thd_id,total_eq_entries);
+//#endif
         for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
             exec_q_tmp = exec_queues->get(i);
             if (i < g_thread_cnt){
@@ -2082,6 +2191,7 @@ public:
                 }
                 else if (fa_execqs->size() == 1) {
                     batch_part->exec_q = fa_execqs->get(0);
+//                    DEBUG_Q("PT_%ld: assigning eq with size %ld to ET_%ld\n",_thd_id,fa_execqs->get(0)->size(), i);
                     // recycle fa_exec_q
                     fa_execqs->clear();
                     quecc_pool.exec_qs_release(fa_execqs, _planner_id);
@@ -2108,9 +2218,9 @@ public:
             expected = 0;
             desired = (uint64_t) batch_part;
 
-#if DEBUG_QUECC
+//#if DEBUG_QUECC
 //            print_eqs_ranges_after_swap();
-#endif
+//#endif
             // Deliver batch partition to the repective ET
 #if BATCH_MAP_ORDER == BATCH_ET_PT
             if(!work_queue.batch_map[batch_slot][i][_planner_id].compare_exchange_strong(expected, desired)){
@@ -2145,12 +2255,19 @@ public:
         }
 
 #else
+#if ATOMIC_PG_STATUS
         expected8 = PG_AVAILABLE;
         desired8 = PG_READY;
         if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
             M_ASSERT_V(false, "PL_%ld: For batch %ld : failed to SET status for planner_pg with slot_num = [%ld], value = %d, @%ld\n",
                        _planner_id, wbatch_id, batch_slot, planner_pg->status.load(), (uint64_t) planner_pg);
         }
+#else
+        planner_pg->ready = 1;
+        planner_pg->done = 0;
+        atomic_thread_fence(memory_order_release);
+
+#endif
 #endif // BATCHING_MODE == TIME_BASED
         // reset data structures and execution queues for the new batch
         prof_starttime = get_sys_clock();
@@ -2289,6 +2406,7 @@ private:
 
     void print_eqs_ranges_after_swap() const {
 #if SPLIT_MERGE_ENABLED
+        uint64_t total_eq_entries = 0;
         for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
             DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
         }
@@ -2304,7 +2422,9 @@ private:
         for (uint64_t i =0; i < exec_queues->size(); ++i){
             DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
                     _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+            total_eq_entries += exec_queues->get(i)->size();
         }
+        DEBUG_Q("total eq entries = %ld, txns =%f\n", total_eq_entries, ((double)total_eq_entries)/REQ_PER_QUERY);
     }
 
     void print_eqs_ranges_before_swap() const;

@@ -291,19 +291,19 @@ RC YCSBTxnManager::run_txn_state() {
 inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
     RC rc = RCOK;
     int part_id = _wl->key_to_part(req->key);
-#if !(CC_ALG == QUECC || CC_ALG == HSTORE || CC_ALG == LADS)
+#if !(CC_ALG == QUECC || CC_ALG == LADS)
     access_t type = req->acctype;
 #endif
     itemid_t *m_item;
 
     m_item = index_read(_wl->the_index, req->key, part_id);
 
-#if CC_ALG == QUECC || CC_ALG == HSTORE || CC_ALG == LADS
+#if CC_ALG == QUECC || CC_ALG == LADS
 //    // just access row, no need to go throught lock manager path
     row_local = ((row_t *) m_item->location);
 #else
     row_t *row = ((row_t *) m_item->location);
-    rc = get_row(row, type, row_local);
+    rc =    get_row(row, type, row_local);
 #endif
 
     return rc;

@@ -171,25 +171,42 @@ public:
 //        M_ASSERT_V(entry->txn_id == entry->txn_ctx->txn_id,"txn_id mismatch entry txn_id = %ld, txn_context txn_id = %ld\n", entry->txn_id, entry->txn_ctx->txn_id);
         uint64_t e8;
         uint64_t d8;
-        entry->txn_ctx->access_lock->lock();
-        uint32_t comp_cnt = entry->txn_ctx->completion_cnt.fetch_add(1);
-        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt.fetch_add(0) - 1)) {
-//            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load());
+
+//        entry->txn_ctx->access_lock->lock();
+#if WORKLOAD == YCSB
+        assert(entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel) == REQ_PER_QUERY);
+#endif
+        stats._stats[_thd_id]->exec_txn_frag_cnt[_thd_id]+=1;
+//        uint32_t cur_comp_cnt = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
+        do{
+            e8 = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
+            d8 = e8 + 1;
+        } while(!entry->txn_ctx->completion_cnt.compare_exchange_strong(e8,d8,memory_order_acq_rel));
+
+//        uint32_t comp_cnt = entry->txn_ctx->completion_cnt.fetch_add(1,memory_order_acq_rel);
+//        uint32_t comp_cnt = __sync_fetch_and_add(&entry->txn_ctx->completion_cnt,1);
+//        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel) - 1)) {
+        if (d8 == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
+            //            DEBUG_Q("Last entry in transaction comp_cnt = %d, ctx txn_comp_cnt %d\n", comp_cnt, entry->txn_ctx->txn_comp_cnt.load());
             // this is the last entry to be executed, we should be ready to commit
-            e8 = TXN_STARTED;
-            d8 = TXN_READY_TO_COMMIT;
-            if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8)) {
-                M_ASSERT_V(false,"Invalid txn state = %ld\n", entry->txn_ctx->txn_state.load());
-            }
+            stats._stats[_thd_id]->exec_txn_cnts[_thd_id] +=1;
+//            if (entry->txn_ctx->completion_cnt.fetch_add(0, memory_order_acq_rel) == entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel)) {
+                e8 = TXN_STARTED;
+                d8 = TXN_READY_TO_COMMIT;
+                if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8,memory_order_acq_rel)) {
+                    M_ASSERT_V(false,"Invalid txn state = %ld\n", entry->txn_ctx->txn_state.load());
+                }
+//            }
         }
-        entry->txn_ctx->access_lock->unlock();
+//        entry->txn_ctx->access_lock->unlock();
     }
     void     row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid);
 
 #endif
+#if CC_ALG == HSTORE
     // For HStore
     virtual RC      run_hstore_txn() = 0;
-
+#endif
 #if CC_ALG == LADS
     // For LADS
     virtual RC      execute_lads_action(gdgcc::Action * action, int eid) = 0;

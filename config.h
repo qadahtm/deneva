@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 20
@@ -14,7 +14,8 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 16
+#define PLAN_THREAD_CNT 32
+#define COMMIT_THREAD_CNT  10
 #define PART_CNT 32
 
 
@@ -52,7 +53,6 @@
 #define WARMUP            0
 // YCSB or TPCC or PPS
 #define WORKLOAD YCSB
-//#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -121,7 +121,7 @@
 /***********************************************/
 // Concurrency Control
 /***********************************************/
-// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
+// WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
 #define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
@@ -221,7 +221,7 @@
 
 #define QUECC_DB_ACCESS true
 #define SYNC_MASTER_BATCH_CLEANUP false
-#define SYNC_MASTER_RR true
+#define SYNC_MASTER_RR false
 #define TDG_ENTRY_TYPE  ARRAY_ENTRY
 #define ARRAY_ENTRY     0
 #define VECTOR_ENTRY    1
@@ -240,12 +240,15 @@
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
 
-#define WT_SYNC_METHOD SYNC_BLOCK
+#define WT_SYNC_METHOD CNT_ALWAYS_FETCH_ADD_SC
 #define CNT_ALWAYS_FETCH_ADD_SC 0
 #define CAS_GLOBAL_SC    1
 #define CAS_GLOBAL_ACQ_REL    2
 #define CNT_FETCH_ADD_ACQ_REL    3
 #define SYNC_BLOCK    4
+#define SENSE_BARRIER  5
+
+#define ATOMIC_PG_STATUS true
 
 #define SAMPLING_FACTOR 0.0001
 
@@ -303,8 +306,8 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-//#define MAX_TXN_PER_PART    (0.1) * MILLION
-#define MAX_TXN_PER_PART    (0.1/PART_CNT) * MILLION
+#define MAX_TXN_PER_PART    (500000/PART_CNT)
+//#define MAX_TXN_PER_PART    (0.1/PART_CNT) * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
@@ -324,7 +327,8 @@
 //#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
-#define SYNTH_TABLE_SIZE 16777152 // ~16M recs so that it is divisiable by different batch sizes values
+#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
+//#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
@@ -333,7 +337,7 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN 16//PART_CNT
+#define PART_PER_TXN 10//PART_CNT
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10

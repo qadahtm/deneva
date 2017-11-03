@@ -370,14 +370,14 @@ public:
         r_cust_local = (row_t *) item->location;
         return RCOK;
     };
-    inline ALWAYS_INLINE RC plan_neworder_read_c(row_t *& r_cust_local, exec_queue_entry * entry) ALWAYS_INLINE {
+    inline RC plan_neworder_read_c(row_t *& r_cust_local, exec_queue_entry * entry) ALWAYS_INLINE {
         entry->row = r_cust_local;
         entry->rid = r_cust_local->get_row_id();
         entry->type = TPCC_NEWORDER_READ_C;
         entry->txn_ctx->txn_comp_cnt.fetch_add(1);
         return RCOK;
     };
-    inline ALWAYS_INLINE RC run_neworder_read_c(exec_queue_entry * entry) ALWAYS_INLINE{
+    inline RC run_neworder_read_c(exec_queue_entry * entry) ALWAYS_INLINE{
         assert(entry != NULL);
         assert(entry->row != NULL);
         uint64_t c_discount;
@@ -683,13 +683,15 @@ private:
     TPCCWorkload * _wl;
     volatile RC _rc;
     row_t * row;
-
-    // For QueCC
-
+#if CC_ALG == HSTORE
     RC run_hstore_txn();
+#endif
+
+#if CC_ALG == LADS
     // For LADS
     RC execute_lads_action(gdgcc::Action * action, int eid);
     RC resolve_txn_dependencies(Message* msg);
+#endif
     uint64_t next_item_id;
 
     void next_tpcc_state();

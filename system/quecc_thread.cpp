@@ -946,13 +946,14 @@ RC PlannerThread::run_fixed_mode() {
 //                DEBUG_Q("Planner_%ld :Batch_%ld for range_%ld ready! b_slot = %ld\n", _planner_id, batch_id, i, slot_num);
 
                 }
-
+#if ATOMIC_PG_STATUS
                 expected8 = PG_AVAILABLE;
                 desired8 = PG_READY;
                 if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
                     M_ASSERT_V(false, "For batch %ld : failed to SET status for planner_pg [%ld][%ld], value = %d\n",
                                batch_id, slot_num, _planner_id, planner_pg->status.load());
                 }
+#endif
 
                 // reset data structures and execution queues for the new batch
                 prof_starttime = get_sys_clock();
@@ -1018,7 +1019,8 @@ RC PlannerThread::run_fixed_mode() {
 
                     tctx->txn_id = planner_txn_id;
                     tctx->txn_state = TXN_INITIALIZED;
-                    tctx->completion_cnt.store(0);
+//                    tctx->completion_cnt.store(0);
+                    tctx->completion_cnt = 0;
 #if !SERVER_GENERATE_QUERIES
                     tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
 #endif
@@ -1426,9 +1428,9 @@ RC PlannerThread::run_normal_mode() {
                        " g_part_cnt = %d, g_plan_thread_cnt = %d\n", _planner_id, g_part_cnt, g_plan_thread_cnt);
 
     uint64_t next_part = 0;
-#if DEBUG_QUECC
-    plan_active[_planner_id]->store(0);
-#endif
+//#if DEBUG_QUECC
+//    plan_active[_planner_id]->store(0);
+//#endif
     while(!simulation->is_done()) {
         if (plan_starttime == 0 && simulation->is_warmup_done()){
             plan_starttime = get_sys_clock();
@@ -1510,9 +1512,9 @@ RC PlannerThread::run_normal_mode() {
 inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs){
 
     if (force_batch_delivery) {
-#if DEBUG_QUECC
-        print_eqs_ranges_after_swap();
-#endif
+//#if DEBUG_QUECC
+//        print_eqs_ranges_after_swap();
+//#endif
         if (BATCHING_MODE == TIME_BASED) {
             INC_STATS(_thd_id, plan_time_batch_cnts[_planner_id], 1)
             force_batch_delivery = false;
@@ -1984,12 +1986,18 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             }
 
 #else
+#if ATOMIC_PG_STATUS
         expected8 = PG_AVAILABLE;
         desired8 = PG_READY;
         if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
             M_ASSERT_V(false, "PL_%ld: For batch %ld : failed to SET status for planner_pg with slot_num = [%ld], value = %d, @%ld\n",
                        _planner_id, batch_id, slot_num, planner_pg->status.load(), (uint64_t) planner_pg);
         }
+#else
+        planner_pg->done = 0;
+        planner_pg->ready = 1;
+        atomic_thread_fence(memory_order_release);
+#endif
 #endif // BATCHING_MODE == TIME_BASED
         // reset data structures and execution queues for the new batch
         prof_starttime = get_sys_clock();
@@ -2056,13 +2064,19 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             planner_pg->txn_ctxs = txn_ctxs;
 #else
 //            DEBUG_Q("PL_%ld : checking PG map for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
-        while(work_queue.batch_pg_map[slot_num][_planner_id].status.fetch_add(0) != PG_AVAILABLE) {
-#if DEBUG_QUECC
-            if (plan_active[_planner_id]->fetch_add(0) >= 0){
-//                DEBUG_Q("PT_%ld: will wait for its batch map slot %ld, batch_id=%ld\n",_planner_id, slot_num, batch_id);
-                plan_active[_planner_id]->store(-1);
-            }
+#if ATOMIC_PG_STATUS
+        while(work_queue.batch_pg_map[slot_num][_planner_id].status.load() != PG_AVAILABLE) {
+
+#else
+        while(work_queue.batch_pg_map[slot_num][_planner_id].done != 1) {
+            atomic_thread_fence(memory_order_acquire);
 #endif
+//#if DEBUG_QUECC
+//            if (plan_active[_planner_id]->fetch_add(0) >= 0){
+////                DEBUG_Q("PT_%ld: will wait for its batch map slot %ld, batch_id=%ld\n",_planner_id, slot_num, batch_id);
+//                plan_active[_planner_id]->store(-1);
+//            }
+//#endif
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
 //                DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is not available\n", _planner_id, batch_id, slot_num);
@@ -2076,6 +2090,10 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
                 return BREAK;
             }
         }
+#if !ATOMIC_PG_STATUS
+        work_queue.batch_pg_map[slot_num][_planner_id].ready = 0;
+        atomic_thread_fence(memory_order_release);
+#endif
 //        DEBUG_Q("PL_%ld : PG map slot for batch_%ld at b_slot = %ld is available now!! retarting planning again\n", _planner_id, batch_id, slot_num);
         // include idle time from spinning above
         if (idle_starttime > 0){
@@ -2089,7 +2107,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 //        }
         // back to planning again
 //            DEBUG_Q("PT_%ld: resuming planning with slot %ld, batch_id=%ld\n",_planner_id, slot_num, batch_id);
-        plan_active[_planner_id]->store(batch_id);
+//        plan_active[_planner_id]->store(batch_id);
 #endif
         // move to the next planner PG
         planner_pg = &work_queue.batch_pg_map[slot_num][_planner_id];
@@ -2119,9 +2137,10 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     // reset transaction context
 
     tctx->txn_id = planner_txn_id;
-    tctx->txn_state.store(TXN_INITIALIZED);
-    tctx->completion_cnt.store(0);
-    tctx->txn_comp_cnt.store(0);
+    tctx->txn_state.store(TXN_INITIALIZED,memory_order_acq_rel);
+    tctx->completion_cnt.store(0,memory_order_acq_rel);
+//    tctx->completion_cnt =0;
+    tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
     tctx->starttime = get_sys_clock(); // record start time of transaction
 
 
@@ -2172,7 +2191,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 
     uint64_t e8 = TXN_INITIALIZED;
     uint64_t d8 = TXN_STARTED;
-    if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+    if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
         assert(false);
     }
     YCSBClientQueryMessage *ycsb_msg = ((YCSBClientQueryMessage *) msg);
@@ -2308,8 +2327,8 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 //    uint64_t idx;
     uint64_t rid;
 
-    uint8_t e8 = TXN_INITIALIZED;
-    uint8_t d8 = TXN_STARTED;
+    uint64_t e8 = TXN_INITIALIZED;
+    uint64_t d8 = TXN_STARTED;
 
     switch (tpcc_msg->txn_type) {
         case TPCC_PAYMENT:
@@ -2662,9 +2681,9 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
         // use the new ranges to assign the new execution entry
         idx = get_split(key, exec_qs_ranges);
         mrange = exec_queues->get(idx);
-#if DEBUG_QUECC
-        print_eqs_ranges_after_swap();
-#endif
+//#if DEBUG_QUECC
+//        print_eqs_ranges_after_swap();
+//#endif
     }
     INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
 #else
