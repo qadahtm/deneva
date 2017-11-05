@@ -76,6 +76,8 @@ gdgcc::Executor *    executor_thds;
 // defined in parser.cpp
 void parser(int argc, char * argv[]);
 
+void cleanup_quecc_runtime();
+
 int main(int argc, char* argv[])
 {
 	// 0. initialize global data structure
@@ -94,7 +96,6 @@ int main(int argc, char* argv[])
 #endif
 	int64_t starttime;
 	int64_t endtime;
-  starttime = get_server_clock();
   printf("Initializing stats... ");
   fflush(stdout);
 	stats.init(g_total_thread_cnt);
@@ -317,7 +318,7 @@ int main(int argc, char* argv[])
     printf("Done\n");
     stats.printProcInfo();
 #endif
-
+    starttime = get_server_clock();
 	// 2. spawn multiple threads
 	uint64_t thd_cnt = g_thread_cnt;
 	uint64_t wthd_cnt = thd_cnt;
@@ -382,10 +383,12 @@ int main(int argc, char* argv[])
 #endif
 
 #if MODE == FIXED_MODE
-    M_ASSERT_V(false, "fixed mode is not supported anymore\n");
+//    M_ASSERT_V(false, "fixed mode is not supported anymore\n");
     worker_thds = new WorkerThread[wthd_cnt];
 
 #if CC_ALG == QUECC
+
+#if PIPELINED
     planner_thds = new PlannerThread[g_plan_thread_cnt];
 
     wthd_cnt = g_plan_thread_cnt;
@@ -400,18 +403,17 @@ int main(int argc, char* argv[])
         M_ASSERT_V(false, "barriar init failed\n");
     }
 
-    p_thds =
-            (pthread_t *) malloc(sizeof(pthread_t) * (g_plan_thread_cnt));
+    p_thds = (pthread_t *) malloc(sizeof(pthread_t) * (g_plan_thread_cnt));
     pthread_attr_init(&attr);
 
     starttime = get_server_clock();
     for (uint64_t j = 0; j < wthd_cnt; j++) {
-#if SET_AFFINITY
-        CPU_ZERO(&cpus);
-        CPU_SET(cpu_cnt, &cpus);
-        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-        cpu_cnt++;
-#endif
+//#if SET_AFFINITY
+//        CPU_ZERO(&cpus);
+//        CPU_SET(cpu_cnt, &cpus);
+//        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+//        cpu_cnt++;
+//#endif
         planner_thds[j].init(id,g_node_id,m_wl);
         planner_thds[j]._planner_id = j;
         pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
@@ -428,8 +430,8 @@ int main(int argc, char* argv[])
         M_ASSERT_V(false, "barriar destroy failed\n");
     }
     free(p_thds);
+#endif // if PIPELINED
 #endif
-
     wthd_cnt = g_thread_cnt;
     if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
         M_ASSERT_V(false, "barriar init failed\n");
@@ -437,15 +439,15 @@ int main(int argc, char* argv[])
     p_thds = (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
     pthread_attr_init(&attr);
     id = 0;
-    cpu_cnt = 1; // restart from cpu 1
+//    cpu_cnt = 1; // restart from cpu 1
 
     for (uint64_t i = 0; i < wthd_cnt; i++) {
-#if SET_AFFINITY
-        CPU_ZERO(&cpus);
-        CPU_SET(cpu_cnt, &cpus);
-        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-        cpu_cnt++;
-#endif
+//#if SET_AFFINITY
+//        CPU_ZERO(&cpus);
+//        CPU_SET(cpu_cnt, &cpus);
+//        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+//        cpu_cnt++;
+//#endif
         assert(id >= 0 && id < wthd_cnt);
         worker_thds[i].init(id,g_node_id,m_wl);
         pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
@@ -458,32 +460,6 @@ int main(int argc, char* argv[])
         pthread_join(p_thds[i], NULL);
     }
 
-    simulation->run_starttime = starttime;
-    ATOM_CAS(simulation->warmup_end_time,0,get_sys_clock());
-    ATOM_CAS(simulation->warmup,false,true);
-
-    endtime = get_server_clock();
-
-    stats.totals->clear();
-    for(uint64_t i = 0; i < g_total_thread_cnt; i++){
-        stats.totals->combine(stats._stats[i]);
-    }
-
-    printf("Warm Up Done !! in total Time = %ld secs, processed %ld txns, starting measured stage\n",
-           (endtime - starttime)/BILLION, stats.totals->txn_cnt);
-    fflush(stdout);
-
-
-    if (STATS_ENABLE){
-        stats.print(true);
-    }
-    printf("\n");
-    fflush(stdout);
-
-    // reset stats
-    for (uint64_t i =0; i < g_total_thread_cnt; ++i){
-        stats._stats[i]->clear();
-    }
 #if CC_ALG == QUECC
     // destory last barrier
     if (pthread_barrier_destroy(&warmup_bar)){
@@ -494,31 +470,11 @@ int main(int argc, char* argv[])
 
     // TODO(tq): Refactor this into a cleanup function
 
-    for (uint64_t i =0; i < g_batch_map_length; ++i){
-        for (uint64_t j=0; j< g_plan_thread_cnt; ++j){
-            work_queue.batch_pg_map[i][j].status.store(0);
-        }
-    }
-#if BATCH_MAP_ORDER == BATCH_ET_PT
-    for (uint64_t i=0; i < g_batch_map_length ; i++){
-        for (uint64_t j=0; j < g_thread_cnt; j++){
-            for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
-                (work_queue.batch_map[i][j][k]).store(0);
-            }
-        }
-    }
-#else
-    for (uint64_t i=0; i < g_batch_map_length ; i++){
-        for (uint64_t j=0; j < g_plan_thread_cnt; j++){
-            for (uint64_t k=0; k< g_thread_cnt; k++){
-                (work_queue.batch_map[i][j][k]).store(0);
-            }
-        }
-    }
-#endif
+    cleanup_quecc_runtime();
 
-    quecc_pool.print_stats();
-
+    float pt_total_runtime = 0;
+//    quecc_pool.print_stats();
+#if PIPELINED
     wthd_cnt = g_plan_thread_cnt;
 
     // create a new barrier for PT
@@ -531,16 +487,16 @@ int main(int argc, char* argv[])
     (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
     pthread_attr_init(&attr);
     id = 0;
-    cpu_cnt = 1; // restart from cpu 1
+//    cpu_cnt = 1; // restart from cpu 1
 
     starttime = get_server_clock();
     for (uint64_t j = 0; j < wthd_cnt; j++) {
-#if SET_AFFINITY
-      CPU_ZERO(&cpus);
-      CPU_SET(cpu_cnt, &cpus);
-      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-      cpu_cnt++;
-#endif
+//#if SET_AFFINITY
+//      CPU_ZERO(&cpus);
+//      CPU_SET(cpu_cnt, &cpus);
+//      pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+//      cpu_cnt++;
+//#endif
         planner_thds[j].init(id,g_node_id,m_wl);
         planner_thds[j]._planner_id = j;
         pthread_create(&p_thds[id++], &attr, run_thread, (void *)&planner_thds[j]);
@@ -553,33 +509,61 @@ int main(int argc, char* argv[])
     }
 
     endtime = get_server_clock();
-    float pt_total_runtime = (float)(endtime - starttime);
+    pt_total_runtime = (float)(endtime - starttime);
 
     if (pthread_barrier_destroy(&warmup_bar)){
         M_ASSERT_V(false, "barriar destroy failed\n");
     }
+#endif // if PIPELINED
 #endif
 
+
+//    simulation->run_starttime = starttime;
+    simulation->warmup_end_time = get_sys_clock();
+    simulation->warmup = true;
+    endtime = get_server_clock();
+
+    stats.totals->clear();
+    for(uint64_t i = 0; i < g_total_thread_cnt; i++){
+        stats.totals->combine(stats._stats[i]);
+    }
+
+    printf("Warm Up Done !! in total Time = %ld secs, processed %ld txns, starting measured stage\n",
+           (endtime - starttime)/BILLION, stats.totals->txn_cnt);
+    fflush(stdout);
+
+    if (STATS_ENABLE){
+        stats.print(true);
+    }
+    printf("\n");
+    fflush(stdout);
+
+    // reset stats
+    for (uint64_t i =0; i < g_total_thread_cnt; ++i){
+        stats._stats[i]->clear();
+    }
+    stats.totals->clear();
+    simulation->start_set = false; //important for accurate calculation of exp run-time
+    // Starting measured phase
     // Run ETs
     wthd_cnt = g_thread_cnt;
     if (pthread_barrier_init( &warmup_bar, NULL, wthd_cnt)){
         M_ASSERT_V(false, "barriar init failed\n");
     }
     free(p_thds);
-    p_thds =
-            (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
+    p_thds = (pthread_t *) malloc(sizeof(pthread_t) * (wthd_cnt));
     pthread_attr_init(&attr);
 
     id = 0;
-    cpu_cnt = 1; // restart from cpu 1
+//    cpu_cnt = 1; // restart from cpu 1
     starttime = get_server_clock();
       for (uint64_t i = 0; i < wthd_cnt; i++) {
-    #if SET_AFFINITY
-          CPU_ZERO(&cpus);
-          CPU_SET(cpu_cnt, &cpus);
-          pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-          cpu_cnt++;
-    #endif
+//    #if SET_AFFINITY
+//          CPU_ZERO(&cpus);
+//          CPU_SET(cpu_cnt, &cpus);
+//          pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+//          cpu_cnt++;
+//    #endif
           assert(id >= 0 && id < wthd_cnt);
           worker_thds[i].init(id,g_node_id,m_wl);
           pthread_create(&p_thds[id++], &attr, run_thread, (void *)&worker_thds[i]);
@@ -591,20 +575,22 @@ int main(int argc, char* argv[])
     for (uint64_t i = 0; i < wthd_cnt ; i++){
         pthread_join(p_thds[i], NULL);
     }
+    simulation->set_done();
 
     // Exit and print status.
 #if CC_ALG == QUECC
 	endtime = get_server_clock();
     float et_total_runtime = (float)(endtime - starttime);
     fflush(stdout);
-    float total_runtime =  et_total_runtime + pt_total_runtime;
+//    float total_runtime =  et_total_runtime + pt_total_runtime;
+    float total_runtime =  et_total_runtime;
     stats.totals->clear();
     for(uint64_t i = 0; i < g_total_thread_cnt; i++){
         stats.totals->combine(stats._stats[i]);
     }
     float pt_total_runtime_sec = (pt_total_runtime / BILLION);
     float et_total_runtime_sec = (et_total_runtime / BILLION);
-    uint64_t txn_cnt = (g_batch_size*g_batch_map_length);
+    uint64_t txn_cnt = (g_batch_size*SIM_BATCH_CNT);
     float pt_tput = (float) txn_cnt/ (pt_total_runtime_sec);
     float et_tput = (float) txn_cnt / (et_total_runtime_sec);
     float tput = (float) txn_cnt / (total_runtime / BILLION);
@@ -632,9 +618,9 @@ int main(int argc, char* argv[])
     // Free things
     m_wl->index_delete_all();
 
-#if CC_ALG == QUECC
-    quecc_pool.print_stats();
-#endif
+//#if CC_ALG == QUECC
+//    quecc_pool.print_stats();
+//#endif
     return 0;
 
 #else // if FIXED_MODE
@@ -925,6 +911,31 @@ int main(int argc, char* argv[])
 //    je_malloc_stats_print(NULL, NULL, NULL);
 //    je_mallctl("prof.dump", NULL, NULL, NULL, 0);
 	return 0;
+#endif
+}
+
+void cleanup_quecc_runtime() {
+    for (uint64_t i =0; i < g_batch_map_length; ++i){
+        for (uint64_t j=0; j< g_plan_thread_cnt; ++j){
+            work_queue.batch_pg_map[i][j].status.store(0);
+        }
+    }
+#if BATCH_MAP_ORDER == BATCH_ET_PT
+    for (uint64_t i=0; i < g_batch_map_length ; i++){
+        for (uint64_t j=0; j < g_thread_cnt; j++){
+            for (uint64_t k=0; k< g_plan_thread_cnt ; k++){
+                (work_queue.batch_map[i][j][k]).store(0);
+            }
+        }
+    }
+#else
+    for (uint64_t i=0; i < g_batch_map_length ; i++){
+        for (uint64_t j=0; j < g_plan_thread_cnt; j++){
+            for (uint64_t k=0; k< g_thread_cnt; k++){
+                (work_queue.batch_map[i][j][k]).store(0);
+            }
+        }
+    }
 #endif
 }
 

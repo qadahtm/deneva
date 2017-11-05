@@ -43,9 +43,9 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-//#define CPU_FREQ          2.0 // FOR GS32
+#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-#define CPU_FREQ            2.4//2.6 // FOR D15v3
+//#define CPU_FREQ            2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -195,7 +195,7 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED true
+#define PIPELINED false
 #define BARRIER_SYNC false
 #define STATIC_TXN_CTXS true
 
@@ -457,8 +457,7 @@ enum PPSTxnType {PPS_ALL = 0,
 // TODO(tq): support other CC_ALGs
 #define MODE NORMAL_MODE
 //#define MODE FIXED_MODE
-
-
+#define SIM_BATCH_CNT 1400
 /***********************************************/
 // Constant
 /***********************************************/

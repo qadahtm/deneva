@@ -102,6 +102,18 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         if pc_m and is_ycsb:
             nline = '#define REQ_PER_QUERY {}\n'.format(oppt)
 
+        m =    re.search('#define MODE\s+(NORMAL_MODE|FIXED_MODE)',line.strip())
+        if m:
+            if is_fixed_mode:
+                nline = '#define MODE FIXED_MODE\n'
+            else:
+                nline = '#define MODE NORMAL_MODE\n'
+
+        m =    re.search('#define SIM_BATCH_CNT\s+(\d+)',line.strip())
+        if m and is_fixed_mode:
+            nline = '#define SIM_BATCH_CNT {}\n'.format(sim_batch_cnt)
+
+
         m =    re.search('#define MERGE_STRATEGY\s+(RR|BALANCE_EQ_SIZE)',line.strip())
         if m:
             nline = '#define MERGE_STRATEGY {}\n'.format(m_strat)
@@ -411,14 +423,15 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = False;
-dry_run = False;
+time_enable = True;
+dry_run = True;
 vm_shut = False;
 
 is_ycsb = True
 
 is_azure = True
 
+is_fixed_mode = False
 
 vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
@@ -494,10 +507,10 @@ batch_sized = [40320]
 # batch_sized = [5184,10368,20736,41472,82944]
 
 # pt_perc = [0.25,0.5,0.75,1]
-pt_perc = [0.25,0.5]
+# pt_perc = [0.25,0.5]
 # pt_perc = [0.5,1]
 # pt_perc = [0.5]
-# pt_perc = [1]
+pt_perc = [1]
 
 # parts_accessed = [1,32]
 # parts_accessed = [1,2,4,8,10]
@@ -518,8 +531,8 @@ zipftheta = [0.0]
 # zipftheta = [0.8] #high contention
 # zipftheta = [0.99]
 
-write_perc = [0.05,0.2,0.5,0.8,0.95]
-# write_perc = [0.5]
+# write_perc = [0.05,0.2,0.5,0.8,0.95]
+write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 # mpt_perc = [0.1,0.2,0.5,0.8,1.0]
 # mpt_perc = [1.0]
@@ -531,9 +544,9 @@ mpt_perc = [1.0] #100% multi partition transactions
 ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
 # recsizes = [1,5,10,20,40]
-# recsizes = [5,10,20,40] # skip 1 since we already have results for it
+recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it
 # recsizes = [0.2,0.5,1] # skip 1 since we already have results for it
-recsizes = [1]
+# recsizes = [1]
 
 
 ############### TPCC specific
@@ -644,14 +657,14 @@ if is_ycsb:
 
                                                                 if prefix != "":
                                                                     if ppts:
-                                                                        nprefix = prefix + '_'+ str(rs) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                        nprefix = prefix + '_'+ str(int(rs)) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
                                                                     else:
-                                                                        nprefix = prefix + '_'+ str(rs) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                                        nprefix = prefix + '_'+ str(int(rs)) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
                                                                 else:
                                                                     if ppts:
-                                                                        nprefix = str(rs*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                        nprefix = str(int(rs)*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
                                                                     else:
-                                                                        nprefix = str(rs*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                                        nprefix = str(int(rs)*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
                                                                 run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
                                                                 # print('Dry run: {}, {}, {}, t{}, {}'
                                                                 #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
