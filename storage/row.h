@@ -60,6 +60,7 @@ class row_t
 public:
 
 	RC init(table_t * host_table, uint64_t part_id, uint64_t row_id = 0);
+	RC init_from_pool(table_t * host_table, uint64_t part_id, uint64_t row_id, uint64_t thd_id);
 	RC switch_schema(table_t * host_table);
 	// not every row has a manager
 	void init_manager(row_t * row);
@@ -100,12 +101,17 @@ public:
 	char * get_data();
 
 	void free_row();
+	void free_row_pool(uint64_t thd_id);
 
 	// for concurrency control. can be lock, timestamp etc.
   RC get_lock(access_t type, TxnManager * txn); 
 	RC get_row(access_t type, TxnManager * txn, row_t *& row);
   RC get_row_post_wait(access_t type, TxnManager * txn, row_t *& row); 
 	void return_row(RC rc, access_t type, TxnManager * txn, row_t * row);
+#if CC_ALG == QUECC
+    // last transaction id who inserted/updated this row
+    uint64_t last_tid;
+#endif
 // Row Lockmanager is not needed for QueCC or LADS
 // TODO(tq): FIXME
   #if CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC || CC_ALG == LADS

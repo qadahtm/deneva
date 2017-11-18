@@ -18,12 +18,16 @@
 #include <boost/random/uniform_int_distribution.hpp>
 #include <boost/random.hpp>
 #include <boost/unordered_map.hpp>
+#include <row.h>
+
 #if CC_ALG == QUECC
 class Workload;
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
 typedef boost::unordered::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
 typedef boost::unordered::unordered_map<uint64_t, Array<uint64_t> *> hash_table_t;
+// Hashtable with size of buffers
+typedef boost::unordered::unordered_map<uint64_t, boost::lockfree::queue<char *> *> row_data_pool_t;
 #endif
 
 /**
@@ -36,17 +40,20 @@ typedef boost::unordered::unordered_map<uint64_t, Array<uint64_t> *> hash_table_
  * So for a single YCSB transaction, we have ~ 8*10 + 10*1000 + 8
  */
 struct transaction_context {
-    uint64_t txn_id;
-    uint64_t starttime;
+    uint64_t txn_id; // 8 bytes
+    uint64_t starttime; // 8bytes
 // this need to be reset on reuse
+    // 8bytes
     volatile atomic<uint64_t> completion_cnt; // used at execution time to track operations that have completed
 //    uint32_t completion_cnt;
+    // 8bytes
     volatile atomic<uint64_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
 #endif
 //    uint64_t batch_id;
 #if PARALLEL_COMMIT
+    // 8 bytes
     volatile atomic<uint64_t> txn_state;
 #else
     uint64_t txn_state;
@@ -68,9 +75,20 @@ struct transaction_context {
     uint64_t  ol_number;
 //    uint64_t ol_amount;
 #endif
+
+#if ROLL_BACK && ROW_ACCESS_TRACKING
+#if ROW_ACCESS_IN_CTX
+    bool undo_buffer_inialized;
+    char * undo_buffer_data;
+    row_t * orig_rows[REQ_PER_QUERY];
+    access_t a_types[REQ_PER_QUERY];
+    uint64_t prev_tid[REQ_PER_QUERY];
+#else
+    // 8bytes
     spinlock * access_lock = NULL;
-#if ROLL_BACK
+    // 8 bytes
     Array<Access*> * accesses;
+#endif
 #endif
 };
 
@@ -92,6 +110,7 @@ enum tpcc_txn_frag_t{
 struct exec_queue_entry {
     transaction_context * txn_ctx; // 8
     uint64_t txn_id; //8
+//    int op_idx; //4
 //    uint64_t batch_id; // 8
 #if WORKLOAD == YCSB
      // 8 bytes for access_type
@@ -103,6 +122,10 @@ struct exec_queue_entry {
     tpcc_txn_frag_t type;
     uint64_t rid;
     row_t * row;
+#endif
+
+#if ROW_ACCESS_IN_CTX
+    uint32_t req_idx;
 #endif
 
 #if !SERVER_GENERATE_QUERIES
@@ -214,8 +237,8 @@ typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<AssignEntryCo
 
 struct sync_block{
     int64_t done;
-    int64_t next_stage;
-    char padding[40];
+//    int64_t next_stage;
+    char padding[56];
 };
 
 inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
@@ -377,6 +400,9 @@ public:
     void pg_get_or_create(priority_group * &pg, uint64_t planner_id);
     void pg_release(priority_group * &pg, uint64_t planner_id);
 
+    void databuff_get_or_create(char * &buf, uint64_t size, uint64_t thd_id);
+    void databuff_release(char * &buf, uint64_t size, uint64_t thd_id);
+
     // TDG
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
     void txn_list_get_or_create(std::vector<uint64_t> *& list, uint64_t planner_id){
@@ -409,6 +435,8 @@ public:
 
 private:
 
+    row_data_pool_t row_data_pool[THREAD_CNT];
+    spinlock * row_data_pool_lock;
     boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
     boost::lockfree::queue<Array<exec_queue_entry> *> * exec_queue_free_list[THREAD_CNT][PLAN_THREAD_CNT];
     boost::lockfree::queue<batch_partition *> * batch_part_free_list[THREAD_CNT][PLAN_THREAD_CNT];

@@ -64,6 +64,9 @@ public:
 	ts_t 		epoch;
 //#elif CC_ALG == HEKATON
 //	void * 		history_entry;
+#elif CC_ALG == QUECC
+    // the previous value of row.last_tid
+    uint64_t prev_tid;
 #endif
 };
 
@@ -173,10 +176,9 @@ public:
         uint64_t d8;
 
 //        entry->txn_ctx->access_lock->lock();
-#if WORKLOAD == YCSB
-        assert(entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel) == REQ_PER_QUERY);
-#endif
-        stats._stats[_thd_id]->exec_txn_frag_cnt[_thd_id]+=1;
+//#if WORKLOAD == YCSB
+//        assert(entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel) == REQ_PER_QUERY);
+//#endif
 //        uint32_t cur_comp_cnt = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
         do{
             e8 = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
@@ -200,7 +202,7 @@ public:
         }
 //        entry->txn_ctx->access_lock->unlock();
     }
-    void     row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid);
+    void     row_access_backup(exec_queue_entry * entry, access_t type, row_t * row, uint64_t ctid);
 
 #endif
 #if CC_ALG == HSTORE

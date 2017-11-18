@@ -34,7 +34,7 @@
 
 #if WORKLOAD == YCSB
 
-volatile atomic<int> YCSBWorkload::next_tid;
+atomic<UInt32> YCSBWorkload::next_tid;
 
 RC YCSBWorkload::init() {
 	Workload::init();
@@ -132,8 +132,7 @@ RC YCSBWorkload::init_table() {
 					value[i] = (char)rand() % (1<<8) ;
 				new_row->set_value(fid, value);
 			}
-            itemid_t * m_item =
-                (itemid_t *) mem_allocator.alloc( sizeof(itemid_t));
+            itemid_t * m_item = (itemid_t *) mem_allocator.alloc( sizeof(itemid_t));
 			assert(m_item != NULL);
             m_item->type = DT_row;
             m_item->location = new_row;
@@ -154,11 +153,38 @@ ins_done:
 void YCSBWorkload::init_table_parallel() {
 	enable_thread_mem_pool = true;
 	pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
+	cpu_set_t cpus;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+
 	for (UInt32 i = 0; i < g_init_parallelism - 1; i++) {
+#if NUMA_ENABLED
+		CPU_ZERO(&cpus);
+		CPU_SET((i+1), &cpus);
+		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+		c_thd_args_t * args = (c_thd_args_t *) mem_allocator.alloc(sizeof(c_thd_args_t));
+		args->wl = this;
+		args->thd_id = (i+1);
+		pthread_create(&p_thds[i], NULL, threadInitTable, args);
+		pthread_setname_np(p_thds[i], "wl");
+#else
 		pthread_create(&p_thds[i], NULL, threadInitTable, this);
 		pthread_setname_np(p_thds[i], "wl");
+#endif
+
 	}
+#if NUMA_ENABLED
+	CPU_ZERO(&cpus);
+	CPU_SET(0, &cpus);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
+	c_thd_args_t * args = (c_thd_args_t *) mem_allocator.alloc(sizeof(c_thd_args_t));
+	args->wl = this;
+	args->thd_id = 0;
+	threadInitTable(args);
+#else
 	threadInitTable(this);
+#endif
+
 
 	for (uint32_t i = 0; i < g_init_parallelism - 1; i++) {
 		int rc = pthread_join(p_thds[i], NULL);
@@ -170,18 +196,95 @@ void YCSBWorkload::init_table_parallel() {
 	}
 	enable_thread_mem_pool = false;
 }
-
-void *YCSBWorkload::init_table_slice() {
-//	UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
-	UInt32 tid = next_tid.fetch_add(1);
+#if NUMA_ENABLED
+void *YCSBWorkload::init_table_slice(uint64_t thd_id, int node) {
+	UInt32 tid = thd_id;
 	RC rc;
 //	assert(g_synth_table_size % g_init_parallelism == 0);
-	assert(tid < g_init_parallelism);
+	M_ASSERT_V(tid < g_init_parallelism, "tid = %d, g_init_parallelism = %d\n", tid, g_init_parallelism);
+	uint64_t key_cnt = 0;
+
+	uint64_t slice_size = g_synth_table_size / g_init_parallelism;
+
+	printf("Thd %d: slice size = %ld, inserting from %ld, to %ld\n", tid, slice_size, slice_size * tid, (slice_size * (tid+1))-1);
+	uint64_t slice_end = slice_size * (tid + 1);
+	if (tid == g_init_parallelism-1){
+		slice_end = g_synth_table_size;
+	}
+	for (uint64_t key = slice_size * tid;
+		 key < slice_end;
+		 key++
+			) {
+#if !SERVER_GENERATE_QUERIES
+		if(GET_NODE_ID(key_to_part(key)) != g_node_id) {
+		  ++key;
+		  continue;
+		}
+#endif
+
+		++key_cnt;
+		if (key_cnt % 500000 == 0) {
+			printf("Thd %d inserted %ld keys %f\n", tid, key_cnt, simulation->seconds_from_start(get_sys_clock()));
+		}
+//		printf("tid=%d. key=%ld\n", tid, key);
+		row_t *new_row = NULL;
+		uint64_t row_id = rid_man.next_rid((uint64_t)tid);
+		int part_id = key_to_part(key); // % g_part_cnt;
+		rc = the_table->get_new_row(new_row, part_id, row_id);
+		assert(rc == RCOK);
+		uint64_t primary_key = key;
+		new_row->set_primary_key(primary_key);
+#if SIM_FULL_ROW
+		new_row->set_value(0, &primary_key,sizeof(uint64_t));
+
+		Catalog * schema = the_table->get_schema();
+		for (UInt32 fid = 0; fid < schema->get_field_cnt(); fid ++) {
+//			int field_size = schema->get_field_size(fid);
+//			char value[field_size];
+//			for (int i = 0; i < field_size; i++)
+//				value[i] = (char)rand() % (1<<8) ;
+			char value[6] = "hello";
+			new_row->set_value(fid, value,sizeof(value));
+		}
+#endif
+		itemid_t *m_item = (itemid_t *) mem_allocator.alloc(sizeof(itemid_t));
+		assert(m_item != NULL);
+		m_item->type = DT_row;
+		m_item->location = new_row;
+		m_item->valid = true;
+		uint64_t idx_key = primary_key;
+
+//		DEBUG_WL("Thread_%d: inserting key = %ld, part_id=%d\n", tid, idx_key, part_id);
+		rc = the_index->index_insert(idx_key, m_item, part_id);
+		assert(rc == RCOK);
+//    key += g_part_cnt;
+
+	}
+	printf("Thd %d inserted %ld keys\n", tid, key_cnt);
+	return NULL;
+}
+#else
+void *YCSBWorkload::init_table_slice() {
+//	UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
+//	UInt32 tid = next_tid.fetch_add(1);
+	UInt32 ntid;
+	UInt32 tid;
+	do{
+		tid = next_tid.load();
+		ntid = tid +1;
+	}while(!next_tid.compare_exchange_strong(tid, ntid));
+
+
+	RC rc;
+//	assert(g_synth_table_size % g_init_parallelism == 0);
+	M_ASSERT_V(tid < g_init_parallelism, "tid = %d, g_init_parallelism = %d\n", tid, g_init_parallelism);
 	uint64_t key_cnt = 0;
 //	while ((UInt32) ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
 //	assert((UInt32) ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
-	while ((UInt32) next_tid.load() < g_init_parallelism) {}
-	assert((UInt32) next_tid.load() == g_init_parallelism);
+
+//	while ((UInt32) next_tid.load() < g_init_parallelism) {}
+//	assert((UInt32) next_tid.load() == g_init_parallelism);
+
 	uint64_t slice_size = g_synth_table_size / g_init_parallelism;
 
 	printf("Thd %d: slice size = %ld, inserting from %ld, to %ld\n", tid, slice_size, slice_size * tid, (slice_size * (tid+1))-1);
@@ -210,7 +313,6 @@ void *YCSBWorkload::init_table_slice() {
 		int part_id = key_to_part(key); // % g_part_cnt;
 		rc = the_table->get_new_row(new_row, part_id, row_id);
 		assert(rc == RCOK);
-//		uint64_t value = rand();
 		uint64_t primary_key = key;
 		new_row->set_primary_key(primary_key);
 #if SIM_FULL_ROW
@@ -226,9 +328,7 @@ void *YCSBWorkload::init_table_slice() {
             new_row->set_value(fid, value,sizeof(value));
         }
 #endif
-
-		itemid_t *m_item =
-				(itemid_t *) mem_allocator.alloc(sizeof(itemid_t));
+		itemid_t *m_item = (itemid_t *) mem_allocator.alloc(sizeof(itemid_t));
 		assert(m_item != NULL);
 		m_item->type = DT_row;
 		m_item->location = new_row;
@@ -244,6 +344,7 @@ void *YCSBWorkload::init_table_slice() {
 	printf("Thd %d inserted %ld keys\n", tid, key_cnt);
 	return NULL;
 }
+#endif
 
 RC YCSBWorkload::get_txn_man(TxnManager *& txn_manager){
   DEBUG_M("YCSBWorkload::get_txn_man YCSBTxnManager alloc\n");

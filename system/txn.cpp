@@ -469,12 +469,16 @@ RC TxnManager::abort() {
     txn->rc = Abort;
     INC_STATS(get_thd_id(), total_txn_abort_cnt, 1);
     txn_stats.abort_cnt++;
+#if SINGLE_NODE
     if (IS_LOCAL(get_txn_id())) {
         INC_STATS(get_thd_id(), local_txn_abort_cnt, 1);
     } else {
         INC_STATS(get_thd_id(), remote_txn_abort_cnt, 1);
         txn_stats.abort_stats(get_thd_id());
     }
+#else
+    INC_STATS(get_thd_id(), local_txn_abort_cnt, 1);
+#endif
 
     aborted = true;
     release_locks(Abort);
@@ -482,11 +486,12 @@ RC TxnManager::abort() {
     //assert(time_table.get_state(get_txn_id()) == MAAT_ABORTED);
     time_table.release(get_thd_id(), get_txn_id());
 #endif
-
+#if !SINGLE_NODE
     uint64_t timespan = get_sys_clock() - txn_stats.restart_starttime;
     if (IS_LOCAL(get_txn_id()) && warmup_done) {
         INC_STATS_ARR(get_thd_id(), start_abort_commit_latency, timespan);
     }
+#endif
     /*
     // latency from most recent start or restart of transaction
     PRINT_LATENCY("lat_s %ld %ld 0 %f %f %f %f %f %f 0.0\n"
@@ -763,7 +768,12 @@ void TxnManager::cleanup_row(RC rc, uint64_t rid) {
       CC_ALG == HSTORE_SPEC
       ))
     {
+//        uint64_t proftime = get_sys_clock();
         orig_r->return_row(rc,type, this, txn->accesses[rid]->orig_data);
+        if (CC_ALG != CALVIN && ROLL_BACK && type == XP) {
+//            INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+            INC_STATS(_thd_id, record_recov_cnt[_thd_id],1);
+        }
     } else {
 #if ISOLATION_LEVEL == READ_COMMITTED
         if(type == WR) {
@@ -838,40 +848,70 @@ RC TxnManager::get_lock(row_t *row, access_t type) {
 }
 
 #if CC_ALG == QUECC
-void TxnManager::row_access_backup(transaction_context * context, access_t type, row_t * row, uint64_t ctid){
+void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_t * row, uint64_t ctid){
 #if ROW_ACCESS_TRACKING
-    Access *access;
-    access_pool.get(ctid, access);
-    M_ASSERT_V(access, "got invalid access object\n");
 #if ROLL_BACK
+#if ROW_ACCESS_IN_CTX
     if (type == WR) {
-    uint64_t part_id = row->get_part_id();
-    DEBUG_M("TxnManager::get_row row_t alloc\n")
-    row_pool.get(ctid,access->orig_data);
-    access->orig_data->init(row->get_table(), part_id, 0);
-    access->orig_data->copy(row);
-    assert(access->orig_data->get_schema() == row->get_schema());
+        uint64_t rec_size = row->get_tuple_size();
+        // we store the prev_tid and set the last_tid to the current txn_id. This is used to roll back the transaction
+        entry->txn_ctx->prev_tid[entry->req_idx] = row->last_tid;
+        row->last_tid = entry->txn_id;
+        uint64_t ri = entry->req_idx*rec_size;
+        uint64_t proftime = get_sys_clock();
+        memcpy(&entry->txn_ctx->undo_buffer_data[ri], row->data, rec_size);
+        INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+        INC_STATS(_thd_id, record_copy_cnt[_thd_id], 1);
+        entry->txn_ctx->orig_rows[entry->req_idx] = row;
+        entry->txn_ctx->a_types[entry->req_idx] = WR;
+    }
+    else{
+        entry->txn_ctx->a_types[entry->req_idx] = RD;
+    }
+
+#else
+    if (type == WR) {
+        Access *access;
+        access_pool.get(ctid, access);
+        M_ASSERT_V(access, "got invalid access object\n");
+        uint64_t part_id = row->get_part_id();
+        DEBUG_M("TxnManager::get_row row_t alloc\n")
+        row_pool.get(ctid,access->orig_data);
+        access->orig_data->init_from_pool(row->get_table(), part_id,0, _thd_id);
+//        access->orig_data->init(row->get_table(), part_id);
+        access->prev_tid = row->last_tid;
+        row->last_tid = entry->txn_id;
+        uint64_t proftime = get_sys_clock();
+        access->orig_data->copy(row);
+        INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+        assert(access->orig_data->get_schema() == row->get_schema());
+        INC_STATS(_thd_id, record_copy_cnt[_thd_id], 1);
 
     // ARIES-style physiological logging
-//#if LOGGING
-//    //LogRecord * record = logger.createRecord(LRT_UPDATE,L_UPDATE,get_txn_id(),part_id,row->get_table()->get_table_id(),row->get_primary_key());
-//    LogRecord * record = logger.createRecord(get_txn_id(),L_UPDATE,row->get_table()->get_table_id(),row->get_primary_key());
-//    if(g_repl_cnt > 0) {
-//      msg_queue.enqueue(get_thd_id(),Message::create_message(record,LOG_MSG),g_node_id + g_node_cnt + g_client_node_cnt);
-//    }
-//    logger.enqueueRecord(record);
-//#endif
+    //#if LOGGING
+    //    //LogRecord * record = logger.createRecord(LRT_UPDATE,L_UPDATE,get_txn_id(),part_id,row->get_table()->get_table_id(),row->get_primary_key());
+    //    LogRecord * record = logger.createRecord(get_txn_id(),L_UPDATE,row->get_table()->get_table_id(),row->get_primary_key());
+    //    if(g_repl_cnt > 0) {
+    //      msg_queue.enqueue(get_thd_id(),Message::create_message(record,LOG_MSG),g_node_id + g_node_cnt + g_client_node_cnt);
+    //    }
+    //    logger.enqueueRecord(record);
+    //#endif
+
+        access->thd_id = ctid;
+        access->type = type;
+        //TODO(tq): we should only use one
+        access->orig_row = row;
+        access->data = row;
+        // Need to protect accesses and synchronize updates to it.
+//        entry->txn_ctx->accesses->atomic_add(access);
+
+        entry->txn_ctx->access_lock->lock();
+        entry->txn_ctx->accesses->add(access);
+        entry->txn_ctx->access_lock->unlock();
 
     }
 #endif
-    access->thd_id = ctid;
-    access->type = type;
-    access->orig_row = row;
-    access->data = row;
-    // Need to protect accesses and synchronize updates to it.
-    context->access_lock->lock();
-    context->accesses->add(access);
-    context->access_lock->unlock();
+#endif
 #endif
 }
 #endif // #if CC_ALG == QUECC
@@ -895,6 +935,7 @@ RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     if (rc == Abort || rc == WAIT) {
         row_rtn = NULL;
         DEBUG_M("TxnManager::get_row(abort) access free\n");
+//        DEBUG_Q("ET_%ld: TxnManager::get_row(abort) access free, write_cnt = %ld\n", _thd_id, txn_stats.write_cnt);
         access_pool.put(get_thd_id(), access);
         timespan = get_sys_clock() - starttime;
         INC_STATS(ctid, txn_manager_time, timespan);
@@ -918,12 +959,16 @@ RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
 
 #if ROLL_BACK && (CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == HSTORE || CC_ALG == HSTORE_SPEC)
     if (type == WR) {
+
     //printf("alloc 10 %ld\n",get_txn_id());
     uint64_t part_id = row->get_part_id();
     DEBUG_M("TxnManager::get_row row_t alloc\n")
     row_pool.get(ctid,access->orig_data);
     access->orig_data->init(row->get_table(), part_id, 0);
+        uint64_t proftime = get_sys_clock();
     access->orig_data->copy(row);
+        INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+        INC_STATS(_thd_id, record_copy_cnt[_thd_id],1);
     assert(access->orig_data->get_schema() == row->get_schema());
 
     // ARIES-style physiological logging
@@ -972,12 +1017,16 @@ RC TxnManager::get_row_post_wait(row_t *&row_rtn) {
     access->orig_row = row;
 #if ROLL_BACK && (CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE)
     if (type == WR) {
+
       uint64_t part_id = row->get_part_id();
     //printf("alloc 10 %ld\n",get_txn_id());
     DEBUG_M("TxnManager::get_row_post_wait row_t alloc\n")
     row_pool.get(get_thd_id(),access->orig_data);
         access->orig_data->init(row->get_table(), part_id, 0);
+        uint64_t proftime = get_sys_clock();
         access->orig_data->copy(row);
+        INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+        INC_STATS(_thd_id, record_copy_cnt[_thd_id], 1);
     }
 #endif
 
@@ -1033,7 +1082,7 @@ TxnManager::index_read(INDEX *index, idx_key_t key, int part_id, int count) {
 
 
 RC TxnManager::validate() {
-#if MODE != NORMAL_MODE
+#if MODE != NORMAL_MODE && MODE != FIXED_MODE
     return RCOK;
 #endif
     if (CC_ALG != OCC && CC_ALG != MAAT) {

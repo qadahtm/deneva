@@ -33,7 +33,12 @@ double YCSBQueryGenerator::denom_record = 0;
 
 void YCSBQueryGenerator::init() {
     mrand = (myrand *) mem_allocator.alloc(sizeof(myrand));
+#if !ZERO_SEED_RAND_WL
     mrand->init(get_sys_clock());
+#else
+    mrand->init(0);
+#endif
+
     if (SKEW_METHOD == ZIPF) {
         zeta_2_theta = zeta(2, g_zipf_theta);
         uint64_t table_size = g_synth_table_size / g_part_cnt;
@@ -358,7 +363,11 @@ BaseQuery *YCSBQueryGenerator::gen_requests_hot(uint64_t home_partition_id, Work
 }
 
 BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Workload *h_wl) {
+//#if NUMA_ENABLED
+//    YCSBQuery *query = (YCSBQuery *) mem_allocator.alloc_local(sizeof(YCSBQuery));
+//#else
     YCSBQuery *query = (YCSBQuery *) mem_allocator.alloc(sizeof(YCSBQuery));
+//#endif
     new(query) YCSBQuery();
     query->requests.init(g_req_per_query);
 
@@ -404,7 +413,11 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
             }
         }
 #endif
+//#if NUMA_ENABLED
+//        ycsb_request *req = (ycsb_request *) mem_allocator.alloc_local(sizeof(ycsb_request));
+//#else
         ycsb_request *req = (ycsb_request *) mem_allocator.alloc(sizeof(ycsb_request));
+//#endif
         if (r_twr < g_txn_read_perc || r < g_tup_read_perc)
             req->acctype = RD;
         else

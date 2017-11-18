@@ -83,6 +83,10 @@ void Stats_thd::init(uint64_t thd_id) {
   wt_hl_sync_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
 
 #endif
+
+  record_copy_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  record_copy_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_thread_cnt);
+  record_recov_cnt = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_thread_cnt);
   DEBUG_M("Stats_thd::init mtx alloc\n");
   mtx= (double *) mem_allocator.align_alloc(sizeof(double) * 40);
 
@@ -121,7 +125,11 @@ void Stats_thd::clear() {
   txn_write_cnt=0;
   record_write_cnt=0;
   parts_touched=0;
-
+  for (uint64_t i=0; i < g_thread_cnt; i++){
+    record_copy_time[i] = 0;
+    record_copy_cnt[i] = 0;
+    record_recov_cnt[i] = 0;
+  }
   // Breakdown
   ts_alloc_time=0;
   abort_time=0;
@@ -624,6 +632,33 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,parts_touched
   ,avg_parts_touched
   );
+
+  double total_record_copy_time = 0;
+  uint64_t total_record_copy_cnt = 0;
+  uint64_t total_record_recov_cnt = 0;
+
+  for (uint64_t i=0; i < g_thread_cnt; i++){
+    total_record_copy_time += record_copy_time[i];
+    total_record_copy_cnt += record_copy_cnt[i];
+    total_record_recov_cnt += record_recov_cnt[i];
+    fprintf(outf,
+            ",wt%ld_record_copy_time_s=%f"
+            ,i
+            ,record_copy_time[i] / BILLION);
+  }
+  fprintf(outf,
+          ",total_record_copy_time_ns=%f"
+          ,(total_record_copy_time));
+  fprintf(outf,
+          ",avg_record_copy_time_ns=%f"
+          ,(total_record_copy_time/(total_record_copy_cnt)));
+  fprintf(outf,
+          ",total_record_copy_cnt=%ld"
+          ,total_record_copy_cnt);
+  fprintf(outf,
+          ",total_record_recov_cnt=%ld"
+          ,total_record_recov_cnt);
+
 #if CC_ALG != QUECC
   // Breakdown
   fprintf(outf,
@@ -800,7 +835,6 @@ void Stats_thd::print(FILE * outf, bool prog) {
       ,worker_process_time_by_type[i] / BILLION
     );
   }
-
   // IO
   double mbuf_send_intv_time_avg = 0;
   double msg_unpack_time_avg = 0;
@@ -1579,6 +1613,11 @@ void Stats_thd::combine(Stats_thd * stats) {
   txn_write_cnt+=stats->txn_write_cnt;
   record_write_cnt+=stats->record_write_cnt;
   parts_touched+=stats->parts_touched;
+  for (uint64_t i=0; i < g_thread_cnt; i++){
+    record_copy_time[i] += stats->record_copy_time[i];
+    record_copy_cnt[i] += stats->record_copy_cnt[i];
+    record_recov_cnt[i] += stats->record_recov_cnt[i];
+  }
 
   // Breakdown
   ts_alloc_time+=stats->ts_alloc_time;

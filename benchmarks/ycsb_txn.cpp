@@ -439,7 +439,8 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     rc = run_ycsb_0(req, row);
     assert(rc == RCOK);
 //    INC_STATS(get_thd_id(), exec_txn_index_lookup_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
-    row_access_backup(exec_qe->txn_ctx, req->acctype, row, _thd_id);
+    // backup row to rollback writes
+    row_access_backup(exec_qe, req->acctype, row, _thd_id);
 //    quecc_prof_time = get_sys_clock();
     // perfrom access
     rc = run_ycsb_1(req->acctype, row);

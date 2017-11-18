@@ -27,8 +27,8 @@ void mem_alloc::free(void * ptr, uint64_t size) {
 #ifdef N_MALLOC 
   std::free(ptr);
 #else
-//  je_free(ptr);
-    je_dallocx(ptr, 0);
+  je_free(ptr);
+//    je_dallocx(ptr, 0);
 #endif
 }
 

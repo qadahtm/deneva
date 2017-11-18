@@ -44,6 +44,26 @@ row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id) {
 	return RCOK;
 }
 
+RC
+row_t::init_from_pool(table_t *host_table, uint64_t part_id, uint64_t row_id, uint64_t thd_id) {
+	part_info = true;
+	_row_id = row_id;
+	_part_id = part_id;
+	this->table = host_table;
+	Catalog * schema = host_table->get_schema();
+	tuple_size = schema->get_tuple_size();
+#if SIM_FULL_ROW
+#if CC_ALG == QUECC
+	quecc_pool.databuff_get_or_create(data,tuple_size, thd_id);
+#else
+	data = (char *) mem_allocator.alloc(sizeof(char) * tuple_size);
+#endif
+#else
+	data = (char *) mem_allocator.alloc(sizeof(uint64_t) * 1);
+#endif
+	return RCOK;
+}
+
 RC 
 row_t::switch_schema(table_t * host_table) {
 	this->table = host_table;
@@ -182,6 +202,19 @@ void row_t::free_row() {
   DEBUG_M("row_t::free_row free\n");
 #if SIM_FULL_ROW
 	mem_allocator.free(data, sizeof(char) * get_tuple_size());
+#else
+	mem_allocator.free(data, sizeof(uint64_t) * 1);
+#endif
+}
+
+void row_t::free_row_pool(uint64_t thd_id) {
+	DEBUG_M("row_t::free_row free\n");
+#if SIM_FULL_ROW
+#if CC_ALG == QUECC
+	quecc_pool.databuff_release(data,get_tuple_size(),thd_id);
+#else
+	mem_allocator.free(data, sizeof(char) * get_tuple_size());
+#endif
 #else
 	mem_allocator.free(data, sizeof(uint64_t) * 1);
 #endif

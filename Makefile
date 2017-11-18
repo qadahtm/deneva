@@ -1,9 +1,8 @@
 CC=g++
-CFLAGS=-Wall -g -gdwarf-3 -std=c++0x
-#CFLAGS += -fsanitize=address -fno-omit-frame-pointer 
-#JEMALLOC=./jemalloc-4.0.3
-JEMALLOC=../deps/jemalloc-4.5.0
-#NNMSG=./nanomsg-0.5-beta
+#CFLAGS=-Wall -g -gdwarf-3 -std=c++0x
+CFLAGS=-Wall -g -gdwarf-3 -std=c++14
+#CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+JEMALLOC=../deps/jemalloc
 NNMSG=../deps/nanomsg-1.0.0
 BOOST=../boost_1_63_0
 
@@ -14,10 +13,13 @@ DEPS = -I. -I./benchmarks -I./client/ -I./concurrency_control -I./storage -I./tr
 
 #CFLAGS += $(DEPS) -O3 -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
 CFLAGS += $(DEPS) -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
-LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -pthread -gdwarf-3 -lrt -std=c++0x -lnuma -lconfig++
+#LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -pthread -gdwarf-3 -lrt -std=c++0x -lnuma -lconfig++
+LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -pthread -gdwarf-3 -lrt
+#LDFLAGS += -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -ljemalloc `jemalloc-config --libs`
 #LDFLAGS = -Wall -L. -L$(NNMSG) -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -pthread -gdwarf-3 -lrt -std=c++11
 LDFLAGS += $(CFLAGS)
-LIBS = -lnanomsg -lanl -ljemalloc 
+#LIBS = -lnanomsg -lanl -ljemalloc -lm -lstdc++ -lpthread -ldl -lnuma -lconfig++
+LIBS = -lnanomsg -lanl -lm -lstdc++ -lpthread -ldl -lnuma -lconfig++
 
 DB_MAINS = ./client/client_main.cpp ./system/sequencer_main.cpp ./unit_tests/unit_main.cpp
 CL_MAINS = ./system/main.cpp ./system/sequencer_main.cpp ./unit_tests/unit_main.cpp

@@ -42,6 +42,12 @@ public:
 #else
 	BaseQuery * get_next_query(uint64_t server_id,uint64_t thread_id);
 #endif
+#if NUMA_ENABLED
+	struct c_thd_args_t{
+		Client_query_queue * context;
+		uint64_t thd_id;
+	};
+#endif
 	void initQueriesParallel();
 	static void * initQueriesHelper(void * context);
 	uint64_t size;

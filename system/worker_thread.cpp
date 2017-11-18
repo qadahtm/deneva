@@ -48,7 +48,7 @@ void WorkerThread::setup() {
 
 }
 
-void WorkerThread::process(Message *msg) {
+RC WorkerThread::process(Message *msg) {
     RC rc __attribute__ ((unused));
 
     DEBUG("%ld Processing %ld %d\n", get_thd_id(), msg->get_txn_id(), msg->get_rtype());
@@ -117,6 +117,7 @@ void WorkerThread::process(Message *msg) {
     INC_STATS(_thd_id, worker_process_cnt_by_type[msg->rtype], 1);
     INC_STATS(_thd_id, worker_process_time_by_type[msg->rtype], timespan);
     DEBUG("%ld EndProcessing %d %ld\n", get_thd_id(), msg->get_rtype(), msg->get_txn_id());
+    return rc;
 }
 
 void WorkerThread::check_if_done(RC rc) {
@@ -181,11 +182,17 @@ void WorkerThread::abort() {
     // TODO: TPCC Rollback here
 
     ++txn_man->abort_cnt;
+#if ABORT_THREAD || ABORT_QUEUES
     txn_man->reset();
-#if ABORT_THREAD
+#if ABORT_QUEUES
+    uint64_t penalty = work_queue.abort_queues[get_thd_id()]->enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
+#else
     uint64_t penalty = abort_queue.enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
+#endif
 
     txn_man->txn_stats.total_abort_time += penalty;
+#else
+    release_txn_man();
 #endif
 }
 
@@ -213,9 +220,9 @@ RC WorkerThread::run() {
 RC WorkerThread::run_fixed_mode() {
     tsetup();
     printf("Running WorkerThread %ld in fixed mode\n", _thd_id);
-#if CC_ALG != QUECC
-    M_ASSERT_V(false, "Fixed mode is not supported\n");
-#endif
+//#if CC_ALG != QUECC
+//    M_ASSERT_V(false, "Fixed mode is not supported\n");
+//#endif
 #if CC_ALG == QUECC
 //#if DEBUG_QUECC
 //    exec_active[_thd_id]->store(0);
@@ -312,9 +319,11 @@ RC WorkerThread::run_fixed_mode() {
     _wl->get_txn_man(my_txn_man);
     my_txn_man->init(_thd_id, _wl);
     my_txn_man->register_thread(this);
-
+//#if NUMA_ENABLED
+//    uint64_t * eq_comp_cnts = (uint64_t *) mem_allocator.alloc_local(sizeof(uint64_t)*g_exec_qs_max_size);
+//#else
     uint64_t * eq_comp_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_exec_qs_max_size);
-
+//#endif
     // Initialize access list
 //    for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
 //        for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
@@ -574,6 +583,9 @@ RC WorkerThread::run_fixed_mode() {
             hl_prof_starttime = get_sys_clock();
         }
 //        M_ASSERT_V(wbatch_id == work_queue.gbatch_id, "ET_%ld: plan stage - batch id mismatch wbatch_id=%ld, gbatch_id=%ld\n", _thd_id, wbatch_id, work_queue.gbatch_id);
+#if DEBUG_QUECC
+        stage = 0;
+#endif
         src = plan_batch(batch_slot, my_txn_man);
         if (batch_proc_starttime > 0) {
             INC_STATS(_thd_id, wt_hl_plan_time[_thd_id], get_sys_clock() - hl_prof_starttime);
@@ -597,6 +609,9 @@ RC WorkerThread::run_fixed_mode() {
                 hl_prof_starttime = get_sys_clock();
             }
 //            M_ASSERT_V(wbatch_id == work_queue.gbatch_id, "ET_%ld: exec stage - batch id mismatch wbatch_id=%ld, gbatch_id=%ld\n", _thd_id, wbatch_id, work_queue.gbatch_id);
+#if DEBUG_QUECC
+            stage = 1;
+#endif
             src = execute_batch(batch_slot,eq_comp_cnts, my_txn_man);
             if (batch_proc_starttime > 0){
                 INC_STATS(_thd_id, wt_hl_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
@@ -626,6 +641,9 @@ RC WorkerThread::run_fixed_mode() {
                     hl_prof_starttime = get_sys_clock();
                 }
 //                M_ASSERT_V(wbatch_id == work_queue.gbatch_id, "ET_%ld: commit stage - batch id mismatch wbatch_id=%ld, gbatch_id=%ld\n", _thd_id, wbatch_id, work_queue.gbatch_id);
+#if DEBUG_QUECC
+                stage = 2;
+#endif
                 commit_batch(batch_slot);
                 if (batch_proc_starttime > 0){
                     INC_STATS(_thd_id, wt_hl_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
@@ -823,11 +841,86 @@ RC WorkerThread::run_fixed_mode() {
 
 
     }
-
-
 #else
     //TODO(tq): do count-based for other CCs
+    uint64_t cnt = 0;
+    uint64_t ready_starttime = 0;
+    uint64_t sim_txn_cnt = (BATCH_SIZE/g_thread_cnt)*SIM_BATCH_CNT;
+    RC rc;
+    while(cnt < sim_txn_cnt){
+        Message * msg = work_queue.dequeue(_thd_id);
+        assert(msg);
+
+        //uint64_t starttime = get_sys_clock();
+        if(msg->rtype != CL_QRY || CC_ALG == CALVIN) {
+            txn_man = get_transaction_manager(msg);
+#if !SINGLE_NODE
+            if (CC_ALG != CALVIN && IS_LOCAL(txn_man->get_txn_id())) {
+            if (msg->rtype != RTXN_CONT && ((msg->rtype != RACK_PREP) || (txn_man->get_rsp_cnt() == 1))) {
+              txn_man->txn_stats.work_queue_time_short += msg->lat_work_queue_time;
+              txn_man->txn_stats.cc_block_time_short += msg->lat_cc_block_time;
+              txn_man->txn_stats.cc_time_short += msg->lat_cc_time;
+              txn_man->txn_stats.msg_queue_time_short += msg->lat_msg_queue_time;
+              txn_man->txn_stats.process_time_short += msg->lat_process_time;
+              /*
+              if (msg->lat_network_time/BILLION > 1.0) {
+                printf("%ld %d %ld -> %ld: %f %f\n",msg->txn_id, msg->rtype, msg->return_node_id,get_node_id() ,msg->lat_network_time/BILLION, msg->lat_other_time/BILLION);
+              }
+              */
+              txn_man->txn_stats.network_time_short += msg->lat_network_time;
+            }
+
+          } else {
+              txn_man->txn_stats.clear_short();
+          }
+          if (CC_ALG != CALVIN) {
+            txn_man->txn_stats.lat_network_time_start = msg->lat_network_time;
+            txn_man->txn_stats.lat_other_time_start = msg->lat_other_time;
+          }
+          txn_man->txn_stats.msg_queue_time += msg->mq_time;
+          txn_man->txn_stats.msg_queue_time_short += msg->mq_time;
+          msg->mq_time = 0;
+          txn_man->txn_stats.work_queue_time += msg->wq_time;
+          txn_man->txn_stats.work_queue_time_short += msg->wq_time;
+          //txn_man->txn_stats.network_time += msg->ntwk_time;
+          msg->wq_time = 0;
+          txn_man->txn_stats.work_queue_cnt += 1;
 #endif
+
+            ready_starttime = get_sys_clock();
+            bool ready = txn_man->unset_ready();
+            INC_STATS(get_thd_id(),worker_activate_txn_time,get_sys_clock() - ready_starttime);
+            assert(ready);
+            txn_man->register_thread(this);
+        }
+
+        rc = process(msg);
+
+        ready_starttime = get_sys_clock();
+        if(txn_man) {
+            bool ready = txn_man->set_ready();
+            assert(ready);
+        }
+        INC_STATS(get_thd_id(),worker_deactivate_txn_time,get_sys_clock() - ready_starttime);
+
+        // delete message
+        ready_starttime = get_sys_clock();
+#if CC_ALG != CALVIN
+#if !INIT_QUERY_MSGS
+        msg->release();
+//        Message::release_message(msg);
+#endif
+#endif
+        INC_STATS(get_thd_id(),worker_release_msg_time,get_sys_clock() - ready_starttime);
+#if ABORT_QUEUES
+        if (rc != Abort){
+            cnt++;
+        }
+#else
+        cnt++;
+#endif
+    }
+#endif // if CC_ALG == QUECCC
 
 
     printf("FINISH WT %ld:%ld\n", _node_id, _thd_id);
@@ -895,6 +988,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         pbprof_starttime = get_sys_clock();
         msg = work_queue.plan_dequeue(_thd_id, next_part);
         INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-pbprof_starttime);
+#if !SINGLE_NODE
         if(!msg) {
 //            SAMPLED_DEBUG_Q("PL_%ld: no message??\n", _planner_id);
             if(pidle_starttime == 0){
@@ -903,7 +997,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
             // we have not recieved a transaction
                 continue;
         }
-
+#endif
 //        DEBUG_Q("PL_%ld: got a query message, query_cnt = %ld\n", _planner_id, query_cnt);
         INC_STATS(_thd_id,plan_queue_deq_cnt[_planner_id],1);
 
@@ -1008,7 +1102,22 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 #else
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
 #endif
+#if DEBUG_QUECC
+        if ((uint64_t)batch_part == 0){
 
+            for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, plan_sync: done[%d]=%ld, plan_next_stage=%ld\n", _thd_id,wbatch_id,j,work_queue.plan_sblocks[i][j].done, *work_queue.plan_next_stage[i]);
+                }
+                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, exec_sync: done[%d]=%ld, exec_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.exec_sblocks[i][j].done, *work_queue.exec_next_stage[i]);
+                }
+                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, commit_sync: done[%d]=%ld, commit_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.commit_sblocks[i][j].done, *work_queue.commit_next_stage[i]);
+                }
+            }
+        }
+#endif
         M_ASSERT_V(batch_part, "WT_%ld: batch part pointer is zero, PG=%ld, batch_slot = %ld, batch_id = %ld!!\n",
                    _thd_id, wplanner_id, batch_slot, wbatch_id);
 #endif
@@ -1155,7 +1264,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
 
                                 msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[j].return_node_id);
 #endif
-                    wt_release_accesses(&planner_pg->txn_ctxs[j], false, false);
+                    wt_release_accesses(&planner_pg->txn_ctxs[j],rc);
                     e8 = TXN_READY_TO_COMMIT;
                     d8 = TXN_COMMITTED;
                     if (!planner_pg->txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
@@ -1176,8 +1285,9 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
                     INC_STATS_ARR(_thd_id, start_abort_commit_latency, timespan_long);
                     // need to do cascading abort
                     // copying back original value is done during release
+
                     if (planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
-                        wt_release_accesses(&planner_pg->txn_ctxs[j], true, true);
+                        wt_release_accesses(&planner_pg->txn_ctxs[j], rc);
                         e8 = TXN_READY_TO_COMMIT;
                         d8 = TXN_ABORTED;
                         if (!planner_pg->txn_ctxs[j].txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
@@ -1186,7 +1296,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
                     }
                     else{
                         assert(planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT);
-                        wt_release_accesses(&planner_pg->txn_ctxs[j], false, true);
+                        wt_release_accesses(&planner_pg->txn_ctxs[j], rc);
 
                         e8 = TXN_READY_TO_ABORT;
                         d8 = TXN_ABORTED;
@@ -1213,7 +1323,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
             }
             if (rc == Commit){
                 commit_cnt++;
-                wt_release_accesses(&planner_pg->txn_ctxs[txn_idx], false, false);
+                wt_release_accesses(&planner_pg->txn_ctxs[txn_idx], rc);
                 e8 = TXN_READY_TO_COMMIT;
                 d8 = TXN_COMMITTED;
                 if (!planner_pg->txn_ctxs[txn_idx].txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
@@ -1222,7 +1332,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
                 // icrement abort
             }
             else if (rc == Abort){
-                wt_release_accesses(&planner_pg->txn_ctxs[txn_idx], true, true);
+                wt_release_accesses(&planner_pg->txn_ctxs[txn_idx],rc);
                 e8 = TXN_READY_TO_COMMIT;
                 d8 = TXN_ABORTED;
                 if (!planner_pg->txn_ctxs[txn_idx].txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
@@ -1342,27 +1452,59 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
 }
 
 
-inline void WorkerThread::wt_release_accesses(transaction_context * context, bool cascading_abort, bool rollback){
+inline void WorkerThread::wt_release_accesses(transaction_context * context, RC rc){
 #if ROW_ACCESS_TRACKING
     // releaase accesses
+//    if (DEBUG_QUECC){
+//        M_ASSERT_V(!cascading_abort, "cascading abort is not false!!\n");
+//        M_ASSERT_V(!rollback, "rollback is not false!!\n");
+//    }
+//    DEBUG_Q("ET_%ld: cacading abort = %d, rollback = %d\n", _thd_id, cascading_abort, rollback);
+#if ROLL_BACK
+#if ROW_ACCESS_IN_CTX
+    // we don't need to free any memory to release accesses as it will be recycled for the next batch
+    // roll back writes
+    for (int i = 0; i < REQ_PER_QUERY; ++i) {
+        if (context->a_types[i] == WR){
+            if (rc == Abort){
+                if (context->orig_rows[i]->last_tid == context->txn_id){
+                    uint64_t rec_size = context->orig_rows[i]->get_tuple_size();
+                    context->orig_rows[i]->last_tid = context->prev_tid[i];
+                    uint64_t ri = i*rec_size;
+                    memcpy(context->orig_rows[i]->data,&context->undo_buffer_data[ri], rec_size);
+                    INC_STATS(_thd_id, record_recov_cnt[_thd_id], 1);
+                }
+            }
+        }
+    }
 
+#else
     for (uint64_t k = 0; k < context->accesses->size(); k++) {
         M_ASSERT_V(context->accesses->get(k), "Zero pointer for access \n");
         uint64_t ctid = context->accesses->get(k)->thd_id;
         Access * access = context->accesses->get(k);
 
-#if ROLL_BACK
-        if (rollback && access->type == WR && !cascading_abort){
-            // restore only the first
-            access->data->copy(access->orig_data);
-        }
-        if (access->orig_data){
+
+        if (access->type == WR){
+            if (rc == Abort){
+                // if ctx.tid == row.last_tid
+                // restore original data and the original tid
+                if (context->txn_id == access->orig_row->last_tid){
+                    access->orig_row->last_tid = access->prev_tid;
+                    access->orig_row->copy(access->orig_data);
+                    INC_STATS(_thd_id, record_recov_cnt[_thd_id], 1);
+                }
+            }
+            //            access->orig_data->free_row();
             row_pool.put(ctid, access->orig_data);
+            access->orig_data->free_row_pool(_thd_id);
         }
-#endif
+
         access_pool.put(ctid, access);
     }
     context->accesses->clear();
+#endif
+#endif
 //    assert(context->accesses->size() == 0);
 #endif
 }
@@ -1473,7 +1615,11 @@ RC WorkerThread::run_normal_mode() {
     my_txn_man->init(_thd_id, _wl);
     my_txn_man->register_thread(this);
 
+//#if NUMA_ENABLED
+//    uint64_t * eq_comp_cnts = (uint64_t *) mem_allocator.alloc_local(sizeof(uint64_t)*g_exec_qs_max_size);
+//#else
     uint64_t * eq_comp_cnts = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_exec_qs_max_size);
+//#endif
 
     // Initialize access list
 //    for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){

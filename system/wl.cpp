@@ -34,7 +34,7 @@ RC Workload::init_schema(const char *schema_file) {
     string line;
     uint32_t id = 0;
     ifstream fin(schema_file);
-    Catalog *schema;
+    Catalog *schema = NULL;
     while (getline(fin, line)) {
         if (line.compare(0, 6, "TABLE=") == 0) {
             string tname(&line[6]);

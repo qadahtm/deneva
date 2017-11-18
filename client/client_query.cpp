@@ -58,13 +58,35 @@ Client_query_queue::init(Workload * h_wl) {
     // single threaded generation to ensure output is not malformed
   initQueriesHelper(this);
 #else
+    cpu_set_t cpus;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
     pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
     for (UInt32 i = 0; i < g_init_parallelism - 1; i++) {
+#if NUMA_ENABLED
+        CPU_ZERO(&cpus);
+        CPU_SET((i+1), &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        c_thd_args_t * args = (c_thd_args_t *) mem_allocator.alloc(sizeof(c_thd_args_t));
+        args->context = this;
+        args->thd_id = (i+1);
+        pthread_create(&p_thds[i], NULL, initQueriesHelper, args);
+#else
         pthread_create(&p_thds[i], NULL, initQueriesHelper, this);
+#endif
         pthread_setname_np(p_thds[i], "clientquery");
     }
-
+#if NUMA_ENABLED
+    CPU_ZERO(&cpus);
+    CPU_SET(0, &cpus);
+    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+    c_thd_args_t * args = (c_thd_args_t *) mem_allocator.alloc(sizeof(c_thd_args_t));
+    args->context = this;
+    args->thd_id = 0;
+    initQueriesHelper(args);
+#else
     initQueriesHelper(this);
+#endif
 
     for (uint32_t i = 0; i < g_init_parallelism - 1; i++) {
         pthread_join(p_thds[i], NULL);
@@ -75,7 +97,16 @@ Client_query_queue::init(Workload * h_wl) {
 
 void *
 Client_query_queue::initQueriesHelper(void * context) {
+#if NUMA_ENABLED
+    c_thd_args_t * args = (c_thd_args_t*) context;
+    int node = (args->thd_id)/(CORE_CNT/NUMA_NODE_CNT);
+    numa_set_preferred(node);
+    DEBUG_Q("QueryInitThd_%ld: preferred node is %d\n", args->thd_id, numa_preferred());
+    args->context->initQueriesParallel();
+#else
     ((Client_query_queue*)context)->initQueriesParallel();
+#endif
+    mem_allocator.free(args, sizeof(c_thd_args_t));
     return NULL;
 }
 

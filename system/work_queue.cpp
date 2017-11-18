@@ -19,6 +19,7 @@
 #include "query.h"
 #include "message.h"
 #include "client_query.h"
+#include "abort_queue.h"
 #include <boost/lockfree/queue.hpp>
 #include <boost/random.hpp>
 
@@ -33,7 +34,13 @@ void QWorkQueue::init() {
   for ( uint64_t i = 0; i < g_node_cnt; i++) {
     sched_queue[i] = new boost::lockfree::queue<work_queue_entry* > (0);
   }
-
+#if ABORT_QUEUES
+  abort_queues = (AbortQueue **) malloc(sizeof(AbortQueue *)*g_thread_cnt);
+  for (uint64_t i =0; i < g_thread_cnt; ++i){
+    abort_queues[i] = new AbortQueue();
+    abort_queues[i]->init();
+  }
+#endif
 #if CC_ALG == QUECC
   // QUECC planners
 
@@ -60,17 +67,26 @@ void QWorkQueue::init() {
     }
   }
 #endif
-  //TODO(tq): is this cache-aware? Need to study and figure out hte optimal layout
+
+#if ROLL_BACK
   uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
   for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
     for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
       priority_group * planner_pg = &batch_pg_map[b][j];
       for (uint64_t i=0; i < planner_batch_size; ++i){
+#if ROW_ACCESS_IN_CTX
+#if WORKLOAD == YCSB
+        planner_pg->txn_ctxs[i].undo_buffer_inialized = false;
+#else
+#endif
+#else
         planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
         planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
+#endif
       }
     }
   }
+#endif
 
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC || WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
   batch_plan_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);
@@ -405,6 +421,10 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
   Message * msg = NULL;
   work_queue_entry * entry = NULL;
   uint64_t mtx_wait_starttime = get_sys_clock();
+#if ABORT_QUEUES
+  // process abort queue for this thread
+  abort_queues[thd_id]->process(thd_id);
+#endif
   bool valid = work_queue->pop(entry);
   if(!valid) {
 #if CC_ALG != CALVIN

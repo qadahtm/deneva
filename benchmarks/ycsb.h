@@ -57,19 +57,39 @@ public :
 
     INDEX *the_index;
     table_t *the_table;
+#if NUMA_ENABLED
+    struct c_thd_args_t{
+        YCSBWorkload * wl;
+        uint64_t thd_id;
+    };
+#endif
 private:
     void init_table_parallel();
-
+#if NUMA_ENABLED
+    void *init_table_slice(uint64_t thd_id, int node);
+    static void *threadInitTable(void *This) {
+        c_thd_args_t * args = ((c_thd_args_t *) This);
+        int node = (args->thd_id)/(CORE_CNT/NUMA_NODE_CNT);
+        numa_set_preferred(node);
+        DEBUG_Q("WorkloadThd_%ld: preferred node is %d\n", args->thd_id, numa_preferred());
+        args->wl->init_table_slice(args->thd_id, node);
+        mem_allocator.free(args, sizeof(c_thd_args_t));
+        return NULL;
+    }
+#else
     void *init_table_slice();
 
     static void *threadInitTable(void *This) {
         ((YCSBWorkload *) This)->init_table_slice();
         return NULL;
     }
+#endif
+
+
 
     pthread_mutex_t insert_lock;
     //  For parallel initialization
-    volatile static atomic<int> next_tid;
+    static atomic<UInt32> next_tid;
 };
 
 class YCSBTxnManager : public TxnManager {

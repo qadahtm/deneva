@@ -70,6 +70,10 @@ public:
   uint64_t txn_write_cnt;
   uint64_t record_write_cnt;
 
+    double * record_copy_time;
+    uint64_t * record_copy_cnt;
+    uint64_t * record_recov_cnt;
+
   // Transaction stats
   double txn_total_process_time;
   double txn_process_time;

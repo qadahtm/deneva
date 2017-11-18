@@ -42,6 +42,7 @@
 #include "plock.h"
 #include <jemalloc/jemalloc.h>
 #include "lads.h"
+#include <numa.h>
 
 void network_test();
 void network_test_recv();
@@ -96,6 +97,10 @@ int main(int argc, char* argv[])
 #endif
 	int64_t starttime;
 	int64_t endtime;
+#if NUMA_ENABLED
+    M_ASSERT_V(numa_available() >= 0, "Error: NUMA is not available code = %d \n", numa_available());
+#endif
+
   printf("Initializing stats... ");
   fflush(stdout);
 	stats.init(g_total_thread_cnt);
@@ -152,12 +157,13 @@ int main(int argc, char* argv[])
   fflush(stdout);
   work_queue.init();
   printf("Done\n");
-#if ABORT_THREAD
-  printf("Initializing abort queue... ");
-  fflush(stdout);
-  abort_queue.init();
-  printf("Done\n");
-#endif
+
+    // Moved to work_queue
+//  printf("Initializing abort queue... ");
+//  fflush(stdout);
+//  abort_queue.init();
+//  printf("Done\n");
+
   printf("Initializing message queue... ");
   fflush(stdout);
   msg_queue.init();
@@ -387,7 +393,21 @@ int main(int argc, char* argv[])
     worker_thds = new WorkerThread[wthd_cnt];
 
 #if CC_ALG == QUECC
-
+    for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+        work_queue.plan_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+        *(work_queue.plan_next_stage[i]) = 0;
+        work_queue.exec_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+        *(work_queue.exec_next_stage[i]) = 0;
+        work_queue.commit_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+        *(work_queue.commit_next_stage[i]) = 0;
+        for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
+            work_queue.plan_sblocks[i][j].done = 0;
+        }
+        for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+            work_queue.exec_sblocks[i][j].done = 0;
+            work_queue.commit_sblocks[i][j].done = 0;
+        }
+    }
 #if PIPELINED
     planner_thds = new PlannerThread[g_plan_thread_cnt];
 
@@ -467,9 +487,6 @@ int main(int argc, char* argv[])
     }
 
     // Reset PG map and batch map
-
-    // TODO(tq): Refactor this into a cleanup function
-
     cleanup_quecc_runtime();
 
     float pt_total_runtime = 0;
@@ -521,8 +538,9 @@ int main(int argc, char* argv[])
 //    simulation->run_starttime = starttime;
     simulation->warmup_end_time = get_sys_clock();
     simulation->warmup = true;
+    txn_table_pool.free_all();
     endtime = get_server_clock();
-
+    txn_table.cleanup(); // important to cleanup aborted transactions
     stats.totals->clear();
     for(uint64_t i = 0; i < g_total_thread_cnt; i++){
         stats.totals->combine(stats._stats[i]);
@@ -544,6 +562,20 @@ int main(int argc, char* argv[])
     }
     stats.totals->clear();
     simulation->start_set = false; //important for accurate calculation of exp run-time
+#if CC_ALG == QUECC
+    for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+        *(work_queue.plan_next_stage[i]) = 0;
+        *(work_queue.exec_next_stage[i]) = 0;
+        *(work_queue.commit_next_stage[i]) = 0;
+        for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
+            work_queue.plan_sblocks[i][j].done = 0;
+        }
+        for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+            work_queue.exec_sblocks[i][j].done = 0;
+            work_queue.commit_sblocks[i][j].done = 0;
+        }
+    }
+#endif
     // Starting measured phase
     // Run ETs
     wthd_cnt = g_thread_cnt;
@@ -621,6 +653,13 @@ int main(int argc, char* argv[])
 //#if CC_ALG == QUECC
 //    quecc_pool.print_stats();
 //#endif
+#ifndef N_MALLOC
+//    je_malloc_stats_print(NULL, NULL, NULL);
+    je_malloc_stats_print(NULL, NULL, "a");
+//    je_mallctl("prof.dump", NULL, NULL, NULL, 0);
+//    je_mallctl("stats.mutexes.ctl.num_spin_acq", NULL, NULL, NULL, 0);
+//    je_mallctl("stats.mutexes.ctl", NULL, NULL, NULL, 0);
+#endif
     return 0;
 
 #else // if FIXED_MODE
@@ -913,7 +952,7 @@ int main(int argc, char* argv[])
 	return 0;
 #endif
 }
-
+#if CC_ALG == QUECC
 void cleanup_quecc_runtime() {
     for (uint64_t i =0; i < g_batch_map_length; ++i){
         for (uint64_t j=0; j< g_plan_thread_cnt; ++j){
@@ -938,6 +977,7 @@ void cleanup_quecc_runtime() {
     }
 #endif
 }
+#endif
 
 void * run_thread(void * id) {
     Thread * thd = (Thread *) id;

@@ -6,17 +6,18 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 32
+#define THREAD_CNT 10
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 20
+#define CORE_CNT 10
+#define NUMA_NODE_CNT 1
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 32
+#define PLAN_THREAD_CNT 10
 #define COMMIT_THREAD_CNT  10
-#define PART_CNT 32
+#define PART_CNT 10
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -43,9 +44,9 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-#define CPU_FREQ          2.0 // FOR GS32
+//#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-//#define CPU_FREQ            2.4//2.6 // FOR D15v3
+#define CPU_FREQ            2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -56,9 +57,10 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          false
-#define TIME_ENABLE         false //STATS_ENABLE
+#define PROG_STATS          true
+#define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
+#define NUMA_ENABLED        true
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -91,7 +93,7 @@
 #define MEM_SIZE          (1UL << 30) 
 #define NO_FREE           false
 
-//#define N_MALLOC
+#define N_MALLOC
 
 /***********************************************/
 // Message Passing
@@ -176,6 +178,7 @@
 #define VALIDATION_LOCK_NO_WAIT   1
 #define VALIDATION_LOCK_WAIT      2
 
+#define ZERO_SEED_RAND_WL false
 
 // [QUECC]
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
@@ -183,13 +186,15 @@
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
+#define BATCH_SIZE 100000
+//#define BATCH_SIZE 40000
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
-#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
+//#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -220,12 +225,13 @@
 #define RR  3
 
 #define QUECC_DB_ACCESS true
-#define SYNC_MASTER_BATCH_CLEANUP false
+#define SYNC_MASTER_BATCH_CLEANUP true
 #define SYNC_MASTER_RR false
 #define TDG_ENTRY_TYPE  ARRAY_ENTRY
 #define ARRAY_ENTRY     0
 #define VECTOR_ENTRY    1
 
+#define STATIC_UNDO_LIST false
 
 #define CT_ENABLED false
 #define BUILD_TXN_DEPS true
@@ -233,14 +239,16 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 10
+#define EXECQ_CAP_FACTOR 30
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
 #define ROW_ACCESS_TRACKING true
+#define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
 
-#define WT_SYNC_METHOD CNT_ALWAYS_FETCH_ADD_SC
+//#define WT_SYNC_METHOD CNT_ALWAYS_FETCH_ADD_SC
+#define WT_SYNC_METHOD SYNC_BLOCK
 #define CNT_ALWAYS_FETCH_ADD_SC 0
 #define CAS_GLOBAL_SC    1
 #define CAS_GLOBAL_ACQ_REL    2
@@ -272,6 +280,7 @@
 
 #define SINGLE_NODE true
 #define ABORT_THREAD false
+#define ABORT_QUEUES true
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20
@@ -306,7 +315,9 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    (500000/PART_CNT)
+//#define MAX_TXN_PER_PART    (500000/PART_CNT)
+//#define MAX_TXN_PER_PART    (100000/PART_CNT)
+#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (0.1/PART_CNT) * MILLION
 #define FIRST_PART_LOCAL      true
 #define MAX_TUPLE_SIZE        1024 // in bytes
@@ -321,16 +332,16 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM THREAD_CNT
 //#define SYNTH_TABLE_SIZE 1024*2
-//#define SYNTH_TABLE_SIZ  65536
-//#define SYNTH_TABLE_SIZE 1048576
-//#define SYNTH_TABLE_SIZE 16777216 // 16M recs
+//#define SYNTH_TABLE_SIZE  65536
+//#define SYNTH_TABLE_SIZE   10*1048576
+#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 //#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
-#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
+//#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
-#define WRITE_PERC 0.5
+#define WRITE_PERC 1.0
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
 #define SCAN_PERC           0
@@ -440,7 +451,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -455,9 +466,11 @@ enum PPSTxnType {PPS_ALL = 0,
 // FIXED_MODE : runs a fixed number of transactions through the system, and computes the throughput based
 // on the total. Currently, only QUECC is supported.
 // TODO(tq): support other CC_ALGs
-#define MODE NORMAL_MODE
-//#define MODE FIXED_MODE
-#define SIM_BATCH_CNT 1400
+//#define MODE NORMAL_MODE
+#define MODE FIXED_MODE
+//#define SIM_BATCH_CNT (100*MAX_TXN_PER_PART)/BATCH_SIZE
+#define SIM_BATCH_CNT 1000000/BATCH_SIZE
+//#define SIM_BATCH_CNT 12000
 /***********************************************/
 // Constant
 /***********************************************/

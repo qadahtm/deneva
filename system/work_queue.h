@@ -120,6 +120,9 @@ public:
     sync_block plan_sblocks[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
     sync_block exec_sblocks[BATCH_MAP_LENGTH][THREAD_CNT];
     sync_block commit_sblocks[BATCH_MAP_LENGTH][THREAD_CNT];
+    int64_t * plan_next_stage[BATCH_MAP_LENGTH];
+    int64_t * exec_next_stage[BATCH_MAP_LENGTH];
+    int64_t * commit_next_stage[BATCH_MAP_LENGTH];
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
     atomic<uint16_t> ** batch_plan_comp_status;
     atomic<uint16_t> ** batch_exec_comp_status;
@@ -162,7 +165,9 @@ public:
   //uint64_t get_rem_wq_cnt() {return remote_op_queue.size();}
   //uint64_t get_new_wq_cnt() {return new_query_queue.size();}
 
-
+#if ABORT_QUEUES
+    AbortQueue ** abort_queues;
+#endif
 private:
   boost::lockfree::queue<work_queue_entry* > * work_queue;
   boost::lockfree::queue<work_queue_entry* > * new_txn_queue;

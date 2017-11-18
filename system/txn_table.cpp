@@ -257,3 +257,23 @@ uint64_t TxnTable::get_min_ts(uint64_t thd_id) {
 
 }
 
+void TxnTable::cleanup() {
+  // not thread-safe
+  // must be called by main
+  for (uint64_t j = 0; j < g_thread_cnt; ++j) {
+    uint64_t thd_id = j;
+    for (uint64_t i = 0; i < pool_size; ++i) {
+      txn_node_t t_node = pool[i]->head;
+      while (t_node != NULL) {
+        LIST_REMOVE_HT(t_node,pool[i]->head,pool[i]->tail);
+        --pool[i]->cnt;
+//        t_node->txn_man->release();
+        txn_man_pool.put(thd_id,t_node->txn_man);
+        t_node = t_node->next;
+      }
+
+    }
+  }
+
+}
+

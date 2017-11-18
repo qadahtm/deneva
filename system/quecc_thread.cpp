@@ -29,6 +29,7 @@
 #include <tpcc.h>
 #include <tpcc_helper.h>
 #include "index_hash.h"
+#include <catalog.h>
 
 #if CC_ALG == QUECC
 void assign_entry_clear(assign_entry * &a_entry){
@@ -2149,6 +2150,23 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
     tctx->o_id.store(-1);
 #endif
 
+#if !SERVER_GENERATE_QUERIES
+    tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
+#endif
+//                tctx->batch_id = batch_id;
+
+    // create execution entry, for now it will contain only one request
+    // we need to reset the mutable values of tctx
+    entry->txn_id = planner_txn_id;
+    entry->txn_ctx = tctx;
+#if ROW_ACCESS_IN_CTX
+    M_ASSERT_V(false, "undo buffer in txn context is ot currently supported for pipelined Quecc\n");
+#else
+    // initialize access_lock if it is not intinialized
+    if (tctx->access_lock == NULL){
+        tctx->access_lock = new spinlock();
+    }
+
 #if ROLL_BACK
     if (tctx->accesses->isInitilized()){
         // need to clear on commit phase
@@ -2160,21 +2178,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
         tctx->accesses->init(MAX_ROW_PER_TXN);
     }
 #endif
-
-#if !SERVER_GENERATE_QUERIES
-    tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
 #endif
-//                tctx->batch_id = batch_id;
-
-    // create execution entry, for now it will contain only one request
-    // we need to reset the mutable values of tctx
-    entry->txn_id = planner_txn_id;
-    entry->txn_ctx = tctx;
-
-    // initialize access_lock if it is not intinialized
-    if (tctx->access_lock == NULL){
-        tctx->access_lock = new spinlock();
-    }
 #if !SERVER_GENERATE_QUERIES
     assert(msg->return_node_id != g_node_id);
         entry->return_node_id = msg->return_node_id;
@@ -2210,7 +2214,6 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
 //        et_id = eq_idx_rand->operator()(plan_rng);
         et_id = _thd_id;
         checkMRange(mrange, key, et_id);
-        INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
 #endif
 
         // Dirty code
@@ -2242,7 +2245,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
         //          get the last txnd id from vector and insert into tdg
 
 
-        prof_starttime = get_sys_clock();
+        uint64_t _prof_starttime = get_sys_clock();
         auto search = access_table.find(key);
         if (search != access_table.end()){
             // found
@@ -2312,7 +2315,7 @@ inline void PlannerThread::process_client_msg(Message *msg, transaction_context 
             }
         }
 
-        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
+        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-_prof_starttime);
 #endif
         // will always return RCOK, should we convert it to void??
     }
@@ -2502,7 +2505,7 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
     uint64_t idx = get_split(key, exec_qs_ranges);
     uint64_t nidx;
 
-    prof_starttime = get_sys_clock();
+    uint64_t _prof_starttime = get_sys_clock();
     mrange = exec_queues->get(idx);
 
     while (mrange->is_full()){
@@ -2601,8 +2604,8 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
 //                        "\n",
 //                _planner_id, (uint64_t) mrange, key, mrange->size(), batch_id, c_range_start, c_range_end, split_point, trial);
 
-        M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!\n, range_size = %ld",
-                   _planner_id, c_range_end-c_range_start);
+        M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
+                   _planner_id, c_range_end-c_range_start, mrange->size());
 
         // compute new ranges
         exec_qs_ranges_tmp->clear();
@@ -2685,7 +2688,8 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
 //        print_eqs_ranges_after_swap();
 //#endif
     }
-    INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-prof_starttime);
+    INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-_prof_starttime);
+
 #else
     M_ASSERT(false, "LAZY_SPLIT not supported in TPCC")
 #endif
@@ -2736,13 +2740,51 @@ void PlannerThread::print_eqs_ranges_before_swap() const {//        // print con
 void QueCCPool::init(Workload * wl, uint64_t size){
 
     planner_batch_size = g_batch_size/g_plan_thread_cnt;
+    row_data_pool_lock = new spinlock();
+
 #if WORKLOAD == YCSB
     exec_queue_capacity = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * (EXECQ_CAP_FACTOR);
+    if (exec_queue_capacity == 0){
+        exec_queue_capacity = 10;
+    }
+    uint64_t tuple_size = wl->tables["MAIN_TABLE"]->get_schema()->get_tuple_size();
+#if ROW_ACCESS_IN_CTX
+// intialize for QueCC undo_buffer int contexts here
+    for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+        for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {
+            for (uint64_t k = 0; k < planner_batch_size; ++k) {
+                work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_inialized = true;
+                work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_data = (char *) malloc(tuple_size*REQ_PER_QUERY);
+            }
+        }
+    }
+#endif
+
+    boost::lockfree::queue<char *> * pool = new boost::lockfree::queue<char *> (FREE_LIST_INITIAL_SIZE);
+#if NUMA_ENABLED
+    numa_set_preferred(0);
+#endif
+    /// Preallocate may mess up NUMA locality. Since, we have a warmup phase, it may not incure overhead during
+    // measure phase
+    for (uint64_t i = 0; i < g_thread_cnt; ++i){
+        row_data_pool[i].insert({size,pool});
+        for (uint64_t j=0; j < (g_batch_size)/g_thread_cnt; ++j){
+////#if NUMA_ENABLED
+////            char * tmp = (char *) mem_allocator.align_alloc_onnode(sizeof(char)*tuple_size, i);
+////#else
+            char * tmp = (char *) mem_allocator.alloc(sizeof(char)*tuple_size);
+////#endif
+            pool->push(tmp);
+        }
+    }
+
+
 #elif WORKLOAD == TPCC
     exec_queue_capacity = (planner_batch_size)*(EXECQ_CAP_FACTOR);
 #else
     assert(false);
 #endif
+    M_ASSERT_V(exec_queue_capacity > 0, "EQ size is zero??\n")
 #if DEBUG_QUECC
     printf("\nEQ Max size = %ld\n",exec_queue_capacity);
     fflush(stdout);
@@ -2759,6 +2801,8 @@ void QueCCPool::init(Workload * wl, uint64_t size){
             exec_queue_free_list[i][j]     = new boost::lockfree::queue<Array<exec_queue_entry> *> (FREE_LIST_INITIAL_SIZE);
             batch_part_free_list[i][j]     = new boost::lockfree::queue<batch_partition *> (FREE_LIST_INITIAL_SIZE);
             exec_qs_status_free_list[i][j] = new boost::lockfree::queue<atomic<uint8_t> *>(FREE_LIST_INITIAL_SIZE);
+
+
 #if DEBUG_QUECC
             exec_q_alloc_cnts[i][j].store(0);
             exec_q_rel_cnts[i][j].store(0);
@@ -2821,8 +2865,16 @@ void QueCCPool::free_all() {
 
 void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
     if (!exec_queue_free_list[et_id][planner_id]->pop(exec_q)){
+//#if NUMA_ENABLED
+        // Allocating this memory on execution thread's node will make it faster for executors to read queues
+        // However, since assignment to ETs can change, it may be better allocate on planner's
+        // We should study which approach is better
+//        exec_q = (Array<exec_queue_entry> *) mem_allocator.align_alloc_onnode(sizeof(Array<exec_queue_entry>), planner_id);
+//        exec_q->init_numa(exec_queue_capacity, planner_id);
+//#else
         exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
         exec_q->init(exec_queue_capacity);
+//#endif
         exec_q->set_et_id(et_id);
         exec_q->set_pt_id(planner_id);
 #if DEBUG_QUECC
@@ -2856,7 +2908,12 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 
 void QueCCPool::batch_part_get_or_create(batch_partition *&batch_part, uint64_t planner_id, uint64_t et_id){
     if (!batch_part_free_list[et_id][planner_id]->pop(batch_part)){
+//#if NUMA_ENABLED
+        // We allocate on Execution thread's node but that should not matter a lot.
+//        batch_part = (batch_partition *) mem_allocator.align_alloc_onnode(sizeof(batch_partition), et_id);
+//#else
         batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
+//#endif
 #if DEBUG_QUECC
 //        DEBUG_Q("Allocating batch_p, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
         batch_part_alloc_cnts[et_id][planner_id].fetch_add(1);
@@ -2881,7 +2938,6 @@ void QueCCPool::batch_part_release(batch_partition *&batch_p, uint64_t planner_i
 
 
 void QueCCPool::exec_qs_get_or_create(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id){
-
     if (!exec_qs_free_list[planner_id]->pop(exec_qs)){
         exec_qs = new Array<Array<exec_queue_entry> *>();
         exec_qs->init(g_exec_qs_max_size);
@@ -2906,8 +2962,14 @@ void QueCCPool::exec_qs_release(Array<Array<exec_queue_entry> *> *&exec_qs, uint
 
 void QueCCPool::exec_qs_status_get_or_create(atomic<uint8_t> *&execqs_status, uint64_t planner_id, uint64_t et_id){
     if (!exec_qs_status_free_list[et_id][planner_id]->pop(execqs_status)){
+//#if NUMA_ENABLED
+//        execqs_status = (atomic<uint8_t> *) mem_allocator.align_alloc_onnode(
+//                sizeof(uint64_t)*g_exec_qs_max_size, planner_id);
+//#else
         execqs_status = (atomic<uint8_t> *) mem_allocator.alloc(
                 sizeof(uint64_t)*g_exec_qs_max_size);
+//#endif
+
     }
 #if DEBUG_QUECC
     else{
@@ -2924,7 +2986,11 @@ void QueCCPool::exec_qs_status_release(atomic<uint8_t> *&execqs_status, uint64_t
 void QueCCPool::txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t planner_id){
     if (!txn_ctxs_free_list[planner_id]->pop(txn_ctxs)){
 //        DEBUG_Q("Allocating txn_ctxs\n");
+//#if NUMA_ENABLED
+//        txn_ctxs = (transaction_context *) mem_allocator.align_alloc_onnode(sizeof(transaction_context)*planner_batch_size, planner_id);
+//#else
         txn_ctxs = (transaction_context *) mem_allocator.alloc(sizeof(transaction_context)*planner_batch_size);
+//#endif
         // FIXME: intialize accesses when this is used
 #if DEBUG_QUECC
         txn_ctxs_alloc_cnts[planner_id].fetch_add(1);
@@ -2947,7 +3013,12 @@ void QueCCPool::txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t plann
 
 void QueCCPool::pg_get_or_create(priority_group * &pg, uint64_t planner_id){
     if (!pg_free_list[planner_id]->pop(pg)){
+//#if NUMA_ENABLED
+//        pg = (priority_group *) mem_allocator.align_alloc_onnode(sizeof(priority_group), planner_id);
+//#else
         pg = (priority_group *) mem_allocator.alloc(sizeof(priority_group));
+//#endif
+
 //        DEBUG_Q("Allocating priority group\n");
 #if DEBUG_QUECC
         pg_alloc_cnts[planner_id].fetch_add(1);
@@ -2965,6 +3036,45 @@ void QueCCPool::pg_release(priority_group * &pg, uint64_t planner_id){
 #if DEBUG_QUECC
     pg_rel_cnts[planner_id].fetch_add(1);
 #endif
+}
+
+// Data buffer pools
+void QueCCPool::databuff_get_or_create(char * &buf, uint64_t size, uint64_t thd_id){
+    auto search = row_data_pool[thd_id].find(size);
+    if (search == row_data_pool[thd_id].end()){
+        // size is not found
+        // create a queue for that size
+        search = row_data_pool[thd_id].find(size);
+        if (search == row_data_pool[thd_id].end()){
+            boost::lockfree::queue<char *> * pool = new boost::lockfree::queue<char *> (FREE_LIST_INITIAL_SIZE);
+            row_data_pool[thd_id].insert({size,pool});
+        }
+//#if NUMA_ENABLED
+//        buf = (char *) mem_allocator.align_alloc_onnode(sizeof(char)*size, thd_id);
+//#else
+        buf = (char *) mem_allocator.align_alloc(sizeof(char)*size);
+//#endif
+
+    }
+    else{
+        if (!search->second->pop(buf)){
+//#if NUMA_ENABLED
+//            buf = (char *) mem_allocator.align_alloc_onnode(sizeof(char)*size, thd_id);
+//#else
+            buf = (char *) mem_allocator.align_alloc(sizeof(char)*size);
+//#endif
+//            DEBUG_Q("Allocatated row data\n");
+        }
+    }
+}
+void QueCCPool::databuff_release(char * &buf, uint64_t size, uint64_t thd_id){
+    auto search = row_data_pool[thd_id].find(size);
+    if (search == row_data_pool[thd_id].end()){
+        M_ASSERT_V(false, "Could not find pool for given size = %ld\n", size);
+    }
+    else{
+        while(!search->second->push(buf)){};
+    }
 }
 
 void QueCCPool::print_stats(uint64_t batch_id) {

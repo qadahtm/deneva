@@ -14,6 +14,7 @@
    limitations under the License.
 */
 
+#include <jemalloc/jemalloc.h>
 #include "global.h"
 #include "manager.h"
 #include "thread.h"
@@ -71,6 +72,15 @@ void Thread::tsetup() {
 	pthread_barrier_wait( &warmup_bar );
 
 #if SET_AFFINITY_AFTER_INIT
+#ifndef N_MALLOC
+    uint64_t arena = _thd_id;
+    je_mallctl("thread.arena", NULL, NULL, &arena, sizeof(uint64_t));
+#endif
+#if NUMA_ENABLED
+    int node = _thd_id/(CORE_CNT/NUMA_NODE_CNT);
+    numa_set_preferred(node);
+    DEBUG_Q("ET_%ld: preferred node is %d\n", _thd_id, numa_preferred());
+#endif
     cpu_set_t cpus;
     CPU_ZERO(&cpus);
 #if CC_ALG == LADS

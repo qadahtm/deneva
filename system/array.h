@@ -61,6 +61,14 @@ public:
     assert(capacity == size);
     count = 0;
   }
+//    void init_numa(uint64_t size, uint64_t thd_id) {
+//        DEBUG_M("Array::init %ld*%ld\n",sizeof(T),size);
+//        items = (T*) mem_allocator.align_alloc_onnode(sizeof(T)*size, thd_id);
+//        capacity = size;
+//        assert(items);
+//        assert(capacity == size);
+//        count = 0;
+//    }
 
   void clear() {
     count = 0;
@@ -100,7 +108,16 @@ public:
     }
     add(item);
   }
-
+// Atomic add
+    void atomic_add(T item){
+//    assert(count < capacity);
+        M_ASSERT_V(count < capacity, "count < capacity failed, count = %ld, capacity = %ld\n", count, capacity);
+        uint64_t ecount;
+        do{
+            ecount = count;
+        }while(!ATOM_CAS(count,ecount, ecount+1));
+        items[ecount] = item;
+    }
   void add(T item){
 //    assert(count < capacity);
     M_ASSERT_V(count < capacity, "count < capacity failed, count = %ld, capacity = %ld\n", count, capacity);
