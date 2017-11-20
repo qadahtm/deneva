@@ -60,7 +60,33 @@ public:
     assert(items);
     assert(capacity == size);
     count = 0;
+#if EXPANDABLE_EQS
+      expandable = false;
+#endif
   }
+#if EXPANDABLE_EQS
+    void init_expandable(uint64_t size, uint64_t cap_factor) {
+        max_capacity = size*cap_factor;
+        cap_inc = size;
+        items = (T*) mem_allocator.alloc(sizeof(T)*max_capacity);
+        capacity = size;
+        assert(items);
+        count = 0;
+        expandable = true;
+    }
+
+    bool expand(){
+        if (expandable){
+            M_ASSERT_V((capacity+cap_inc) <= max_capacity, "Cannot expand, reached max_capacitty = %ld\n",max_capacity);
+            capacity += cap_inc;
+            return true;
+        }
+        else{
+//            M_ASSERT_V(expandable, "Cannot expand this array, capacity = %ld\n");
+            return false;
+        }
+    }
+#endif
 //    void init_numa(uint64_t size, uint64_t thd_id) {
 //        DEBUG_M("Array::init %ld*%ld\n",sizeof(T),size);
 //        items = (T*) mem_allocator.align_alloc_onnode(sizeof(T)*size, thd_id);
@@ -83,7 +109,7 @@ public:
   }
 
   void append(Array a) {
-    assert(count + a.size() <= capacity); 
+    M_ASSERT_V(count + a.size() <= capacity, "count=%ld,a.size()=%ld,capacity=%ld\n",count,a.size(),capacity);
     for(uint64_t i = 0; i < a.size(); i++) {
       add(a[i]);
     }
@@ -185,9 +211,13 @@ public:
     T * items;
     uint64_t capacity;
     uint64_t count;
+#if EXPANDABLE_EQS
+    uint64_t cap_inc;
+    uint64_t max_capacity;
+    bool expandable;
+#endif
 private:
 //  uint64_t head;
-
     int64_t _et_id =-1;
     int64_t _pt_id =-1;
 };

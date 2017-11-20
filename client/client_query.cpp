@@ -32,33 +32,59 @@ void
 Client_query_queue::init(Workload * h_wl) {
     _wl = h_wl;
     qlock = new spinlock();
-
 #if SERVER_GENERATE_QUERIES
     if(ISCLIENT)
         return;
-    size = g_part_cnt;
+
+    M_ASSERT_V(g_part_cnt == 1 || g_part_cnt == g_thread_cnt,"part_cnt must be eitehr 1 or equal to thread_cnt\n");
+//    size = g_part_cnt;
+    size = g_thread_cnt;
 #else
     size = g_servers_per_client;
 #endif
+    // allocate a set of queries for each thread
     query_cnt = new uint64_t * [size];
+    size_t query_cnt_per_thread;
+    if (g_part_cnt == 1){
+        query_cnt_per_thread = (g_max_txn_per_part/g_thread_cnt) + 4;
+    }
+    else{
+        query_cnt_per_thread = g_max_txn_per_part + 4;
+    }
+
+#if CREATE_TXN_FILE
+    query_cnt_per_thread = g_max_txn_per_part + 4;
+#endif
+
     for (UInt32 id = 0; id < size; id++) {
 #if INIT_QUERY_MSGS
-        std::vector<Message *> new_query_msgs(g_max_txn_per_part + 4, NULL);
+        std::vector<Message *> new_query_msgs(query_cnt_per_thread, NULL);
         queries_msgs.push_back(new_query_msgs);
 #else
-        std::vector<BaseQuery *> new_queries(g_max_txn_per_part + 4, NULL);
+
+        std::vector<BaseQuery *> new_queries(query_cnt_per_thread, NULL);
         queries.push_back(new_queries);
 #endif
         query_cnt[id] = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t));
+        *(query_cnt[id]) = 0;
     }
 //    next_tid = 0;
     next_tid.store(0);
 
 #if CREATE_TXN_FILE
     // single threaded generation to ensure output is not malformed
-  initQueriesHelper(this);
+#if NUMA_ENABLED
+    c_thd_args_t * args = (c_thd_args_t *) mem_allocator.alloc(sizeof(c_thd_args_t));
+    args->context = this;
+    args->thd_id = (0);
+    initQueriesHelper(args);
 #else
+    initQueriesHelper(this);
+#endif
+#else
+#if NUMA_ENABLED
     cpu_set_t cpus;
+#endif
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
@@ -103,31 +129,55 @@ Client_query_queue::initQueriesHelper(void * context) {
     numa_set_preferred(node);
     DEBUG_Q("QueryInitThd_%ld: preferred node is %d\n", args->thd_id, numa_preferred());
     args->context->initQueriesParallel();
+    mem_allocator.free(args, sizeof(c_thd_args_t));
 #else
     ((Client_query_queue*)context)->initQueriesParallel();
 #endif
-    mem_allocator.free(args, sizeof(c_thd_args_t));
     return NULL;
 }
 
 void
 Client_query_queue::initQueriesParallel() {
 //    UInt32 tid = ATOM_FETCH_ADD(next_tid, 1);
-    UInt32 tid = next_tid.fetch_add(1);
+//    UInt32 tid;
+    uint64_t tid;
+    do{
+        tid = next_tid.load();
+    }while(!next_tid.compare_exchange_strong(tid,tid+1));
+
     uint64_t request_cnt;
-    request_cnt = g_max_txn_per_part + 4;
+    if (g_part_cnt == 1){
+        request_cnt = (g_max_txn_per_part/g_thread_cnt) + 4;
+    }
+    else{
+        request_cnt = g_max_txn_per_part + 4;
+    }
 
     uint32_t final_request;
 
 #if CREATE_TXN_FILE
     // TQ: single threaded generation
-  final_request = request_cnt;
+    request_cnt = g_max_txn_per_part + 4;
+    final_request = request_cnt;
 #else
-    if (tid == g_init_parallelism-1) {
+//    if (tid == g_init_parallelism-1) {
+//        final_request = request_cnt;
+//    } else {
+//        final_request = request_cnt / g_init_parallelism * (tid+1);
+//    }
+
+    if (g_part_cnt == 1){
         final_request = request_cnt;
-    } else {
-        final_request = request_cnt / g_init_parallelism * (tid+1);
     }
+    else{
+        if (tid < g_part_cnt){
+            final_request = request_cnt;
+        }
+        else{
+            return;
+        }
+    }
+
 #endif
 
 #if WORKLOAD == YCSB
@@ -139,42 +189,75 @@ Client_query_queue::initQueriesParallel() {
     PPSQueryGenerator * gen = new PPSQueryGenerator;
 #endif
 #if SERVER_GENERATE_QUERIES
-    UInt32 thd_cnt = g_part_cnt;
 
-//#if WORKLOAD == YCSB
-//    M_ASSERT_V(g_thread_cnt == g_part_cnt, "mismatch thd_cnt=%d and part_cnt = %d\n", thd_cnt, g_part_cnt)
-//#endif
-    for ( UInt32 thread_id = 0; thread_id < thd_cnt; thread_id ++) {
-        DEBUG_Q("Server-side generation for part %d ... ", thread_id);
-        for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+    if (g_part_cnt == 1){
+        // single partition query generation
+        int q_gen_cnt = 0;
+        DEBUG_Q("gtid=%ld: Server-side generation for part %d ... ",tid, 0);
+        DEBUG_Q("TID=%ld, Server-side generation - going to generate transactions from %lu to %u, total = %lu, for part %d\n",
+                tid,(request_cnt / g_init_parallelism * tid), final_request, (final_request-(request_cnt / g_init_parallelism * tid)), 0);
+        for (UInt32 query_id = 0; query_id < final_request; query_id ++) {
 #if SINGLE_NODE
-            BaseQuery * query = gen->create_query(_wl,thread_id);
+            BaseQuery * query = gen->create_query(_wl,0);
+            M_ASSERT_V(g_part_cnt>=query->partitions.size(),"Invalid query generated\n");
 #else
             BaseQuery * query = gen->create_query(_wl,g_node_id);
 #endif
-            uint64_t qslot;
-#if WORKLOAD == YCSB
-            YCSBQuery * ycsb_query = (YCSBQuery*)query;
-            qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
-            assert(qslot == thread_id);
-#else
-            qslot = thread_id;
-#endif
 #if INIT_QUERY_MSGS
-            Message * msg = Message::create_message(query,CL_QRY);
+                Message * msg = Message::create_message(query,CL_QRY);
             queries_msgs[qslot][query_id] = msg;
             assert(msg->rtype == CL_QRY);
 //            if ( query_id < 100 && qslot==1)
 //                DEBUG_Q("added to qslot =%ld, query_id=%d\n", qslot, query_id);
 #else
-            queries[qslot][query_id] = query;
+                queries[tid][query_id] = query;
 
 #endif
+                q_gen_cnt++;
+            }
+            DEBUG_Q("tid=%ld, Done .. gen %d, txns\n",tid,q_gen_cnt);
+    }
+    else{
+        // multi-partition partition query generation
+        M_ASSERT_V(false, "not supported for now\n");
+        for ( UInt32 thread_id = 0; thread_id < g_part_cnt; thread_id ++) {
+            int q_gen_cnt = 0;
+            DEBUG_Q("gtid=%ld: Server-side generation for part %d ... ",tid, thread_id);
+            DEBUG_Q("TID=%ld, Server-side generation - going to generate transactions from %lu to %u, total = %lu, for part %d\n",
+                    tid,(request_cnt / g_init_parallelism * tid), final_request, (final_request-(request_cnt / g_init_parallelism * tid)), thread_id);
+            for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+#if SINGLE_NODE
+                BaseQuery * query = gen->create_query(_wl,thread_id);
+                M_ASSERT_V(g_part_cnt>=query->partitions.size(),"Invalid query generated\n");
+#else
+                BaseQuery * query = gen->create_query(_wl,g_node_id);
+#endif
+//            uint64_t qslot;
+#if WORKLOAD == YCSB
+//            YCSBQuery * ycsb_query = (YCSBQuery*)query;
+//            qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
+//            qslot = tid;
+//            assert(qslot == thread_id);
+#else
+                qslot = thread_id;
+#endif
+#if INIT_QUERY_MSGS
+                Message * msg = Message::create_message(query,CL_QRY);
+            queries_msgs[qslot][query_id] = msg;
+            assert(msg->rtype == CL_QRY);
+//            if ( query_id < 100 && qslot==1)
+//                DEBUG_Q("added to qslot =%ld, query_id=%d\n", qslot, query_id);
+#else
+                queries[tid][query_id] = query;
+
+#endif
+                q_gen_cnt++;
+            }
+            DEBUG_Q("tid=%ld, Done .. gen %d, txns\n",tid,q_gen_cnt);
         }
-        DEBUG_Q("Done\n");
     }
 #else
-
+M_ASSERT_V(false,"Not suppoprted\n");
 //    UInt32 gq_cnt = 0;
 //#if CREATE_TXN_FILE
 //  DEBUG_WL("single threaded generation ...\n")
@@ -228,18 +311,23 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
 #else
 BaseQuery * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread_id) {
     assert(server_id < size);
-//    if (!(CC_ALG == QUECC && THREAD_CNT == PART_CNT)){
-//        qlock->lock();
-//    }
     uint64_t query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
-    if (query_id > g_max_txn_per_part) {
-        __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
-        query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
+    uint64_t max_txns_per_thread;
+    if (g_part_cnt == 1){
+        max_txns_per_thread = (g_max_txn_per_part/g_thread_cnt) + 4;
     }
+    else{
+        max_txns_per_thread = g_max_txn_per_part + 4;
+    }
+    if (query_id >= max_txns_per_thread) {
+
+//        __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
+//        query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
+        *(query_cnt[server_id]) = 0;
+        query_id = 0;
+    }
+    assert(query_id < max_txns_per_thread);
     BaseQuery *query = queries[server_id][query_id];
-//    if (!(CC_ALG == QUECC && THREAD_CNT == PART_CNT)){
-//        qlock->unlock();
-//    }
     M_ASSERT_V(query, "could not get next query???\n");
     return query;
 }

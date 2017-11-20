@@ -18,6 +18,7 @@
 #define _WORKERTHREAD_H_
 
 #include <tpcc.h>
+#include <ycsb.h>
 #include "global.h"
 #include "work_queue.h"
 #include "quecc_thread.h"
@@ -851,7 +852,12 @@ public:
                 for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
 //                    delete it->second;
                     std::vector<uint64_t> * tmp = it->second;
-                    quecc_pool.txn_list_release(tmp, _planner_id);
+                    quecc_pool.txn_list_release(tmp, i);
+                }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+                    Array<uint64_t> * tmp = it->second;
+                    quecc_pool.txn_list_release(tmp, i);
                 }
 #endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
                 planner_pg->txn_dep_graph->clear();
@@ -1447,7 +1453,7 @@ public:
     uint64_t _planner_id;
     uint64_t query_cnt =0;
 
-    uint32_t get_split(uint64_t key, Array<uint64_t> * ranges) {
+    inline uint32_t get_split(uint64_t key, Array<uint64_t> * ranges) ALWAYS_INLINE{
         for (uint32_t i = 0; i < ranges->size(); i++){
             if (key <= ranges->get(i)){
                 return i;
@@ -1457,16 +1463,69 @@ public:
         return (uint32_t) ranges->size()-1;
     }
 
+    uint64_t __attribute__((optimize("O0"))) get_key_from_entry(exec_queue_entry * entry) {
+#if WORKLOAD == YCSB
+        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
+        return ycsb_req_tmp->key;
+#else
+        return mrange->get(r).rid;
+#endif
+    }
+
+    inline void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id) ALWAYS_INLINE{
+        volatile uint64_t idx = get_split(key, exec_qs_ranges);
+        volatile uint64_t tidx;
+        volatile uint64_t nidx;
+        volatile Array<exec_queue_entry> * texec_q = NULL;
+
+        for (uint64_t r =0; r < mrange->size(); ++r){
+            // TODO(tq): refactor this to respective benchmark implementation
+            uint64_t lid = get_key_from_entry(mrange->get_ptr(r));
+            tidx = get_split(lid, exec_qs_ranges);
+            M_ASSERT_V(((Array<exec_queue_entry> volatile * )exec_queues->get(tidx)) == mrange, "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+            nidx = get_split(lid, ((Array<uint64_t> *)exec_qs_ranges_tmp));
+
+            texec_q =  ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->get(nidx);
+//            M_ASSERT_V(texec_q == nexec_q || texec_q == oexec_q , "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+            // all entries must fall into one of the splits
+#if DEBUG_QUECC
+            if (!(nidx == tidx || nidx == (tidx+1))){
+                DEBUG_Q("PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
+                for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
+                    DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
+                }
+
+//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+//                        _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+//            }
+
+                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+                    DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+                }
+//            for (uint64_t i =0; i < exec_queues->size(); ++i){
+//                DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                        _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//            }
+            }
+#endif
+            M_ASSERT_V(nidx == tidx || nidx == (tidx+1),"PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
+
+            ((Array<exec_queue_entry> *)texec_q)->add(mrange->get(r));
+        }
+    }
     inline void checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id) ALWAYS_INLINE{
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
         int max_tries = 64;
         int trial =0;
 
-        uint64_t c_range_start;
-        uint64_t c_range_end;
-        uint64_t idx = get_split(key, exec_qs_ranges);
-        uint64_t nidx;
+        volatile uint64_t c_range_start;
+        volatile uint64_t c_range_end;
+        volatile uint64_t idx = get_split(key, exec_qs_ranges);
+        volatile uint64_t split_point;
+        Array<exec_queue_entry> * nexec_q = NULL;
+        Array<exec_queue_entry> * oexec_q = NULL;
 
         mrange = exec_queues->get(idx);
 
@@ -1494,32 +1553,39 @@ public:
             }
             c_range_end = exec_qs_ranges->get(idx);
 
-            uint64_t split_point = (c_range_end-c_range_start)/2;
-
 //        DEBUG_Q("Planner_%ld : Eagerly we need to split mrange ptr = %lu, key = %lu, current size = %ld,"
 //                        " batch_id = %ld, c_range_start = %lu, c_range_end = %lu, split_point = %lu, trial=%d"
 //                        "\n",
 //                _planner_id, (uint64_t) mrange, key, mrange->size(), wbatch_id, c_range_start, c_range_end, split_point, trial);
+#if EXPANDABLE_EQS
+            // if we cannot split, we must expand this, otherwise, we fail
+            if ((c_range_end-c_range_start) <= 1){
+                // expand current EQ
+                if (mrange->expand()){
+                    assert(!mrange->is_full());
+                    return;
+                }
+            }
+#endif
 
+            split_point = (c_range_end-c_range_start)/2;
             M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
                        _planner_id, c_range_end-c_range_start, mrange->size());
 
             // compute new ranges
-            exec_qs_ranges_tmp->clear();
-            exec_queues_tmp->clear();
+            ((Array<uint64_t> *)exec_qs_ranges_tmp)->clear();
+            ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->clear();
             M_ASSERT_V(exec_queues->size() == exec_qs_ranges->size(), "PL_%ld: Size mismatch : EQS(%lu) Ranges (%lu)\n",
                        _planner_id, exec_queues->size(), exec_qs_ranges->size());
+            // update ranges
+            // add two new and empty exec_queues
             for (uint64_t r=0; r < exec_qs_ranges->size(); ++r){
                 if (r == idx){
                     // insert split
                     M_ASSERT_V(exec_qs_ranges->get(r) != split_point+c_range_start,
                                "PL_%ld: old range = %lu, new range = %lu",
                                _planner_id,exec_qs_ranges->get(r), split_point+c_range_start);
-                    exec_qs_ranges_tmp->add(split_point+c_range_start);
-
-                    // add two new and empty exec_queues
-                    Array<exec_queue_entry> * nexec_q = NULL;
-                    Array<exec_queue_entry> * oexec_q = NULL;
+                    ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(split_point+c_range_start);
 #if MERGE_STRATEGY == RR
                     quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, r % g_thread_cnt);
                     quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, (r+1) % g_thread_cnt);
@@ -1535,30 +1601,18 @@ public:
 //                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
 //                assert(oexec_q->size() == 0);
 //                assert(nexec_q->size() == 0);
-                    exec_queues_tmp->add(oexec_q);
-                    exec_queues_tmp->add(nexec_q);
+                    ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->add(oexec_q);
+                    ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->add(nexec_q);
 
                 }
                 else{
-                    exec_queues_tmp->add(exec_queues->get(r));
+                    ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->add(exec_queues->get(r));
                 }
-                exec_qs_ranges_tmp->add(exec_qs_ranges->get(r));
+                ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(r));
             }
 
             // use new ranges to split current execq
-            for (uint64_t r =0; r < mrange->size(); ++r){
-                // TODO(tq): refactor this to respective benchmark implementation
-#if WORKLOAD == YCSB
-                ycsb_request *ycsb_req_tmp = (ycsb_request *) mrange->get(r).req_buffer;
-            nidx = get_split(ycsb_req_tmp->key, exec_qs_ranges_tmp);
-#else
-                nidx = get_split(mrange->get(r).rid, exec_qs_ranges_tmp);
-#endif
-                // all entries must fall into one of the splits
-                M_ASSERT_V(nidx == idx || nidx == (idx+1), "nidx=%ld, idx = %ld\n", nidx, idx);
-
-                exec_queues_tmp->get(nidx)->add(mrange->get(r));
-            }
+            splitMRange(mrange,key,et_id);
 
 //            if(exec_queues_tmp->get(idx)->size() == 0){
 //                M_ASSERT_V(false,"PT_%ld: LEFT EQ is empty after split\n",_planner_id);
@@ -1567,13 +1621,12 @@ public:
 //            if (exec_queues_tmp->get(idx+1)->size() == 0){
 //                M_ASSERT_V(false,"PT_%ld: RIGHT EQ is empty after split\n",_planner_id);
 //            }
-
             // swap data structures
             exec_queues_tmp_tmp = exec_queues;
             exec_qs_ranges_tmp_tmp = exec_qs_ranges;
 
-            exec_queues = exec_queues_tmp;
-            exec_qs_ranges = exec_qs_ranges_tmp;
+            exec_queues = ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp);
+            exec_qs_ranges = ((Array<uint64_t> *)exec_qs_ranges_tmp);
 
             exec_queues_tmp = exec_queues_tmp_tmp;
             exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
@@ -1729,6 +1782,9 @@ public:
         req_buff->key = ycsb_req->key;
         req_buff->value = ycsb_req->value;
 
+#if YCSB_INDEX_LOOKUP_PLAN
+        ((YCSBTxnManager *)my_txn_man)->lookup_key(req_buff->key,entry);
+#endif
         // add entry into range/bucket queue
         // entry is a sturct, need to double check if this works
         // this actually performs a full memcopy when adding entries
@@ -2564,10 +2620,10 @@ private:
             sizeof(Array<exec_queue_entry> *) * 2);
 
 #elif SPLIT_STRATEGY == EAGER_SPLIT
-    Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
-    Array<uint64_t> * exec_qs_ranges_tmp_tmp = new Array<uint64_t>();
-    Array<Array<exec_queue_entry> *> * exec_queues_tmp;
-    Array<Array<exec_queue_entry> *> * exec_queues_tmp_tmp;
+    volatile Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
+    volatile Array<uint64_t> * exec_qs_ranges_tmp_tmp = new Array<uint64_t>();
+    volatile Array<Array<exec_queue_entry> *> * exec_queues_tmp;
+    volatile Array<Array<exec_queue_entry> *> * exec_queues_tmp_tmp;
 #endif
 #if MERGE_STRATEGY == BALANCE_EQ_SIZE
     assign_ptr_min_heap_t assignment;
@@ -2586,13 +2642,15 @@ private:
     void print_eqs_ranges_after_swap() const {
 #if SPLIT_MERGE_ENABLED
         uint64_t total_eq_entries = 0;
-        for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
-            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+        for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
+            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
         }
 
-        for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+        for (uint64_t i =0; i < ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->size(); ++i){
             DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
-                    _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+                    _planner_id, i, ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->get(i)->size(),
+                    (uint64_t) (((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->get(i)),
+                    ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
         }
 #endif
         for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){

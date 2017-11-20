@@ -110,6 +110,19 @@ public:
 #if CC_ALG == QUECC
     // For QueCC
     RC run_quecc_txn(exec_queue_entry * exec_qe);
+#if YCSB_INDEX_LOOKUP_PLAN
+    inline RC lookup_key(uint64_t key, exec_queue_entry *&entry) ALWAYS_INLINE {
+        itemid_t *item;
+        int part_id = _wl->key_to_part(key);
+        INDEX *index = _wl->the_index;
+        item = index_read(index, key,part_id);
+
+        assert(item != NULL);
+        entry->row = ((row_t *) item->location);
+        assert(entry->row);
+        return RCOK;
+    };
+#endif// if INDEX_LOOKUP_PLAN
 #endif
     // For HStore
     RC run_hstore_txn();

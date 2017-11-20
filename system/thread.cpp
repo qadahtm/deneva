@@ -83,11 +83,7 @@ void Thread::tsetup() {
 #endif
     cpu_set_t cpus;
     CPU_ZERO(&cpus);
-#if CC_ALG == LADS
-    CPU_SET(_thd_id % g_thread_cnt, &cpus);
-#else
-    CPU_SET(_thd_id, &cpus);
-#endif
+	CPU_SET(_thd_id, &cpus);
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
 #endif
 

@@ -153,7 +153,9 @@ ins_done:
 void YCSBWorkload::init_table_parallel() {
 	enable_thread_mem_pool = true;
 	pthread_t * p_thds = new pthread_t[g_init_parallelism - 1];
+#if NUMA_ENABLED
 	cpu_set_t cpus;
+#endif
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 

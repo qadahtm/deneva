@@ -55,7 +55,7 @@ void AbortQueue::process(uint64_t thd_id) {
     return;
   abort_entry * entry;
   uint64_t mtx_time_start = get_sys_clock();
-  pthread_mutex_lock(&mtx);
+//  pthread_mutex_lock(&mtx);
   INC_STATS(thd_id,mtx[1],get_sys_clock() - mtx_time_start);
   uint64_t starttime = get_sys_clock();
   while(!queue.empty()) {
@@ -76,7 +76,7 @@ void AbortQueue::process(uint64_t thd_id) {
     }
 
   }
-  pthread_mutex_unlock(&mtx);
+//  pthread_mutex_unlock(&mtx);
 
   INC_STATS(thd_id,abort_queue_dequeue_time,get_sys_clock() - starttime);
 

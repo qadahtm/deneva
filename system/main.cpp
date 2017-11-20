@@ -387,11 +387,6 @@ int main(int argc, char* argv[])
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
     cpu_cnt++;
 #endif
-
-#if MODE == FIXED_MODE
-//    M_ASSERT_V(false, "fixed mode is not supported anymore\n");
-    worker_thds = new WorkerThread[wthd_cnt];
-
 #if CC_ALG == QUECC
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
         work_queue.plan_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
@@ -408,6 +403,13 @@ int main(int argc, char* argv[])
             work_queue.commit_sblocks[i][j].done = 0;
         }
     }
+#endif
+
+#if MODE == FIXED_MODE
+//    M_ASSERT_V(false, "fixed mode is not supported anymore\n");
+    worker_thds = new WorkerThread[wthd_cnt];
+
+#if CC_ALG == QUECC
 #if PIPELINED
     planner_thds = new PlannerThread[g_plan_thread_cnt];
 

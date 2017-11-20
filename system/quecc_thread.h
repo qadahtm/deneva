@@ -123,7 +123,9 @@ struct exec_queue_entry {
     uint64_t rid;
     row_t * row;
 #endif
-
+#if YCSB_INDEX_LOOKUP_PLAN
+    row_t * row;
+#endif
 #if ROW_ACCESS_IN_CTX
     uint32_t req_idx;
 #endif

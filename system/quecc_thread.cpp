@@ -1445,7 +1445,8 @@ RC PlannerThread::run_normal_mode() {
 #if RANDOM_PLAN_DEQ
         next_part = RAND(g_part_cnt);
 #else
-        next_part = (_planner_id + (g_plan_thread_cnt * query_cnt)) % g_part_cnt;
+//        next_part = (_planner_id + (g_plan_thread_cnt * query_cnt)) % g_part_cnt;
+        next_part = _planner_id;
 #endif
         query_cnt++;
 //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
@@ -2741,11 +2742,17 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 
     planner_batch_size = g_batch_size/g_plan_thread_cnt;
     row_data_pool_lock = new spinlock();
-
+//#if NUMA_ENABLED
+//    numa_set_preferred(0);
+//#endif
 #if WORKLOAD == YCSB
-    exec_queue_capacity = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * (EXECQ_CAP_FACTOR);
-    if (exec_queue_capacity == 0){
-        exec_queue_capacity = 10;
+#if EXPANDABLE_EQS
+    exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * REQ_PER_QUERY;
+#else
+    exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
+#endif
+    if (exec_queue_capacity < MIN_EXECQ_SIZE){
+        exec_queue_capacity = MIN_EXECQ_SIZE;
     }
     uint64_t tuple_size = wl->tables["MAIN_TABLE"]->get_schema()->get_tuple_size();
 #if ROW_ACCESS_IN_CTX
@@ -2761,9 +2768,6 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 #endif
 
     boost::lockfree::queue<char *> * pool = new boost::lockfree::queue<char *> (FREE_LIST_INITIAL_SIZE);
-#if NUMA_ENABLED
-    numa_set_preferred(0);
-#endif
     /// Preallocate may mess up NUMA locality. Since, we have a warmup phase, it may not incure overhead during
     // measure phase
     for (uint64_t i = 0; i < g_thread_cnt; ++i){
@@ -2873,7 +2877,11 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
 //        exec_q->init_numa(exec_queue_capacity, planner_id);
 //#else
         exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
+#if EXPANDABLE_EQS
+        exec_q->init_expandable(exec_queue_capacity, EXECQ_CAP_FACTOR);
+#else
         exec_q->init(exec_queue_capacity);
+#endif
 //#endif
         exec_q->set_et_id(et_id);
         exec_q->set_pt_id(planner_id);
@@ -2887,7 +2895,7 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
         exec_q->clear();
 #if DEBUG_QUECC
         exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
-//        SAMPLED_DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
+        SAMPLED_DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
 #endif
     }
 }
@@ -2900,7 +2908,7 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 //    while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
     while(!exec_queue_free_list[qet_id][qpt_id]->push(exec_q)){};
 #if DEBUG_QUECC
-//    SAMPLED_DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
+    SAMPLED_DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
     exec_q_rel_cnts[et_id][planner_id].fetch_add(1);
 #endif
 }

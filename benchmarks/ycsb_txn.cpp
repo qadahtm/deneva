@@ -436,8 +436,12 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 
 //    quecc_prof_time = get_sys_clock();
     // get pointer to record in row
+#if YCSB_INDEX_LOOKUP_PLAN
+    row = exec_qe->row;
+#else
     rc = run_ycsb_0(req, row);
     assert(rc == RCOK);
+#endif
 //    INC_STATS(get_thd_id(), exec_txn_index_lookup_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
     // backup row to rollback writes
     row_access_backup(exec_qe, req->acctype, row, _thd_id);

@@ -201,7 +201,8 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
     msg = client_query_queue.get_next_query(home_partition, thd_id);
 #else
     BaseQuery * m_query = NULL;
-    m_query = client_query_queue.get_next_query(home_partition,thd_id);
+//    m_query = client_query_queue.get_next_query(home_partition,thd_id);
+    m_query = client_query_queue.get_next_query(thd_id,thd_id);
     assert(m_query);
     if(m_query) {
 //      DEBUG_Q("thread %ld, home partition = %ld, creating client query message\n", thd_id, home_partition);

@@ -432,8 +432,9 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
         table_size = g_synth_table_size / g_part_cnt;
         row_id = zipf(table_size - 1, g_zipf_theta);
         assert(row_id < table_size);
-        primary_key = row_id + (partition_id * table_size);
-        assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
+        primary_key = row_id;
+//        primary_key = row_id + (partition_id * table_size);
+//        assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
 #else
         if ((FIRST_PART_LOCAL && rid == 0) || part_limit == 1) {
 //        if (FIRST_PART_LOCAL && rid == 0) {
@@ -512,6 +513,8 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
         }
         //std::sort(query->requests.begin(),query->requests.end(),[](ycsb_request lhs, ycsb_request rhs) { return lhs.key < rhs.key;});
     }
+
+    assert(partitions_accessed.size()!= 0 && partitions_accessed.size() <= g_part_cnt);
     query->partitions.init(partitions_accessed.size());
     for (auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
         query->partitions.add(*it);

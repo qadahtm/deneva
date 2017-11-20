@@ -49,7 +49,7 @@ void WorkerThread::setup() {
 }
 
 RC WorkerThread::process(Message *msg) {
-    RC rc __attribute__ ((unused));
+    RC rc __attribute__ ((unused)) = ERROR;
 
     DEBUG("%ld Processing %ld %d\n", get_thd_id(), msg->get_txn_id(), msg->get_rtype());
 //    DEBUG_Q("%ld Processing %ld %d \n",get_thd_id(),msg->get_txn_id(),msg->get_rtype());
@@ -164,7 +164,7 @@ void WorkerThread::commit() {
     uint64_t timespan = get_sys_clock() - txn_man->txn_stats.starttime;
 //    DEBUG_Q("COMMIT %ld %f -- %f\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
 //          (double) timespan / BILLION);
-    DEBUG("COMMIT %ld %f -- %f\n",txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
+    DEBUG("WT_%ld: COMMIT %ld %f -- %f\n",_thd_id,txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
     // Send result back to client
 #if !SERVER_GENERATE_QUERIES
     msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
@@ -179,13 +179,14 @@ void WorkerThread::commit() {
 void WorkerThread::abort() {
 
     DEBUG("ABORT %ld -- %f\n", txn_man->get_txn_id(), (double) get_sys_clock() - run_starttime / BILLION);
+//    DEBUG_Q("WT_%ld: ABORT txn_id=%ld,txn_man_thd_id=%ld,thd_id=%ld -- %f\n",_thd_id, txn_man->get_txn_id(),txn_man->get_thd_id(),get_thd_id(), (double) get_sys_clock() - run_starttime / BILLION);
     // TODO: TPCC Rollback here
 
     ++txn_man->abort_cnt;
 #if ABORT_THREAD || ABORT_QUEUES
     txn_man->reset();
 #if ABORT_QUEUES
-    uint64_t penalty = work_queue.abort_queues[get_thd_id()]->enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
+    uint64_t penalty = work_queue.abort_queues[txn_man->get_thd_id()]->enqueue(txn_man->get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
 #else
     uint64_t penalty = abort_queue.enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
 #endif
@@ -242,9 +243,9 @@ RC WorkerThread::run_fixed_mode() {
 #if SPLIT_MERGE_ENABLED
 
 #if SPLIT_STRATEGY == EAGER_SPLIT
-    exec_qs_ranges_tmp->init(g_exec_qs_max_size);
+    ((Array<uint64_t> *)exec_qs_ranges_tmp)->init(g_exec_qs_max_size);
     exec_queues_tmp = new Array<Array<exec_queue_entry> *>();
-    exec_queues_tmp->init(g_exec_qs_max_size);
+    ((Array<uint64_t> *)exec_queues_tmp)->init(g_exec_qs_max_size);
 #endif
 #endif
 
@@ -977,7 +978,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 //            DEBUG_Q("WT_%ld: Delivered a batch at slot = %ld\n", _thd_id, batch_slot);
             break;
         }
-        if (g_thread_cnt == g_part_cnt){
+        if (g_thread_cnt == g_part_cnt || g_part_cnt == 1){
             next_part = _thd_id;
         }
         else{
@@ -1039,18 +1040,26 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 
     uint64_t wplanner_id = 0;
     batch_partition * batch_part = 0;
-#if DEBUG_QUECC
-    stats._stats[_thd_id]->exec_txn_frag_cnt[_thd_id] = 0;
-    stats._stats[_thd_id]->exec_txn_cnts[_thd_id] =0;
+//#if DEBUG_QUECC
+//    stats._stats[_thd_id]->exec_txn_frag_cnt[_thd_id] = 0;
+//    stats._stats[_thd_id]->exec_txn_cnts[_thd_id] =0;
 //    uint64_t total_eq_entries = 0;
 //    for (uint64_t i=0; i < g_plan_thread_cnt; ++i){
 //        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][i][_thd_id].load();
-//        assert(batch_part->single_q);
-//        total_eq_entries+= batch_part->exec_q->size();
+////        assert(batch_part->single_q);
+//        if (batch_part->single_q){
+//            total_eq_entries+= batch_part->exec_q->size();
+//        }
+//        else{
+//            for (uint64_t j = 0; j < batch_part->exec_qs->size(); ++j) {
+//                total_eq_entries += batch_part->exec_qs->get(j)->size();
+//            }
+//        }
+//
 ////        DEBUG_Q("ET_%ld: exec_batch - total eq entries from PL_%ld = %ld\n", _thd_id,i, batch_part->exec_q->size());
 //    }
-//    DEBUG_Q("ET_%ld: exec_batch - total eq entries = %ld\n", _thd_id,total_eq_entries);
-#endif
+//    DEBUG_Q("ET_%ld: exec_batch_id = %ld - total eq entries = %ld\n", _thd_id, wbatch_id,total_eq_entries);
+//#endif
 
     while (true){
 
@@ -1206,8 +1215,8 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
     uint64_t quecc_commit_starttime = 0;
 
     uint64_t txn_per_pg = g_batch_size / g_plan_thread_cnt;
-    uint64_t txn_wl_per_et = txn_per_pg / g_thread_cnt;
-    uint64_t txn_commit_seq=0; // the transaction order in the batch
+    uint64_t txn_wl_per_et UNUSED = txn_per_pg / g_thread_cnt;
+    uint64_t txn_commit_seq UNUSED =0; // the transaction order in the batch
     uint64_t commit_et_id =0;
     uint64_t commit_cnt = 0;
 //    uint8_t e8 =0;
@@ -1221,7 +1230,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
 
     RC rc;
 //    uint64_t commit_thread_cnt = COMMIT_THREAD_CNT;
-    uint64_t commit_thread_cnt = g_thread_cnt;
+    uint64_t commit_thread_cnt UNUSED = g_thread_cnt;
 
     for (uint64_t i=0; i < g_plan_thread_cnt;++i){
 
@@ -1229,9 +1238,13 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
         quecc_commit_starttime = get_sys_clock();
         // committing a PG
         for (uint64_t j = 0; j < txn_per_pg; ++j){
+
+#if BATCH_SIZE >= TXN_CNT_COMMIT_THRESHOLD
             txn_commit_seq = (i*txn_per_pg) + j;
             commit_et_id = (txn_commit_seq / txn_wl_per_et) % commit_thread_cnt;
-
+#else
+            commit_et_id = 0; // single threaded commit
+#endif
             if (commit_et_id == _thd_id){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
@@ -1537,9 +1550,9 @@ RC WorkerThread::run_normal_mode() {
 #if SPLIT_MERGE_ENABLED
 
 #if SPLIT_STRATEGY == EAGER_SPLIT
-    exec_qs_ranges_tmp->init(g_exec_qs_max_size);
+    ((Array<uint64_t> *)exec_qs_ranges_tmp)->init(g_exec_qs_max_size);
     exec_queues_tmp = new Array<Array<exec_queue_entry> *>();
-    exec_queues_tmp->init(g_exec_qs_max_size);
+    ((Array<uint64_t> *)exec_queues_tmp)->init(g_exec_qs_max_size);
 #endif
 #endif
 
@@ -2516,7 +2529,7 @@ RC WorkerThread::process_rtxn(Message *msg) {
         msg->txn_id = txn_id;
 
         // Put txn in txn_table
-//        DEBUG_Q("WT_%ld: Getting txn man txn_id = %ld\n",_thd_id, txn_id);
+        DEBUG("WT_%ld: Getting txn man txn_id = %ld\n",_thd_id, txn_id);
         txn_man = txn_table.get_transaction_manager(ctid, txn_id, 0);
         txn_man->register_thread(this);
 
@@ -2530,16 +2543,16 @@ RC WorkerThread::process_rtxn(Message *msg) {
 
         txn_man->txn_stats.starttime = get_sys_clock();
         txn_man->txn_stats.restart_starttime = txn_man->txn_stats.starttime;
+        DEBUG("WT_%ld: START %ld %f %lu\n",_thd_id, txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
+                txn_man->txn_stats.starttime);
         // this should make a copy of the query object to the txn_man
         msg->copy_to_txn(txn_man);
-        DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
-              txn_man->txn_stats.starttime);
         INC_STATS(ctid, local_txn_start_cnt, 1);
 
     } else {
         txn_man->txn_stats.restart_starttime = get_sys_clock();
         txn_id = msg->txn_id;
-        DEBUG("RESTART %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
+        DEBUG("WT_%ld: RESTART %ld %f %lu\n", _thd_id, txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
               txn_man->txn_stats.starttime);
     }
 

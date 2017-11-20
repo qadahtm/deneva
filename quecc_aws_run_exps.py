@@ -45,6 +45,7 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         part_cnt = nwthd_cnt
         piplined = 'true'
 
+    part_cnt = 1
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
@@ -97,6 +98,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         pc_m =    re.search('#define PART_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
             nline = '#define PART_CNT {}\n'.format(part_cnt)
+
+        pc_m =    re.search('#define CORE_CNT\s+(\d+|THREAD_CNT)',line.strip())
+        if pc_m:
+            nline = '#define CORE_CNT {}\n'.format(vm_cores)
 
         pc_m =    re.search('#define REQ_PER_QUERY\s+(\d+)',line.strip())
         if pc_m and is_ycsb:
@@ -424,7 +429,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 env = dict(os.environ)
 
 time_enable = True;
-dry_run = True;
+dry_run = False;
 vm_shut = False;
 
 is_ycsb = True
@@ -435,7 +440,7 @@ is_fixed_mode = False
 
 vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
-num_trials = 2;
+# num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
 # cc_algs = ['WAIT_DIE', 'TIMESTAMP', 'MVCC', 'NO_WAIT']
@@ -481,9 +486,9 @@ strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
 wthreads = [vm_cores]
-# wthreads = [32] # redo experiments
-# num_trials = 1
-# cc_algs = ['HSTORE']
+# wthreads = [4] # redo experiments
+num_trials = 1
+# cc_algs = ['NO_WAIT']
 cc_algs = ['QUECC']  
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
 # cc_algs = ['OCC', 'NO_WAIT'] # set 11
@@ -494,17 +499,19 @@ merge_strats = ['RR'] # for Quecc Only - set ot a single value if using others
 # mtpps = [100000,int(100000/vm_cores)] # MAX_TXN_PER_PART
 # mtpps = [int(100000/vm_cores)] # MAX_TXN_PER_PART
 # mtpps = [int(100000/vm_cores),int(500000/vm_cores),int(1600000/vm_cores)] # MAX_TXN_PER_PART
-mtpps = [int(500000/vm_cores)] # MAX_TXN_PER_PART
+# mtpps = [int(500000/vm_cores)] # MAX_TXN_PER_PART
+mtpps = [int(500000)] # MAX_TXN_PER_PART
 
 # batch_sized = [5184,10368,20736,41472,82944]
 # batch_sized = [5184] // this causes problems, so we ommit it
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
-batch_sized = [40320]
+# batch_sized = [40320]
+# batch_sized = [20736]
 # batch_sized = [13440,26880,40320,53760,107520]
 # batch_sized = [13440,26880,53760,107520]
 # batch_sized = [5184,10368,20736,41472,82944,165888]
-# batch_sized = [5184,10368,20736,41472,82944]
+batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
 
 # pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.25,0.5]
@@ -521,7 +528,7 @@ pt_perc = [1]
 # parts_accessed = [1] # for OPT=16
 # parts_accessed = [1,8,16,24,32] # for pptvar
 # parts_accessed = [10]
-parts_accessed = [5]
+parts_accessed = [1]
 
 
 ############### YCSB specific
@@ -536,23 +543,24 @@ write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 # mpt_perc = [0.1,0.2,0.5,0.8,1.0]
 # mpt_perc = [1.0]
+mpt_perc = [0.0]
 # mpt_perc = [0.1] #10% multi partition transactions
-mpt_perc = [1.0] #100% multi partition transactions
+# mpt_perc = [1.0] #100% multi partition transactions
 # ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
 ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
 # recsizes = [1,5,10,20,40]
-recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it
+# recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it
 # recsizes = [0.2,0.5,1] # skip 1 since we already have results for it
-# recsizes = [1]
+recsizes = [1]
 
 
 ############### TPCC specific
 payment_perc = [0.5]
 # payment_perc = [0.0,0.2,0.5,0.8,1.0]
-mpt_perc = [0.1] #10% multi partition transactions
+# mpt_perc = [0.1] #10% multi partition transactions
 
 procs = []
 seq_no = 0
