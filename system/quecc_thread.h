@@ -22,14 +22,6 @@
 
 #if CC_ALG == QUECC
 class Workload;
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-typedef boost::unordered::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-typedef boost::unordered::unordered_map<uint64_t, Array<uint64_t> *> hash_table_t;
-// Hashtable with size of buffers
-typedef boost::unordered::unordered_map<uint64_t, boost::lockfree::queue<char *> *> row_data_pool_t;
-#endif
-
 /**
  * TODO(tq): makes this more dynamic in terms of the number of fields and support TPCC
  * We will hardcode YCSB for now
@@ -92,6 +84,15 @@ struct transaction_context {
 #endif
 };
 
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+typedef boost::unordered::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+typedef boost::unordered::unordered_map<uint64_t, Array<uint64_t> *> hash_table_t;
+typedef boost::unordered::unordered_map<uint64_t, Array<transaction_context *> *> hash_table_tctx_t;
+// Hashtable with size of buffers
+typedef boost::unordered::unordered_map<uint64_t, boost::lockfree::queue<char *> *> row_data_pool_t;
+#endif
+
 enum tpcc_txn_frag_t{
     TPCC_PAYMENT_UPDATE_W=0,
     TPCC_PAYMENT_UPDATE_D,
@@ -149,7 +150,8 @@ struct priority_group{
 #endif
     volatile bool initialized = false;
 #if BUILD_TXN_DEPS
-    hash_table_t * txn_dep_graph;
+    hash_table_t * access_table;
+    hash_table_tctx_t * txn_dep_graph;
 #endif
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
@@ -256,7 +258,7 @@ public:
     uint32_t get_split(uint64_t key, Array<uint64_t> * ranges);
 
     inline void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
-    inline void process_client_msg(Message *msg, transaction_context * txn_ctxs);
+    inline void process_client_msg(Message *msg, priority_group * planner_pg);
     inline SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
 #if DEBUG_QUECC
     void print_threads_status() const {// print phase status
@@ -323,7 +325,8 @@ private:
     // For txn dependency tracking
 #if BUILD_TXN_DEPS
     hash_table_t access_table;
-    hash_table_t * txn_dep_graph;
+//    hash_table_t * txn_dep_graph;
+    hash_table_tctx_t * txn_dep_graph;
 #endif
 
     // create and and pre-allocate execution queues
@@ -417,13 +420,24 @@ public:
         while(!vector_free_list[planner_id]->push(list)){};
     }
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-    void txn_list_get_or_create(Array<uint64_t> *& list, uint64_t planner_id){
+    void txn_ctx_list_get_or_create(Array<transaction_context *> *& list, uint64_t planner_id){
+        if (!tctx_ptr_free_list[planner_id]->pop(list)){
+            list = (Array<transaction_context *> *) mem_allocator.alloc(sizeof(Array<transaction_context *>));
+            list->init(TDG_ENTRY_LENGTH);
+        }
+    }
+    void txn_ctx_list_release(Array<transaction_context *> *& list, uint64_t planner_id){
+        list->clear();
+        while(!tctx_ptr_free_list[planner_id]->push(list)){};
+    }
+
+    void txn_id_list_get_or_create(Array<uint64_t> *& list, uint64_t planner_id){
         if (!vector_free_list[planner_id]->pop(list)){
             list = (Array<uint64_t> *) mem_allocator.alloc(sizeof(Array<uint64_t>));
             list->init(TDG_ENTRY_LENGTH);
         }
     }
-    void txn_list_release(Array<uint64_t> *& list, uint64_t planner_id){
+    void txn_id_list_release(Array<uint64_t> *& list, uint64_t planner_id){
         list->clear();
         while(!vector_free_list[planner_id]->push(list)){};
     }
@@ -447,6 +461,7 @@ private:
     boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
     boost::lockfree::queue<Array<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
+    boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[PLAN_THREAD_CNT];
 #endif
 
 

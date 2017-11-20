@@ -856,8 +856,8 @@ public:
                 }
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
                 for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-                    Array<uint64_t> * tmp = it->second;
-                    quecc_pool.txn_list_release(tmp, i);
+                    Array<transaction_context *> * tmp = it->second;
+                    quecc_pool.txn_ctx_list_release(tmp, i);
                 }
 #endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
                 planner_pg->txn_dep_graph->clear();
@@ -1144,15 +1144,13 @@ public:
         return get_batch_part(batch_slot,wplanner_id,_thd_id);
     }
     inline batch_partition * get_batch_part(uint64_t batch_slot, uint64_t wplanner_id, uint64_t et_id) ALWAYS_INLINE{
+        batch_partition * ret;
 #if BATCH_MAP_ORDER == BATCH_ET_PT
-        return (batch_partition *)  work_queue.batch_map[batch_slot][et_id][wplanner_id].fetch_add(0);
+        ret = (batch_partition *)  work_queue.batch_map[batch_slot][et_id][wplanner_id].load();
 #else
-#if ATOMIC_PG_STATUS
-        return (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][et_id].fetch_add(0);
-#else
-        return (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][et_id].load();
+        ret = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][et_id].load();
 #endif
-#endif
+        return  ret;
     }
 
     inline void cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id) ALWAYS_INLINE{
@@ -1204,9 +1202,33 @@ public:
 
     inline SRC plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) ALWAYS_INLINE;
     inline SRC execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) ALWAYS_INLINE;
+    inline batch_partition * get_curr_batch_part(uint64_t batch_slot) ALWAYS_INLINE{
+        batch_partition * batch_part;
+#if BATCH_MAP_ORDER == BATCH_ET_PT
+        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
+#else
+        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
+#endif
+        M_ASSERT_V(batch_part, "WT_%ld: batch part pointer is zero, PG=%ld, batch_slot = %ld, batch_id = %ld!!\n",
+                   _thd_id, wplanner_id, batch_slot, wbatch_id);
+        return batch_part;
+    };
 
-    inline SRC execute_batch_part(batch_partition * batch_part, uint64_t *eq_comp_cnts, TxnManager * my_txn_man, uint64_t wplanner_id)
+    inline void capture_cpg_deps(uint64_t batch_slot, exec_queue_entry * entry, TxnManager * my_txn_man)
     ALWAYS_INLINE{
+        // we are processing lower PGs, need to capture dependencies from
+        // we need to check access tables for higher PGS
+        for (int j = wplanner_id; j > 0; --j) {
+//            batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
+
+        }
+    }
+
+    inline SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
+    ALWAYS_INLINE{
+
+        batch_partition * batch_part = get_curr_batch_part(batch_slot);
+
         Array<exec_queue_entry> * exec_q;
         //        M_ASSERT_V(batch_part->batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
 //                " wbatch_id=%ld, batch_part_batch_id = %ld\n",
@@ -1299,6 +1321,9 @@ public:
             quecc_prof_time = get_sys_clock();
 //            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
             rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
+            if (rc == RCOK){
+
+            }
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
 
             while (rc == RCOK){
@@ -1424,7 +1449,94 @@ public:
 
     inline RC commit_batch(uint64_t batch_slot) ALWAYS_INLINE;
     inline RC commit_txn(priority_group * planner_pg, uint64_t txn_idx) ALWAYS_INLINE;
-    inline void wt_release_accesses(transaction_context * context, RC rc) ALWAYS_INLINE;
+    inline void finalize_txn_commit(transaction_context * tctx, RC rc) ALWAYS_INLINE{
+        uint64_t commit_time = get_sys_clock(),e8,d8;
+        uint64_t timespan_long = commit_time - tctx->starttime;
+
+        // Committing
+        INC_STATS_ARR(_thd_id, first_start_commit_latency, timespan_long);
+        // Sending response to client a
+#if !SERVER_GENERATE_QUERIES
+        Message * rsp_msg = Message::create_message(CL_RSP);
+                                rsp_msg->txn_id = txn_ctxs[i].txn_id;
+                                rsp_msg->batch_id = batch_id; // using batch_id from local, we can also use the one in the context
+                                ((ClientResponseMessage *) rsp_msg)->client_startts = txn_ctxs[i].client_startts;
+                                rsp_msg->lat_work_queue_time = 0;
+                                rsp_msg->lat_msg_queue_time = 0;
+                                rsp_msg->lat_cc_block_time = 0;
+                                rsp_msg->lat_cc_time = 0;
+                                rsp_msg->lat_process_time = 0;
+                                rsp_msg->lat_network_time = 0;
+                                rsp_msg->lat_other_time = 0;
+
+                                msg_queue.enqueue(_thd_id, rsp_msg, txn_ctxs[j].return_node_id);
+#endif
+        wt_release_accesses(tctx,rc);
+        e8 = TXN_READY_TO_COMMIT;
+        d8 = TXN_COMMITTED;
+        if (tctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
+            M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
+        }
+//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld\n",
+//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
+    };
+
+    inline void wt_release_accesses(transaction_context * context, RC rc) ALWAYS_INLINE{
+#if ROW_ACCESS_TRACKING
+        // releaase accesses
+//    if (DEBUG_QUECC){
+//        M_ASSERT_V(!cascading_abort, "cascading abort is not false!!\n");
+//        M_ASSERT_V(!rollback, "rollback is not false!!\n");
+//    }
+//    DEBUG_Q("ET_%ld: cacading abort = %d, rollback = %d\n", _thd_id, cascading_abort, rollback);
+#if ROLL_BACK
+#if ROW_ACCESS_IN_CTX
+        // we don't need to free any memory to release accesses as it will be recycled for the next batch
+        // roll back writes
+        for (int i = 0; i < REQ_PER_QUERY; ++i) {
+            if (context->a_types[i] == WR){
+                if (rc == Abort){
+                    if (context->orig_rows[i]->last_tid == context->txn_id){
+                        uint64_t rec_size = context->orig_rows[i]->get_tuple_size();
+                        context->orig_rows[i]->last_tid = context->prev_tid[i];
+                        uint64_t ri = i*rec_size;
+                        memcpy(context->orig_rows[i]->data,&context->undo_buffer_data[ri], rec_size);
+                        INC_STATS(_thd_id, record_recov_cnt[_thd_id], 1);
+                    }
+                }
+            }
+        }
+
+#else
+        for (uint64_t k = 0; k < context->accesses->size(); k++) {
+        M_ASSERT_V(context->accesses->get(k), "Zero pointer for access \n");
+        uint64_t ctid = context->accesses->get(k)->thd_id;
+        Access * access = context->accesses->get(k);
+
+
+        if (access->type == WR){
+            if (rc == Abort){
+                // if ctx.tid == row.last_tid
+                // restore original data and the original tid
+                if (context->txn_id == access->orig_row->last_tid){
+                    access->orig_row->last_tid = access->prev_tid;
+                    access->orig_row->copy(access->orig_data);
+                    INC_STATS(_thd_id, record_recov_cnt[_thd_id], 1);
+                }
+            }
+            //            access->orig_data->free_row();
+            row_pool.put(ctid, access->orig_data);
+            access->orig_data->free_row_pool(_thd_id);
+        }
+
+        access_pool.put(ctid, access);
+    }
+    context->accesses->clear();
+#endif
+#endif
+//    assert(context->accesses->size() == 0);
+#endif
+    };
 
     inline void move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts,
                                               Array<exec_queue_entry> *&exec_q, uint64_t &w_exec_q_index) const ALWAYS_INLINE{
@@ -1447,6 +1559,7 @@ public:
     };
 
     uint64_t wbatch_id = 0;
+    uint64_t wplanner_id = 0;
 
 #if !PIPELINED
 
@@ -1856,20 +1969,28 @@ public:
                 // but since this is a single record operation, no need for dependencies
             }
             else{
-                M_ASSERT_V(search->second->last() >= batch_starting_txn_id,
+                M_ASSERT_V(search->second->last() >= planner_pg->batch_starting_txn_id,
                            "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
-                           search->second->last(), batch_starting_txn_id
+                           search->second->last(), planner_pg->batch_starting_txn_id
                 );
 
                 auto search_txn = planner_pg->txn_dep_graph->find(planner_txn_id);
+                uint64_t d_txnid;
+                uint64_t d_txn_ctx_idx;
+                transaction_context * d_tctx;
+                d_txnid = search->second->last();
+                d_txn_ctx_idx = d_txnid-planner_pg->batch_starting_txn_id;
+                d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
                 if (search_txn != planner_pg->txn_dep_graph->end()){
-                    search_txn->second->add(search->second->last());
+                    M_ASSERT_V(d_tctx->txn_id == d_txnid, "WT_%ld: Mismatch txnid\n",_thd_id);
+                    search_txn->second->add(d_tctx);
                 }
                 else{
                     // first operation for this txn_id
-                    Array<uint64_t> * txn_list;
-                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
-                    txn_list->add(search->second->last());
+//                    Array<uint64_t> * txn_list;
+                    Array<transaction_context *> * txn_list;
+                    quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
+                    txn_list->add(d_tctx);
                     planner_pg->txn_dep_graph->insert({planner_txn_id, txn_list});
                 }
 //                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
@@ -1879,7 +2000,7 @@ public:
             // not found
             if (ycsb_req->acctype == WR){
                 Array<uint64_t> * txn_list;
-                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
+                quecc_pool.txn_id_list_get_or_create(txn_list,_planner_id);
                 txn_list->add(planner_txn_id);
                 access_table.insert({ycsb_req->key, txn_list});
             }
@@ -2383,8 +2504,7 @@ public:
 
 //            planner_pg->batch_txn_cnt = batch_cnt;
 //            planner_pg->batch_id = batch_id;
-
-        planner_pg->batch_starting_txn_id = batch_starting_txn_id;
+//        planner_pg->batch_starting_txn_id = batch_starting_txn_id;
 
         // deilvery  phase
         for (uint64_t i = 0; i < g_thread_cnt; i++){
@@ -2526,14 +2646,14 @@ public:
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
             Array<uint64_t> * tmp = it->second;
 #endif
-            quecc_pool.txn_list_release(tmp, _planner_id);
+            quecc_pool.txn_id_list_release(tmp, _planner_id);
         }
         //TODO(tq): FIXME
         access_table.clear();
 
         M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
 #endif
-        batch_starting_txn_id = planner_txn_id;
+//        batch_starting_txn_id = planner_txn_id;
         pbatch_cnt = 0;
     }
 
@@ -2573,7 +2693,7 @@ private:
     // Batch related
     uint64_t pbatch_cnt = 0;
     bool force_batch_delivery = false;
-    uint64_t batch_starting_txn_id;
+//    uint64_t batch_starting_txn_id;
 
     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.align_alloc(sizeof(exec_queue_entry));
     uint64_t et_id = 0;

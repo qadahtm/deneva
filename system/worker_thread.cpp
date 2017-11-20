@@ -304,7 +304,7 @@ RC WorkerThread::run_fixed_mode() {
 //    txn_dep_graph = new hash_table_t();
 #endif
 
-    batch_starting_txn_id = planner_txn_id;
+//    batch_starting_txn_id = planner_txn_id;
     query_cnt = 0;
 
 //    M_ASSERT_V(g_part_cnt >= g_thread_cnt,
@@ -959,7 +959,8 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 #if BUILD_TXN_DEPS
     if (!planner_pg->initialized){
         // since we are doing effectively one batch at a time.
-        planner_pg->txn_dep_graph = new hash_table_t();
+        planner_pg->access_table = new hash_table_t();
+        planner_pg->txn_dep_graph = new hash_table_tctx_t();
         planner_pg->initialized = true;
     }
     else{
@@ -967,6 +968,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
     }
     // use txn_dep from planner_pg
 //    txn_dep_graph = planner_pg->txn_dep_graph;
+    planner_pg->batch_starting_txn_id = planner_txn_id;
 #endif
 
     while (true){
@@ -1038,8 +1040,8 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
 inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) {
 
-    uint64_t wplanner_id = 0;
-    batch_partition * batch_part = 0;
+//    uint64_t wplanner_id = 0;
+    wplanner_id = 0;
 //#if DEBUG_QUECC
 //    stats._stats[_thd_id]->exec_txn_frag_cnt[_thd_id] = 0;
 //    stats._stats[_thd_id]->exec_txn_cnts[_thd_id] =0;
@@ -1106,11 +1108,6 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 
 #else
 
-#if BATCH_MAP_ORDER == BATCH_ET_PT
-        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
-#else
-        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_thd_id].load();
-#endif
 #if DEBUG_QUECC
         if ((uint64_t)batch_part == 0){
 
@@ -1127,8 +1124,6 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
             }
         }
 #endif
-        M_ASSERT_V(batch_part, "WT_%ld: batch part pointer is zero, PG=%ld, batch_slot = %ld, batch_id = %ld!!\n",
-                   _thd_id, wplanner_id, batch_slot, wbatch_id);
 #endif
 //        DEBUG_Q("ET_%ld: got a PG from planner %ld, batch_slot = %ld, batch_part = %lu\n",_thd_id, wplanner_id, batch_slot, (uint64_t) batch_part);
 
@@ -1136,7 +1131,7 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
 //            quecc_batch_proc_starttime = get_sys_clock();
 //        }
 
-        if (execute_batch_part(batch_part, eq_comp_cnts, my_txn_man, wplanner_id) == BREAK){
+        if (execute_batch_part(batch_slot, eq_comp_cnts, my_txn_man) == BREAK){
             return BREAK;
         }
 
@@ -1400,19 +1395,6 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
                            d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
                            (uint64_t)txn_ctxs, wbatch_id, j
                 );
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                if (search->second->size() > 0){
-                // there are dependent transactions
-                uint64_t d_txn_id = search->second->last();
-                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
-                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
-                           "ET_%ld: Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
-                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld), batch_id=%ld, j = %ld \n", _thd_id,
-                           txn_ctxs[d_txn_ctx_idx].txn_id,
-                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
-                           (uint64_t)txn_ctxs, wbatch_id, j
-                );
-#endif
                 if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
                     // abort due to dependencies on an aborted txn
                     //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
@@ -1443,6 +1425,55 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
 
                 }
             }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+            if (search->second->size() > 0){
+                // there are dependent transactions
+                transaction_context * d_tctx = search->second->last();
+//                uint64_t d_txn_id = search->second->last();
+//                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
+//                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
+//                           "ET_%ld: Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
+//                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld), batch_id=%ld, j = %ld \n", _thd_id,
+//                           txn_ctxs[d_txn_ctx_idx].txn_id,
+//                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
+//                           (uint64_t)txn_ctxs, wbatch_id, j
+//                );
+#endif
+//                if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
+                if (d_tctx->txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
+                    // abort due to dependencies on an aborted txn
+                    //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+                    return Abort;
+//                    canCommit = false;
+//#if ROW_ACCESS_TRACKING
+//                    cascading_abort = true;
+//#endif
+                }
+//                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
+                else if (d_tctx->txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
+                    // queue up this transaction j in the pedning txn list and check later if it can commit
+//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+                    return WAIT;
+                }
+//                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_COMMITTED){
+                else if (d_tctx->txn_state.load(memory_order_acq_rel) == TXN_COMMITTED){
+//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+                    return Commit;
+//                    canCommit = true;
+//#if ROW_ACCESS_TRACKING
+//                    cascading_abort = false;
+//#endif
+                }
+                else{
+//                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
+//                               _thd_id, txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel));
+                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
+                               _thd_id, d_tctx->txn_state.load(memory_order_acq_rel));
+
+                }
+            }
         }
 #endif // #if BUILD_TXN_DEPS
 
@@ -1462,64 +1493,6 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
     }
 
     return Commit;
-}
-
-
-inline void WorkerThread::wt_release_accesses(transaction_context * context, RC rc){
-#if ROW_ACCESS_TRACKING
-    // releaase accesses
-//    if (DEBUG_QUECC){
-//        M_ASSERT_V(!cascading_abort, "cascading abort is not false!!\n");
-//        M_ASSERT_V(!rollback, "rollback is not false!!\n");
-//    }
-//    DEBUG_Q("ET_%ld: cacading abort = %d, rollback = %d\n", _thd_id, cascading_abort, rollback);
-#if ROLL_BACK
-#if ROW_ACCESS_IN_CTX
-    // we don't need to free any memory to release accesses as it will be recycled for the next batch
-    // roll back writes
-    for (int i = 0; i < REQ_PER_QUERY; ++i) {
-        if (context->a_types[i] == WR){
-            if (rc == Abort){
-                if (context->orig_rows[i]->last_tid == context->txn_id){
-                    uint64_t rec_size = context->orig_rows[i]->get_tuple_size();
-                    context->orig_rows[i]->last_tid = context->prev_tid[i];
-                    uint64_t ri = i*rec_size;
-                    memcpy(context->orig_rows[i]->data,&context->undo_buffer_data[ri], rec_size);
-                    INC_STATS(_thd_id, record_recov_cnt[_thd_id], 1);
-                }
-            }
-        }
-    }
-
-#else
-    for (uint64_t k = 0; k < context->accesses->size(); k++) {
-        M_ASSERT_V(context->accesses->get(k), "Zero pointer for access \n");
-        uint64_t ctid = context->accesses->get(k)->thd_id;
-        Access * access = context->accesses->get(k);
-
-
-        if (access->type == WR){
-            if (rc == Abort){
-                // if ctx.tid == row.last_tid
-                // restore original data and the original tid
-                if (context->txn_id == access->orig_row->last_tid){
-                    access->orig_row->last_tid = access->prev_tid;
-                    access->orig_row->copy(access->orig_data);
-                    INC_STATS(_thd_id, record_recov_cnt[_thd_id], 1);
-                }
-            }
-            //            access->orig_data->free_row();
-            row_pool.put(ctid, access->orig_data);
-            access->orig_data->free_row_pool(_thd_id);
-        }
-
-        access_pool.put(ctid, access);
-    }
-    context->accesses->clear();
-#endif
-#endif
-//    assert(context->accesses->size() == 0);
-#endif
 }
 
 #endif
@@ -1611,7 +1584,7 @@ RC WorkerThread::run_normal_mode() {
 //    txn_dep_graph = new hash_table_t();
 #endif
 
-    batch_starting_txn_id = planner_txn_id;
+//    batch_starting_txn_id = planner_txn_id;
     query_cnt = 0;
 
 //    M_ASSERT_V(g_part_cnt >= g_thread_cnt,
