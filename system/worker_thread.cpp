@@ -964,10 +964,47 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         planner_pg->initialized = true;
     }
     else{
+        // clear up meta data from previouse batch
+#if BUILD_TXN_DEPS
+//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
+//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
+        // Clean up and clear txn_graph
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+        for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+//                    delete it->second;
+                    std::vector<uint64_t> * tmp = it->second;
+                    quecc_pool.txn_list_release(tmp, i);
+                }
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+        for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+            Array<transaction_context *> * tmp = it->second;
+            quecc_pool.txn_ctx_list_release(tmp, _planner_id);
+        }
+#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
+        planner_pg->txn_dep_graph->clear();
+//                assert(planner_pg->txn_dep_graph->size() == 0);
+//        prof_starttime = get_sys_clock();
+        for (auto it = planner_pg->access_table->begin(); it != planner_pg->access_table->end(); ++it){
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+            std::vector<uint64_t> * tmp = it->second;
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+            Array<uint64_t> * tmp = it->second;
+#endif
+            quecc_pool.txn_id_list_release(tmp, _planner_id);
+        }
+        //TODO(tq): FIXME
+        planner_pg->access_table->clear();
+        M_ASSERT_V(planner_pg->access_table->size() == 0, "Access table is not empty!!\n");
+#endif
+        // Reset PG map so that planners can continue
+        desired8 = PG_AVAILABLE;
+        expected8 = PG_READY;
+        if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+            M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+        };
         M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
     }
     // use txn_dep from planner_pg
-//    txn_dep_graph = planner_pg->txn_dep_graph;
     planner_pg->batch_starting_txn_id = planner_txn_id;
 #endif
 
@@ -1872,8 +1909,6 @@ RC WorkerThread::run_normal_mode() {
         if (batch_proc_starttime > 0){
             hl_prof_starttime = get_sys_clock();
         }
-//        src = plan_batch(batch_slot, my_txn_man);
-//        M_ASSERT_V(wbatch_id == work_queue.gbatch_id, "ET_%ld: plan stage - batch id mismatch wbatch_id=%ld, gbatch_id=%ld\n", _thd_id, wbatch_id, work_queue.gbatch_id);
         src = plan_batch(batch_slot, my_txn_man);
         if (batch_proc_starttime > 0) {
             INC_STATS(_thd_id, wt_hl_plan_time[_thd_id], get_sys_clock() - hl_prof_starttime);

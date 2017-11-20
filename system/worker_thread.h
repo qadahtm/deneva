@@ -841,35 +841,6 @@ public:
 
             //TODO(tq): remove this later
 #if SYNC_MASTER_BATCH_CLEANUP
-            priority_group * planner_pg;
-            for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
-                planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-#if BUILD_TXN_DEPS
-//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
-//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
-                // Clean up and clear txn_graph
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-//                    delete it->second;
-                    std::vector<uint64_t> * tmp = it->second;
-                    quecc_pool.txn_list_release(tmp, i);
-                }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-                    Array<transaction_context *> * tmp = it->second;
-                    quecc_pool.txn_ctx_list_release(tmp, i);
-                }
-#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                planner_pg->txn_dep_graph->clear();
-//                assert(planner_pg->txn_dep_graph->size() == 0);
-#endif
-                // Reset PG map so that planners can continue
-                desired8 = PG_AVAILABLE;
-                expected8 = PG_READY;
-                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-                    M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
-                };
-            }
             // cleanup my batch part and allow planners waiting on me to
             for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
                 for (uint64_t j = 0; j < g_thread_cnt; ++j) {
@@ -1922,7 +1893,7 @@ public:
 
 
         pmprof_starttime = get_sys_clock();
-        auto search = access_table.find(key);
+        auto search = planner_pg->access_table->find(key);
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
         if (search != access_table.end()){
             // found
@@ -1961,7 +1932,7 @@ public:
             }
         }
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-        if (search != access_table.end()){
+        if (search != planner_pg->access_table->end()){
             // found
             if (ycsb_req->acctype == WR){
                 search->second->add(planner_txn_id);
@@ -2002,7 +1973,7 @@ public:
                 Array<uint64_t> * txn_list;
                 quecc_pool.txn_id_list_get_or_create(txn_list,_planner_id);
                 txn_list->add(planner_txn_id);
-                access_table.insert({ycsb_req->key, txn_list});
+                planner_pg->access_table->insert({ycsb_req->key, txn_list});
             }
         }
 #endif // end - if TDG_ENTRY_TYPE == VECTOR_ENTRY
@@ -2638,22 +2609,8 @@ public:
         INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
         INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
         INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
-#if BUILD_TXN_DEPS
-//        prof_starttime = get_sys_clock();
-        for (auto it = access_table.begin(); it != access_table.end(); ++it){
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-            std::vector<uint64_t> * tmp = it->second;
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-            Array<uint64_t> * tmp = it->second;
-#endif
-            quecc_pool.txn_id_list_release(tmp, _planner_id);
-        }
-        //TODO(tq): FIXME
-        access_table.clear();
 
-        M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
-#endif
-//        batch_starting_txn_id = planner_txn_id;
+        //reset batch_cnt for next time
         pbatch_cnt = 0;
     }
 
@@ -2714,9 +2671,9 @@ private:
 //    uint64_t slot_num = 0;
 
     // For txn dependency tracking
-#if BUILD_TXN_DEPS
-    hash_table_t access_table;
-#endif
+//#if BUILD_TXN_DEPS
+//    hash_table_t access_table;
+//#endif
 
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
