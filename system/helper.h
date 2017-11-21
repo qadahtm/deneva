@@ -88,7 +88,7 @@
 #define ALWAYS_INLINE __attribute__((always_inline))
 #define UNUSED __attribute__((unused))
 #define COMPILER_MEMORY_FENCE asm volatile("" ::: "memory")
-
+#define OPTIMIZE_OUT __attribute__((optimize("O0")))
 /************************************************/
 // atomic operations
 /************************************************/

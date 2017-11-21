@@ -122,11 +122,8 @@ struct exec_queue_entry {
 #elif WORKLOAD == TPCC
     tpcc_txn_frag_t type;
     uint64_t rid;
-    row_t * row;
 #endif
-#if YCSB_INDEX_LOOKUP_PLAN
     row_t * row;
-#endif
 #if ROW_ACCESS_IN_CTX
     uint32_t req_idx;
 #endif
@@ -149,6 +146,9 @@ struct priority_group{
     volatile atomic<uint8_t> status;
 #endif
     volatile bool initialized = false;
+#if EXEC_BUILD_TXN_DEPS
+    hash_table_tctx_t * exec_tdg[THREAD_CNT];
+#endif
 #if BUILD_TXN_DEPS
     hash_table_t * access_table;
     hash_table_tctx_t * txn_dep_graph;

@@ -15,9 +15,9 @@ CFLAGS += $(DEPS) -O3 -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
 #CFLAGS += $(DEPS) -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
 #LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -pthread -gdwarf-3 -lrt -std=c++0x
 LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -pthread -gdwarf-3 -lrt -std=c++11
-#LDFLAGS += -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -ljemalloc `jemalloc-config --libs`
+LDFLAGS += -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -ljemalloc `jemalloc-config --libs`
 #LDFLAGS = -Wall -L. -L$(NNMSG) -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -pthread -gdwarf-3 -lrt -std=c++11
-LDFLAGS += -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -ljemalloc `jemalloc-config --libs`
+#LDFLAGS += -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -ljemalloc `jemalloc-config --libs`
 LDFLAGS += $(CFLAGS)
 LIBS = -lnanomsg -lanl -ljemalloc -lm -lstdc++ -lpthread -ldl -lnuma -lconfig++
 #LIBS = -lnanomsg -lanl -lm -lstdc++ -lpthread -ldl -lnuma -lconfig++

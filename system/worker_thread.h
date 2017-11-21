@@ -846,6 +846,16 @@ public:
                 for (uint64_t j = 0; j < g_thread_cnt; ++j) {
                     cleanup_batch_part(batch_slot, i,j);
                 }
+#if PIPELINED
+                // Reset PG map so that planners can continue
+                uint64_t desired8 = PG_AVAILABLE;
+                uint64_t expected8 = PG_READY;
+                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+                    M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+                };
+
+#endif
             }
 #endif // -- #if SYNC_MASTER_BATCH_CLEANUP
 
@@ -1184,21 +1194,117 @@ public:
                    _thd_id, wplanner_id, batch_slot, wbatch_id);
         return batch_part;
     };
+    inline bool add_txn_dep(uint64_t txn_id, uint64_t d_txn_id, hash_table_tctx_t * tdg, priority_group * d_planner_pg) ALWAYS_INLINE{
+        transaction_context * d_tctx = get_tctx_from_pg(d_txn_id, d_planner_pg);
+        if (d_tctx != NULL){
+            auto txn_search = tdg->find(entry->txn_id);
+            if (txn_search != tdg->end()){
+                // found tdg entry
+                // this txn has other dependencies
+                txn_search->second->add_unique(d_tctx);
+            }
+            else{
+                // a new dependency for this txn
+                Array<transaction_context *> * txn_list;
+                quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
+                txn_list->add(d_tctx);
+                tdg->insert({entry->txn_id, txn_list});
+            }
+            return true;
+        }
+        else{
+            return false;
+        }
+    };
 
-    inline void capture_cpg_deps(uint64_t batch_slot, exec_queue_entry * entry, TxnManager * my_txn_man)
+    inline void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc)
     ALWAYS_INLINE{
+#if EXEC_BUILD_TXN_DEPS
+        if (rc == RCOK){
+            batch_partition * mypart = get_batch_part(batch_slot,wplanner_id,_thd_id);
+            hash_table_tctx_t * mytdg = mypart->planner_pg->exec_tdg[_thd_id];
+            uint64_t last_tid = entry->row->last_tid;
+            if (last_tid == 0){
+                //  if this is a read, and record has not been update before, so no dependency
+                return;
+            }
+            if (last_tid == entry->txn_id){
+                // I just wrote to this row, // get previous txn_id from context
+                last_tid = entry->txn_ctx->prev_tid[entry->req_idx];
+            }
+            if (last_tid == 0){
+                // if this is a write, we are the first to write to this record, so no dependency
+                return;
+            }
+            for (int64_t j = (int64_t)wplanner_id; j >= 0; --j) {
+                batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
+                if (add_txn_dep(entry->txn_id,last_tid,mytdg,part->planner_pg)){
+//                    DEBUG_Q("ET_%ld: added dependency : entry_txnid=%ld, row_last_tid=%ld, PG=%ld, batch_id=%ld\n",
+//                            _thd_id,entry->txn_id,last_tid, wplanner_id,wbatch_id);
+                    break;
+                }
+            }
+        }
+#endif
+
+#if BUILD_TXN_DEPS
         // we are processing lower PGs, need to capture dependencies from
         // we need to check access tables for higher PGS
-        for (int j = wplanner_id; j > 0; --j) {
-//            batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
-
-        }
+//        for (int j = wplanner_id; j > 0; --j) {
+//            batch_partition * part = get_batch_part(batch_slot,(j-1),_thd_id);
+//            hash_table_tctx_t * mytdg = mypart->planner_pg->txn_dep_graph;
+//            hash_table_t * at = part->planner_pg->access_table;
+//            spinlock * tdg_latch = mypart->planner_pg->tdg_lock;
+//            uint64_t key = get_key_from_entry(entry);
+//            // lookup the last transaction that wrote to this key in the higher PG
+//            auto at_search = at->find(key);
+//            if (at_search != at->end()){
+//                // found a dependency, add it to the this
+//                //TODO(tq): check performance of latching, if bad, use a per thread, tdg
+//                // latch  txn_dep_graph
+//                tdg_latch->lock();
+//                transaction_context * d_tctx = get_tctx_from_pg(at_search->second->last(), part->planner_pg);
+//                auto txn_search = mytdg->find(entry->txn_id);
+//                if (txn_search != mytdg->end()){
+//                    // found tdg entry
+//                    // this txn has other dependencies
+//                    txn_search->second->add(d_tctx);
+//                }
+//                else{
+//                    // a new dependency for this txn
+//                    Array<transaction_context *> * txn_list;
+//                    quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
+//                    txn_list->add(d_tctx);
+//                    mytdg->insert({entry->txn_id, txn_list});
+//                }
+//                // unlatch TDG
+//                tdg_latch->unlock();
+//            }
+//        }
+#endif
     }
 
     inline SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
     ALWAYS_INLINE{
 
         batch_partition * batch_part = get_curr_batch_part(batch_slot);
+
+//#if DEBUG_QUECC
+//        if ((uint64_t)batch_part == 0){
+//
+//            for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+//                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+//                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, plan_sync: done[%d]=%ld, plan_next_stage=%ld\n", _thd_id,wbatch_id,j,work_queue.plan_sblocks[i][j].done, *work_queue.plan_next_stage[i]);
+//                }
+//                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+//                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, exec_sync: done[%d]=%ld, exec_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.exec_sblocks[i][j].done, *work_queue.exec_next_stage[i]);
+//                }
+//                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+//                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, commit_sync: done[%d]=%ld, commit_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.commit_sblocks[i][j].done, *work_queue.commit_next_stage[i]);
+//                }
+//            }
+//        }
+//#endif
 
         Array<exec_queue_entry> * exec_q;
         //        M_ASSERT_V(batch_part->batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
@@ -1292,9 +1398,7 @@ public:
             quecc_prof_time = get_sys_clock();
 //            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
             rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
-            if (rc == RCOK){
-
-            }
+            capture_txn_deps(batch_slot, exec_qe_ptr, rc);
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
 
             while (rc == RCOK){
@@ -1327,6 +1431,7 @@ public:
                 quecc_prof_time = get_sys_clock();
                 exec_qe_ptr = exec_q->get_ptr(eq_comp_cnts[w_exec_q_index]);
                 rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
+                capture_txn_deps(batch_slot, exec_qe_ptr, rc);
                 INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
             }
 
@@ -1547,7 +1652,7 @@ public:
         return (uint32_t) ranges->size()-1;
     }
 
-    uint64_t __attribute__((optimize("O0"))) get_key_from_entry(exec_queue_entry * entry) {
+    uint64_t OPTIMIZE_OUT get_key_from_entry(exec_queue_entry * entry) {
 #if WORKLOAD == YCSB
         ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
         return ycsb_req_tmp->key;
@@ -1756,6 +1861,20 @@ public:
 #endif
     }
 
+    inline transaction_context * get_tctx_from_pg(uint64_t txnid, priority_group *planner_pg) ALWAYS_INLINE{
+        transaction_context * d_tctx;
+        uint64_t d_txn_ctx_idx = txnid-planner_pg->batch_starting_txn_id;
+
+        if (d_txn_ctx_idx >= (g_batch_size/g_plan_thread_cnt)){
+            return NULL;
+        }
+        else{
+            d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
+//            DEBUG_Q("ET_%ld: d_txn_ctx_idx=%ld, txn_id=%ld, batch_starting_txn_id=%ld\n",
+//                    _thd_id,d_txn_ctx_idx,txnid,planner_pg->batch_starting_txn_id);
+            return d_tctx;
+        }
+    }
 
     inline void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man) ALWAYS_INLINE{
 
@@ -1947,18 +2066,16 @@ public:
 
                 auto search_txn = planner_pg->txn_dep_graph->find(planner_txn_id);
                 uint64_t d_txnid;
-                uint64_t d_txn_ctx_idx;
                 transaction_context * d_tctx;
                 d_txnid = search->second->last();
-                d_txn_ctx_idx = d_txnid-planner_pg->batch_starting_txn_id;
-                d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
+                d_tctx = get_tctx_from_pg(d_txnid, planner_pg);
+
                 if (search_txn != planner_pg->txn_dep_graph->end()){
                     M_ASSERT_V(d_tctx->txn_id == d_txnid, "WT_%ld: Mismatch txnid\n",_thd_id);
                     search_txn->second->add(d_tctx);
                 }
                 else{
                     // first operation for this txn_id
-//                    Array<uint64_t> * txn_list;
                     Array<transaction_context *> * txn_list;
                     quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
                     txn_list->add(d_tctx);

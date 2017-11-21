@@ -1323,6 +1323,10 @@ RC PlannerThread::run_normal_mode() {
 
     Message * msg;
     txn_prefix_planner_base = (_planner_id * txn_prefix_base);
+    if (_planner_id == 0){
+        //start first transaction with 1
+        txn_prefix_planner_base = 1;
+    }
     assert(UINT64_MAX > (txn_prefix_planner_base+txn_prefix_base));
 
     DEBUG_Q("Planner_%ld thread started, txn_ids start at %ld \n", _planner_id, txn_prefix_planner_base);
@@ -2912,7 +2916,7 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
         exec_q->clear();
 #if DEBUG_QUECC
         exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
-        SAMPLED_DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
+//        SAMPLED_DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
 #endif
     }
 }
@@ -2925,7 +2929,7 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 //    while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
     while(!exec_queue_free_list[qet_id][qpt_id]->push(exec_q)){};
 #if DEBUG_QUECC
-    SAMPLED_DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
+//    SAMPLED_DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
     exec_q_rel_cnts[et_id][planner_id].fetch_add(1);
 #endif
 }
@@ -2998,7 +3002,7 @@ void QueCCPool::exec_qs_status_get_or_create(atomic<uint8_t> *&execqs_status, ui
     }
 #if DEBUG_QUECC
     else{
-        DEBUG_Q("Reusing exec_qs\n");
+//        DEBUG_Q("Reusing exec_qs\n");
     }
 #endif
     memset(execqs_status, 0, sizeof(uint64_t)*g_exec_qs_max_size);

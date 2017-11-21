@@ -299,12 +299,10 @@ RC WorkerThread::run_fixed_mode() {
 #endif
 
     planner_txn_id = txn_prefix_planner_base;
-
-#if BUILD_TXN_DEPS
-//    txn_dep_graph = new hash_table_t();
-#endif
-
-//    batch_starting_txn_id = planner_txn_id;
+    if (_planner_id == 0){
+        // start txn_id of planner 0 with 1
+        planner_txn_id = 1;
+    }
     query_cnt = 0;
 
 //    M_ASSERT_V(g_part_cnt >= g_thread_cnt,
@@ -956,16 +954,35 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
     plan_starttime = get_sys_clock();
     planner_pg = &work_queue.batch_pg_map[batch_slot][_planner_id];
-#if BUILD_TXN_DEPS
+
     if (!planner_pg->initialized){
+#if BUILD_TXN_DEPS
         // since we are doing effectively one batch at a time.
         planner_pg->access_table = new hash_table_t();
         planner_pg->txn_dep_graph = new hash_table_tctx_t();
+#endif
+#if EXEC_BUILD_TXN_DEPS
+        for (int i = 0; i < THREAD_CNT; ++i) {
+            planner_pg->exec_tdg[i] = new hash_table_tctx_t();
+        }
+#endif
         planner_pg->initialized = true;
+
     }
     else{
-        // clear up meta data from previouse batch
+
+#if EXEC_BUILD_TXN_DEPS
+        for (int i = 0; i < THREAD_CNT; ++i) {
+            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
+            for (auto it = tdg->begin(); it != tdg->end(); ++it){
+                Array<transaction_context *> * tmp = it->second;
+                quecc_pool.txn_ctx_list_release(tmp, _planner_id);
+            }
+            tdg->clear();
+        }
+#endif
 #if BUILD_TXN_DEPS
+        // clear up meta data from previouse batch
 //                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
 //                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
         // Clean up and clear txn_graph
@@ -995,18 +1012,20 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         //TODO(tq): FIXME
         planner_pg->access_table->clear();
         M_ASSERT_V(planner_pg->access_table->size() == 0, "Access table is not empty!!\n");
-#endif
+        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
+#endif // #if BUILD_TXN_DEPS
+
+#if !PIPELINED
         // Reset PG map so that planners can continue
         desired8 = PG_AVAILABLE;
         expected8 = PG_READY;
         if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
             M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
         };
-        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
+#endif
     }
     // use txn_dep from planner_pg
     planner_pg->batch_starting_txn_id = planner_txn_id;
-#endif
 
     while (true){
 
@@ -1143,30 +1162,8 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
             idle_starttime = 0;
         }
 
-#else
-
-#if DEBUG_QUECC
-        if ((uint64_t)batch_part == 0){
-
-            for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
-                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, plan_sync: done[%d]=%ld, plan_next_stage=%ld\n", _thd_id,wbatch_id,j,work_queue.plan_sblocks[i][j].done, *work_queue.plan_next_stage[i]);
-                }
-                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, exec_sync: done[%d]=%ld, exec_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.exec_sblocks[i][j].done, *work_queue.exec_next_stage[i]);
-                }
-                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, commit_sync: done[%d]=%ld, commit_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.commit_sblocks[i][j].done, *work_queue.commit_next_stage[i]);
-                }
-            }
-        }
-#endif
 #endif
 //        DEBUG_Q("ET_%ld: got a PG from planner %ld, batch_slot = %ld, batch_part = %lu\n",_thd_id, wplanner_id, batch_slot, (uint64_t) batch_part);
-
-//        if (wplanner_id == 0){
-//            quecc_batch_proc_starttime = get_sys_clock();
-//        }
 
         if (execute_batch_part(batch_slot, eq_comp_cnts, my_txn_man) == BREAK){
             return BREAK;
@@ -1288,6 +1285,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
 #endif
                 rc = commit_txn(planner_pg, j);
                 if (rc == Commit){
+//                    finalize_txn_commit(&planner_pg->txn_ctxs[j],rc);
                     commit_time = get_sys_clock();
                     timespan_long = commit_time - planner_pg->txn_ctxs[j].starttime;
 
@@ -1409,7 +1407,40 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
     atomic_thread_fence(memory_order_acq_rel);
     if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
         // check for any dependent transaction
-
+#if EXEC_BUILD_TXN_DEPS
+        for (uint64_t i = 0; i < g_thread_cnt; ++i) {
+            // check all tdgs built during execution
+            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
+            auto search = tdg->find(txn_ctxs[j].txn_id);
+            if (search != tdg->end()){
+                // a set of dependencies are found
+                // check all of them, if any of them is Abort, we have to abort
+                auto ds_tctx = search->second;
+                for (uint64_t k = 0; k < ds_tctx->size(); ++k) {
+                    uint64_t d_txn_state = ds_tctx->get(k)->txn_state.load(memory_order_acq_rel);
+                    if (d_txn_state == TXN_READY_TO_COMMIT){
+//                    DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, ds_tctx->get(k)->txn_id,wbatch_id);
+                        return WAIT;
+                    }
+                    else if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
+//                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+                        return Abort;
+                    }
+                    else if (d_txn_state == TXN_COMMITTED){
+//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+                        return Commit;
+                    }
+                    else{
+                        M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
+                                   _thd_id, d_txn_state);
+                    }
+                }
+            }
+        }
+        // default is commit below
+#endif
 #if BUILD_TXN_DEPS
         // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
         // to check if we need to abort, we lookup transaction dependency graph
@@ -1436,10 +1467,6 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
                     // abort due to dependencies on an aborted txn
                     //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
                     return Abort;
-//                    canCommit = false;
-//#if ROW_ACCESS_TRACKING
-//                    cascading_abort = true;
-//#endif
                 }
                 else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
                     // queue up this transaction j in the pedning txn list and check later if it can commit
@@ -1476,44 +1503,34 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
 //                           (uint64_t)txn_ctxs, wbatch_id, j
 //                );
 #endif
-//                if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
-                if (d_tctx->txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
+                uint64_t d_txn_state = d_tctx->txn_state.load(memory_order_acq_rel);
+                if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
                     // abort due to dependencies on an aborted txn
-                    //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+                    DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[j].txn_id);
                     return Abort;
-//                    canCommit = false;
-//#if ROW_ACCESS_TRACKING
-//                    cascading_abort = true;
-//#endif
                 }
-//                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
-                else if (d_tctx->txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
+                else if (d_txn_state == TXN_READY_TO_COMMIT){
                     // queue up this transaction j in the pedning txn list and check later if it can commit
 //                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+//                            _thd_id, txn_ctxs[j].txn_id, d_tctx->txn_id,wbatch_id);
                     return WAIT;
                 }
-//                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_COMMITTED){
-                else if (d_tctx->txn_state.load(memory_order_acq_rel) == TXN_COMMITTED){
+                else if (d_txn_state == TXN_COMMITTED){
 //                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
+//                            _thd_id, txn_ctxs[j].txn_id, d_tctx->txn_id,wbatch_id);
                     return Commit;
-//                    canCommit = true;
-//#if ROW_ACCESS_TRACKING
-//                    cascading_abort = false;
-//#endif
                 }
                 else{
 //                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
 //                               _thd_id, txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel));
                     M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-                               _thd_id, d_tctx->txn_state.load(memory_order_acq_rel));
+                               _thd_id, d_txn_state);
 
                 }
             }
         }
 #endif // #if BUILD_TXN_DEPS
-
+        return Commit;
     }
     else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
         //     abort transaction, this abort decision is done by an ET during execution phase
@@ -1616,12 +1633,10 @@ RC WorkerThread::run_normal_mode() {
 #endif
 
     planner_txn_id = txn_prefix_planner_base;
-
-#if BUILD_TXN_DEPS
-//    txn_dep_graph = new hash_table_t();
-#endif
-
-//    batch_starting_txn_id = planner_txn_id;
+    if (_planner_id == 0){
+        // start txn_id of planner 0 with 1
+        planner_txn_id = 1;
+    }
     query_cnt = 0;
 
 //    M_ASSERT_V(g_part_cnt >= g_thread_cnt,
@@ -2007,7 +2022,7 @@ RC WorkerThread::run_normal_mode() {
                     INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
                 }
 #else
-                #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
+#if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
             work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);
 #if CT_ENABLED
             while (!simulation->is_done() && work_queue.batch_map_comp_cnts[batch_slot].load() != 0){

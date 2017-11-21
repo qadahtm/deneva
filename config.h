@@ -6,16 +6,16 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 20
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 20
+#define CORE_CNT 32
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 20
+#define PLAN_THREAD_CNT 32
 #define PART_CNT 1
 
 
@@ -58,7 +58,7 @@
 #define STATS_ENABLE        true
 #define PROG_STATS          false
 #define TIME_ENABLE         false //STATS_ENABLE
-#define ASSERT_ENABLED      true
+#define ASSERT_ENABLED      false
 #define NUMA_ENABLED        false
 
 #define FIN_BY_TIME true
@@ -123,7 +123,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -233,8 +233,9 @@
 #define YCSB_INDEX_LOOKUP_PLAN false
 
 #define CT_ENABLED false
-#define BUILD_TXN_DEPS true
-#define TDG_ENTRY_LENGTH 100
+#define BUILD_TXN_DEPS false
+#define EXEC_BUILD_TXN_DEPS true
+#define TDG_ENTRY_LENGTH 1000
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
@@ -319,8 +320,8 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    (500000/PART_CNT)
-//#define MAX_TXN_PER_PART    10000
+//#define MAX_TXN_PER_PART    (500000/PART_CNT)
+#define MAX_TXN_PER_PART    500000
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -346,7 +347,7 @@
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.8//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC

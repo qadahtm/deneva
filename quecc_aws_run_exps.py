@@ -428,7 +428,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = True;
+time_enable = False;
 dry_run = False;
 vm_shut = False;
 
@@ -485,12 +485,13 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-wthreads = [vm_cores]
-# wthreads = [4] # redo experiments
+# wthreads = [vm_cores]
+wthreads = [8,24,32] # redo experiments
 num_trials = 1
-# cc_algs = ['NO_WAIT']
-cc_algs = ['QUECC']  
+cc_algs = ['NO_WAIT']
+# cc_algs = ['QUECC']  
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC']
 # cc_algs = ['OCC', 'NO_WAIT'] # set 11
 # cc_algs = ['TIMESTAMP', 'HSTORE'] # set 12
 #Common parameters
@@ -507,11 +508,11 @@ mtpps = [int(500000)] # MAX_TXN_PER_PART
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
 # batch_sized = [40320]
-# batch_sized = [20736]
+batch_sized = [10368]
 # batch_sized = [13440,26880,40320,53760,107520]
 # batch_sized = [13440,26880,53760,107520]
 # batch_sized = [5184,10368,20736,41472,82944,165888]
-batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
+# batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
 
 # pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.25,0.5]
