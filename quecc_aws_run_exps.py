@@ -485,13 +485,14 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-# wthreads = [vm_cores]
-wthreads = [8,24,32] # redo experiments
-num_trials = 1
-cc_algs = ['NO_WAIT']
+wthreads = [vm_cores]
+# wthreads = [8,24,32] # redo experiments
+num_trials = 2
+cc_algs = ['SILO']
 # cc_algs = ['QUECC']  
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
-# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC']
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC','QUECC'] # + QueCC
 # cc_algs = ['OCC', 'NO_WAIT'] # set 11
 # cc_algs = ['TIMESTAMP', 'HSTORE'] # set 12
 #Common parameters
@@ -533,10 +534,10 @@ parts_accessed = [1]
 
 
 ############### YCSB specific
-# zipftheta = [0.0,0.3,0.6,0.8,0.9]
-zipftheta = [0.0]
-# zipftheta = [0.0,0.8]
-# zipftheta = [0.8] #high contention
+zipftheta = [0.0,0.3,0.6,0.8,0.9]
+# zipftheta = [0.0]
+# zipftheta = [0.0,0.3,0.6] #redo
+# zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
 
 # write_perc = [0.05,0.2,0.5,0.8,0.95]

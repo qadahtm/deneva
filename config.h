@@ -6,16 +6,16 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 32
+#define THREAD_CNT 20
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 32
+#define CORE_CNT 20
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 32
+#define PLAN_THREAD_CNT 20
 #define PART_CNT 1
 
 
@@ -63,7 +63,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT 10*1024//1000000 * 1
+#define MAX_TXN_IN_FLIGHT 1024*1024//1000000 * 1
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled

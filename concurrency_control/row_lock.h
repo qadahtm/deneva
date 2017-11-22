@@ -43,8 +43,8 @@ private:
 	row_t * _row;
   uint64_t hash(uint64_t id) {return id % owners_size;};
     lock_t lock_type;
-    UInt32 owner_cnt;
-    UInt32 waiter_cnt;
+    volatile UInt32 owner_cnt;
+    volatile UInt32 waiter_cnt;
 	
 	// owners is a hash table
 	// waiters is a double linked list 

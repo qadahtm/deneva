@@ -229,7 +229,7 @@ RC row_t::get_lock(access_t type, TxnManager * txn) {
   return rc;
 }
 
-RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
+RC OPTIMIZE_OUT row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
     RC rc = RCOK;
 #if MODE==NOCC_MODE || MODE==QRY_ONLY_MODE 
     row = this;
@@ -399,7 +399,7 @@ RC row_t::get_row_post_wait(access_t type, TxnManager * txn, row_t *& row) {
 // delete during history cleanup.
 // For TIMESTAMP, the row will be explicity deleted at the end of access().
 // (c.f. row_ts.cpp)
-void row_t::return_row(RC rc, access_t type, TxnManager * txn, row_t * row) {	
+void row_t::return_row(RC rc, access_t type, TxnManager * txn, row_t * row) {
 #if MODE==NOCC_MODE || MODE==QRY_ONLY_MODE
   return;
 #endif

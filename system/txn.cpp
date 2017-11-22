@@ -916,7 +916,7 @@ void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_
 }
 #endif // #if CC_ALG == QUECC
 
-RC TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
+RC  TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     uint64_t starttime = get_sys_clock();
     uint64_t timespan;
     RC rc = RCOK;
