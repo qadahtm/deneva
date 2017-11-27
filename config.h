@@ -6,16 +6,16 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 10
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 20
+#define CORE_CNT 32
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 10
+#define PLAN_THREAD_CNT 32
 #define PART_CNT 1
 
 
@@ -187,6 +187,7 @@
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 20736
 #define BATCH_SIZE 10368
+//#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
 //#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
@@ -194,12 +195,13 @@
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 #define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+//#define BATCH_MAP_LENGTH 2 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED true
+#define PIPELINED false
 #define BARRIER_SYNC false
 #define STATIC_TXN_CTXS true
 

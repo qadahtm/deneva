@@ -255,10 +255,24 @@ public:
     uint64_t _planner_id;
     uint32_t get_bucket(uint64_t key);
     uint32_t get_split(uint64_t key, uint32_t range_cnt, uint64_t range_start, uint64_t range_end);
-    uint32_t get_split(uint64_t key, Array<uint64_t> * ranges);
+    uint32_t get_split(uint64_t key, Array<uint64_t> * ranges) ALWAYS_INLINE{
+        for (uint64_t i = 0; i < ranges->size(); i++){
+            if (key <= ranges->get(i)){
+                return i;
+            }
+        }
+#if DEBUG_QUECC
+        for (uint64_t i = 0; i < ranges->size(); i++){
+            DEBUG_Q("PL_%ld: ranges[%lu] = %lu\n",_planner_id,i,ranges->get(i));
+        }
+#endif
+        M_ASSERT_V(false, "PL_%ld: could not assign to range key = %lu\n", _planner_id, key);
+        return ranges->size()-1;
+    }
 
-    inline void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
-    inline void process_client_msg(Message *msg, priority_group * planner_pg);
+
+    void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
+    inline void plan_client_msg(Message *msg, priority_group * planner_pg);
     inline SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
 #if DEBUG_QUECC
     void print_threads_status() const {// print phase status
@@ -420,15 +434,15 @@ public:
         while(!vector_free_list[planner_id]->push(list)){};
     }
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-    void txn_ctx_list_get_or_create(Array<transaction_context *> *& list, uint64_t planner_id){
-        if (!tctx_ptr_free_list[planner_id]->pop(list)){
+    void txn_ctx_list_get_or_create(Array<transaction_context *> *& list, uint64_t thd_id){
+        if (!tctx_ptr_free_list[thd_id]->pop(list)){
             list = (Array<transaction_context *> *) mem_allocator.alloc(sizeof(Array<transaction_context *>));
             list->init(TDG_ENTRY_LENGTH);
         }
     }
-    void txn_ctx_list_release(Array<transaction_context *> *& list, uint64_t planner_id){
+    void txn_ctx_list_release(Array<transaction_context *> *& list, uint64_t thd_id){
         list->clear();
-        while(!tctx_ptr_free_list[planner_id]->push(list)){};
+        while(!tctx_ptr_free_list[thd_id]->push(list)){};
     }
 
     void txn_id_list_get_or_create(Array<uint64_t> *& list, uint64_t planner_id){
@@ -461,7 +475,8 @@ private:
     boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
     boost::lockfree::queue<Array<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
-    boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[PLAN_THREAD_CNT];
+//    boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[PLAN_THREAD_CNT];
+    boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[THREAD_CNT];
 #endif
 
 

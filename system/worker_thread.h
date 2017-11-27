@@ -847,10 +847,20 @@ public:
                     cleanup_batch_part(batch_slot, i,j);
                 }
 #if PIPELINED
-                // Reset PG map so that planners can continue
-                uint64_t desired8 = PG_AVAILABLE;
-                uint64_t expected8 = PG_READY;
                 priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+#if EXEC_BUILD_TXN_DEPS
+                for (int j = 0; j < THREAD_CNT; ++j) {
+                    hash_table_tctx_t * tdg = planner_pg->exec_tdg[j];
+                    for (auto it = tdg->begin(); it != tdg->end(); ++it){
+                        Array<transaction_context *> * tmp = it->second;
+                        quecc_pool.txn_ctx_list_release(tmp, j);
+                    }
+                    tdg->clear();
+                }
+#endif
+                // Reset PG map so that planners can continue
+                uint8_t desired8 = PG_AVAILABLE;
+                uint8_t expected8 = PG_READY;
                 if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
                     M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
                 };
@@ -1197,7 +1207,7 @@ public:
     inline bool add_txn_dep(uint64_t txn_id, uint64_t d_txn_id, hash_table_tctx_t * tdg, priority_group * d_planner_pg) ALWAYS_INLINE{
         transaction_context * d_tctx = get_tctx_from_pg(d_txn_id, d_planner_pg);
         if (d_tctx != NULL){
-            auto txn_search = tdg->find(entry->txn_id);
+            auto txn_search = tdg->find(txn_id);
             if (txn_search != tdg->end()){
                 // found tdg entry
                 // this txn has other dependencies
@@ -1206,9 +1216,9 @@ public:
             else{
                 // a new dependency for this txn
                 Array<transaction_context *> * txn_list;
-                quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
+                quecc_pool.txn_ctx_list_get_or_create(txn_list, _thd_id);
                 txn_list->add(d_tctx);
-                tdg->insert({entry->txn_id, txn_list});
+                tdg->insert({txn_id, txn_list});
             }
             return true;
         }
@@ -1236,7 +1246,8 @@ public:
                 // if this is a write, we are the first to write to this record, so no dependency
                 return;
             }
-            for (int64_t j = (int64_t)wplanner_id; j >= 0; --j) {
+            int64_t cplan_id = (int64_t)wplanner_id;
+            for (int64_t j = cplan_id; j >= 0; --j) {
                 batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
                 if (add_txn_dep(entry->txn_id,last_tid,mytdg,part->planner_pg)){
 //                    DEBUG_Q("ET_%ld: added dependency : entry_txnid=%ld, row_last_tid=%ld, PG=%ld, batch_id=%ld\n",
@@ -1637,6 +1648,21 @@ public:
     uint64_t wbatch_id = 0;
     uint64_t wplanner_id = 0;
 
+    inline transaction_context * get_tctx_from_pg(uint64_t txnid, priority_group *planner_pg) ALWAYS_INLINE{
+        transaction_context * d_tctx;
+        uint64_t d_txn_ctx_idx = txnid-planner_pg->batch_starting_txn_id;
+
+        if (d_txn_ctx_idx >= (g_batch_size/g_plan_thread_cnt)){
+            return NULL;
+        }
+        else{
+            d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
+//            DEBUG_Q("ET_%ld: d_txn_ctx_idx=%ld, txn_id=%ld, batch_starting_txn_id=%ld\n",
+//                    _thd_id,d_txn_ctx_idx,txnid,planner_pg->batch_starting_txn_id);
+            return d_tctx;
+        }
+    }
+
 #if !PIPELINED
 
     uint64_t _planner_id;
@@ -1859,21 +1885,6 @@ public:
 #else
         M_ASSERT(false, "LAZY_SPLIT not supported in TPCC")
 #endif
-    }
-
-    inline transaction_context * get_tctx_from_pg(uint64_t txnid, priority_group *planner_pg) ALWAYS_INLINE{
-        transaction_context * d_tctx;
-        uint64_t d_txn_ctx_idx = txnid-planner_pg->batch_starting_txn_id;
-
-        if (d_txn_ctx_idx >= (g_batch_size/g_plan_thread_cnt)){
-            return NULL;
-        }
-        else{
-            d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
-//            DEBUG_Q("ET_%ld: d_txn_ctx_idx=%ld, txn_id=%ld, batch_starting_txn_id=%ld\n",
-//                    _thd_id,d_txn_ctx_idx,txnid,planner_pg->batch_starting_txn_id);
-            return d_tctx;
-        }
     }
 
     inline void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man) ALWAYS_INLINE{

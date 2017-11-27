@@ -218,6 +218,7 @@ RC WorkerThread::run() {
 #endif
 }
 
+#if MODE == FIXED_MODE
 RC WorkerThread::run_fixed_mode() {
     tsetup();
     printf("Running WorkerThread %ld in fixed mode\n", _thd_id);
@@ -926,6 +927,7 @@ RC WorkerThread::run_fixed_mode() {
     fflush(stdout);
     return FINISH;
 }
+#endif // if MODE == FIXED_MODE
 
 //TODO(tq): refactor this outside worker thread
 // Probably it is better to have a QueCC manager helper class for these kinds of functionality
@@ -961,7 +963,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         planner_pg->access_table = new hash_table_t();
         planner_pg->txn_dep_graph = new hash_table_tctx_t();
 #endif
-#if EXEC_BUILD_TXN_DEPS
+#if EXEC_BUILD_TXN_DEPS && !PIPELINED
         for (int i = 0; i < THREAD_CNT; ++i) {
             planner_pg->exec_tdg[i] = new hash_table_tctx_t();
         }
@@ -976,7 +978,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
             hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
             for (auto it = tdg->begin(); it != tdg->end(); ++it){
                 Array<transaction_context *> * tmp = it->second;
-                quecc_pool.txn_ctx_list_release(tmp, _planner_id);
+                quecc_pool.txn_ctx_list_release(tmp, i);
             }
             tdg->clear();
         }
@@ -1122,7 +1124,7 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
     while (true){
 
 #if PIPELINED
-
+        batch_partition * batch_part = NULL;
         // wait for batch to be ready
         if (wait_for_batch_ready(batch_slot, wplanner_id, batch_part) == BATCH_WAIT){
             if (simulation->is_done()){

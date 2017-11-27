@@ -83,6 +83,11 @@ void QWorkQueue::init() {
         planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
         planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
 #endif
+#if EXEC_BUILD_TXN_DEPS && PIPELINED
+        for (int i = 0; i < THREAD_CNT; ++i) {
+          planner_pg->exec_tdg[i] = new hash_table_tctx_t();
+        }
+#endif
       }
     }
   }

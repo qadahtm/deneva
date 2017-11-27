@@ -31,6 +31,7 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
     else:
         pt_cnt = pt_p
 
+    bmap_len = 2
     if ncc_alg == 'QUECC':
         nwthd_cnt = wthd_cnt - pt_cnt 
         part_cnt = nwthd_cnt + pt_cnt
@@ -39,20 +40,22 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
             nwthd_cnt = wthd_cnt     
             part_cnt = wthd_cnt  
             piplined = 'false'
+            bmap_len = 1 # if unpipelined mode, use length of 1
         
     else:
         nwthd_cnt = wthd_cnt #ignore planner percentage now. 
         part_cnt = nwthd_cnt
         piplined = 'true'
 
+
     part_cnt = 1
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
     if is_ycsb:
-        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}, MAXTPP={}, MERGE_STRAT={}, REC_SIZE={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp, maxtpp, m_strat, int(rs*100))    
+        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}, MAXTPP={}, MERGE_STRAT={}, REC_SIZE={}, BATCH_MAP_LENGTH={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp, maxtpp, m_strat, int(rs*100),bmap_len)    
     else:
-        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, PAYMENT_PERC={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}, MAXTPP={}, MERGE_STRAT={}'.format(ncc_alg, wthd_cnt, wp, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv, maxtpp, m_strat)
+        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, PAYMENT_PERC={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}, MAXTPP={}, MERGE_STRAT={}, BATCH_MAP_LENGTH={}'.format(ncc_alg, wthd_cnt, wp, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv, maxtpp, m_strat,bmap_len)
     print(msg_out)
 
     for line in oconf:
@@ -102,6 +105,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         pc_m =    re.search('#define CORE_CNT\s+(\d+|THREAD_CNT)',line.strip())
         if pc_m:
             nline = '#define CORE_CNT {}\n'.format(vm_cores)
+
+        pc_m =    re.search('#define BATCH_MAP_LENGTH\s+(\d+)',line.strip())
+        if pc_m:
+            nline = '#define BATCH_MAP_LENGTH {}\n'.format(bmap_len)
 
         pc_m =    re.search('#define REQ_PER_QUERY\s+(\d+)',line.strip())
         if pc_m and is_ycsb:
@@ -490,14 +497,15 @@ et_sync = ['AFTER_BATCH_COMP']
 wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
 num_trials = 2
-cc_algs = ['SILO']
+# cc_algs = ['SILO']
 # cc_algs = ['NO_WAIT']
 # cc_algs = ['MVCC']  
-# cc_algs = ['QUECC']  
+cc_algs = ['QUECC']  
 # cc_algs = ['TIMESTAMP','OCC','WAIT_DIE']  
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'QUECC'] 
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'WAIT_DIE'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC','QUECC'] # + QueCC
 # cc_algs = ['SILO', 'NO_WAIT','QUECC'] # set 11
 # cc_algs = ['TIMESTAMP', 'HSTORE'] # set 12
@@ -516,16 +524,18 @@ mtpps = [int(500000)] # MAX_TXN_PER_PART
 # batch_sized = [41472]
 # batch_sized = [40320]
 batch_sized = [10368]
+# batch_sized = [10080] # for ptvar lcm(2,4,5,6,8,10,12,15,16,18,20,24,32)
 # batch_sized = [13440,26880,40320,53760,107520]
 # batch_sized = [13440,26880,53760,107520]
 # batch_sized = [5184,10368,20736,41472,82944,165888]
 # batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
 
-# pt_perc = [0.25,0.5,0.75,1]
-# pt_perc = [0.25,0.5]
+pt_perc = [0.25,0.5,0.75,1]
+# pt_perc = [0.25,0.75]
+# pt_perc = [0.25]
 # pt_perc = [0.5,1]
 # pt_perc = [0.5]
-pt_perc = [1]
+# pt_perc = [1]
 
 # parts_accessed = [1,32]
 # parts_accessed = [1,2,4,8,10]
@@ -541,9 +551,9 @@ parts_accessed = [1]
 
 ############### YCSB specific
 # zipftheta = [0.0,0.3,0.6,0.8,0.9]
-# zipftheta = [0.0]
+zipftheta = [0.0]
 # zipftheta = [0.0,0.8,0.6] #redo
-zipftheta = [0.6,0.8] #medium + high contention 
+# zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
 
 # write_perc = [0.05,0.2,0.5,0.8,0.95]
@@ -554,10 +564,10 @@ write_perc = [0.5]
 mpt_perc = [0.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 # mpt_perc = [1.0] #100% multi partition transactions
-ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
+# ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
-# ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
+ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
 # recsizes = [1,5,10,20,40]
 # recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it

@@ -39,6 +39,9 @@ Client_query_queue::init(Workload * h_wl) {
     M_ASSERT_V(g_part_cnt == 1 || g_part_cnt == g_thread_cnt,"part_cnt must be eitehr 1 or equal to thread_cnt\n");
 //    size = g_part_cnt;
     size = g_thread_cnt;
+#if CC_ALG == QUECC
+    size = g_plan_thread_cnt;
+#endif
 #else
     size = g_servers_per_client;
 #endif
@@ -310,6 +313,7 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
 }
 #else
 BaseQuery * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread_id) {
+    M_ASSERT_V(server_id < size, "server_id=%ld, size=%ld, thread_id=%ld\n",server_id, size, thread_id);
     assert(server_id < size);
     uint64_t query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     uint64_t max_txns_per_thread;

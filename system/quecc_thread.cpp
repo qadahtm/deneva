@@ -366,20 +366,6 @@ uint32_t PlannerThread::get_split(uint64_t key, uint32_t range_cnt, uint64_t ran
     return 0;
 }
 
-uint32_t PlannerThread::get_split(uint64_t key, Array<uint64_t> * ranges) {
-    for (uint64_t i = 0; i < ranges->size(); i++){
-        if (key <= ranges->get(i)){
-            return i;
-        }
-    }
-
-    for (uint64_t i = 0; i < ranges->size(); i++){
-        DEBUG_Q("ranges[%lu] = %lu\n",i,ranges->get(i));
-    }
-
-    M_ASSERT_V(false, "could not assign to range key = %lu\n", key);
-    return ranges->size()-1;
-}
 
 RC PlannerThread::run() {
 
@@ -392,7 +378,7 @@ RC PlannerThread::run() {
     return FINISH;
 #endif
 }
-
+#if MODE == FIXED_MODE
 RC PlannerThread::run_fixed_mode() {
     tsetup();
 
@@ -1313,7 +1299,7 @@ RC PlannerThread::run_fixed_mode() {
     fflush(stdout);
     return FINISH;
 }
-
+#endif
 RC PlannerThread::run_normal_mode() {
     tsetup();
     printf("Running PlannerThread %ld\n", _thd_id);
@@ -1437,9 +1423,9 @@ RC PlannerThread::run_normal_mode() {
 
     uint64_t query_cnt = 0;
 
-    M_ASSERT_V(g_part_cnt >= g_plan_thread_cnt,
-               "PT_%ld: Number of paritions must be geq to number of planners."
-                       " g_part_cnt = %d, g_plan_thread_cnt = %d\n", _planner_id, g_part_cnt, g_plan_thread_cnt);
+//    M_ASSERT_V(g_part_cnt >= g_plan_thread_cnt,
+//               "PT_%ld: Number of paritions must be geq to number of planners."
+//                       " g_part_cnt = %d, g_plan_thread_cnt = %d\n", _planner_id, g_part_cnt, g_plan_thread_cnt);
 
     uint64_t next_part = 0;
 //#if DEBUG_QUECC
@@ -1463,7 +1449,7 @@ RC PlannerThread::run_normal_mode() {
 #endif
         query_cnt++;
 //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
-        msg = work_queue.plan_dequeue(_thd_id, next_part);
+        msg = work_queue.plan_dequeue(_planner_id, next_part);
         INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-prof_starttime);
 
         if(!msg) {
@@ -1504,7 +1490,7 @@ RC PlannerThread::run_normal_mode() {
             case CL_QRY: {
 
                 if (!simulation->is_done()){
-                    process_client_msg(msg, planner_pg);
+                    plan_client_msg(msg, planner_pg);
                     batch_cnt++;
                 }
                 break;
@@ -1938,7 +1924,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
                 }
             }
 #else
-            while(work_queue.batch_map[slot_num][_planner_id][i].fetch_add(0) != 0) {
+            while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
 #if DEBUG_QUECC
 //                if (_planner_id == 0){
 //                    print_threads_status();
@@ -2135,7 +2121,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
     return SUCCESS;
 }
 
-inline void PlannerThread::process_client_msg(Message *msg, priority_group * planner_pg) {
+inline void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 
 // Query from client
 //    DEBUG_Q("PT_%ld: planning txn %ld\n", _planner_id,planner_txn_id);
@@ -2175,7 +2161,12 @@ inline void PlannerThread::process_client_msg(Message *msg, priority_group * pla
     entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
 #if ROW_ACCESS_IN_CTX
-    M_ASSERT_V(false, "undo buffer in txn context is ot currently supported for pipelined Quecc\n");
+//    M_ASSERT_V(false, "undo buffer in txn context is ot currently supported for pipelined Quecc\n");
+#if WORKLOAD == YCSB
+    M_ASSERT_V(tctx->undo_buffer_inialized, "Txn context is not initialized\n");
+#else
+    M_ASSERT_V(false, "undo buffer in txn ctx is not supported for TPCC or others\n");
+#endif
 #else
     // initialize access_lock if it is not intinialized
     if (tctx->access_lock == NULL){
@@ -2515,7 +2506,7 @@ inline void PlannerThread::process_client_msg(Message *msg, priority_group * pla
 
 }
 
-inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
+void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
     int max_tries = 64;
@@ -2523,10 +2514,12 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
 
     uint64_t c_range_start;
     uint64_t c_range_end;
-    uint64_t idx = get_split(key, exec_qs_ranges);
+    uint64_t idx;
     uint64_t nidx;
+    uint64_t _prof_starttime;
 
-    uint64_t _prof_starttime = get_sys_clock();
+    idx = get_split(key, exec_qs_ranges);
+    _prof_starttime = get_sys_clock();
     mrange = exec_queues->get(idx);
 
     while (mrange->is_full()){
@@ -2673,7 +2666,7 @@ inline void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64
         for (uint64_t r =0; r < mrange->size(); ++r){
             // TODO(tq): refactor this to respective benchmark implementation
 #if WORKLOAD == YCSB
-            ycsb_request *ycsb_req_tmp = (ycsb_request *) mrange->get(r).req_buffer;
+            ycsb_request *ycsb_req_tmp = (ycsb_request *) mrange->get_ptr(r)->req_buffer;
             nidx = get_split(ycsb_req_tmp->key, exec_qs_ranges_tmp);
 #else
             nidx = get_split(mrange->get(r).rid, exec_qs_ranges_tmp);
@@ -2852,12 +2845,16 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 //    exec_qs_status_free_list = new boost::lockfree::queue<atomic<uint8_t> *> * [g_plan_thread_cnt];
     txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
     pg_free_list = new boost::lockfree::queue<priority_group *> * [g_plan_thread_cnt];
+#if EXEC_BUILD_TXN_DEPS && TDG_ENTRY_TYPE == ARRAY_ENTRY
+    for (UInt32 i = 0; i < g_thread_cnt; ++i) {
+        tctx_ptr_free_list[i] = new boost::lockfree::queue<Array<transaction_context *> *>(FREE_LIST_INITIAL_SIZE);
+    }
+#endif
     for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
         vector_free_list[i] = new boost::lockfree::queue<std::vector<uint64_t> *>(FREE_LIST_INITIAL_SIZE);
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
         vector_free_list[i] = new boost::lockfree::queue<Array<uint64_t> *>(FREE_LIST_INITIAL_SIZE);
-        tctx_ptr_free_list[i] = new boost::lockfree::queue<Array<transaction_context *> *>(FREE_LIST_INITIAL_SIZE);
 #endif
 
         exec_qs_free_list[i] = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *>(FREE_LIST_INITIAL_SIZE);

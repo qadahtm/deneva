@@ -11,7 +11,7 @@ BOOST=../boost_1_63_0
 SRC_DIRS = ./ ./benchmarks/ ./client/ ./concurrency_control/ ./storage/ ./transport/ ./system/ ./statistics/#./unit_tests/
 DEPS = -I. -I./benchmarks -I./client/ -I./concurrency_control -I./storage -I./transport -I./system -I./statistics -I$(JEMALLOC)/include -I$(NNMSG)/include -I$(BOOST) #-I./unit_tests 
 
-CFLAGS += $(DEPS) -O3 -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
+CFLAGS += $(DEPS) -O2 -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
 #CFLAGS += $(DEPS) -D NOGRAPHITE=1 -Werror -Wno-sizeof-pointer-memaccess
 #LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -L$(JEMALLOC)/lib -Wl,-rpath,$(JEMALLOC)/lib -pthread -gdwarf-3 -lrt -std=c++0x
 LDFLAGS = -Wall -L. -L$(NNMSG)/lib64 -pthread -gdwarf-3 -lrt -std=c++11
