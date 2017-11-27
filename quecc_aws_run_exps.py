@@ -369,12 +369,14 @@ def get_df_csv(outdir):
 def set_ycsb_schema(rs):
     ycsb_schema = "//size, type, name\nTABLE=MAIN_TABLE\n"
 
-    if rs < 1:
+    if rs <= 1:
         frs = 1
+        for i in range(frs):
+            ycsb_schema += "\t{},string,F{}\n".format(int(rs*100),i)
     else:   
         frs = rs
-    for i in range(frs):
-        ycsb_schema += "\t{},string,F{}\n".format(int(rs*100),i)
+        for i in range(frs):
+            ycsb_schema += "\t{},string,F{}\n".format(int(100),i)
     ycsb_schema += "\nINDEX=MAIN_INDEX\n"
     ycsb_schema += "\tMAIN_TABLE,0\n"
     print(ycsb_schema)
@@ -486,14 +488,18 @@ strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
 wthreads = [vm_cores]
-# wthreads = [8,24,32] # redo experiments
+# wthreads = [4] # redo experiments
 num_trials = 2
 cc_algs = ['SILO']
+# cc_algs = ['NO_WAIT']
+# cc_algs = ['MVCC']  
 # cc_algs = ['QUECC']  
+# cc_algs = ['TIMESTAMP','OCC','WAIT_DIE']  
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'QUECC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC','QUECC'] # + QueCC
-# cc_algs = ['OCC', 'NO_WAIT'] # set 11
+# cc_algs = ['SILO', 'NO_WAIT','QUECC'] # set 11
 # cc_algs = ['TIMESTAMP', 'HSTORE'] # set 12
 #Common parameters
 # merge_strats = ['RR','BALANCE_EQ_SIZE'] # for Quecc Only - set ot a single value if using others
@@ -534,10 +540,10 @@ parts_accessed = [1]
 
 
 ############### YCSB specific
-zipftheta = [0.0,0.3,0.6,0.8,0.9]
+# zipftheta = [0.0,0.3,0.6,0.8,0.9]
 # zipftheta = [0.0]
-# zipftheta = [0.0,0.3,0.6] #redo
-# zipftheta = [0.6,0.8] #medium + high contention 
+# zipftheta = [0.0,0.8,0.6] #redo
+zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
 
 # write_perc = [0.05,0.2,0.5,0.8,0.95]
@@ -548,14 +554,14 @@ write_perc = [0.5]
 mpt_perc = [0.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 # mpt_perc = [1.0] #100% multi partition transactions
-# ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
+ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
-ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
+# ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
 # recsizes = [1,5,10,20,40]
 # recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it
-# recsizes = [0.2,0.5,1] # skip 1 since we already have results for it
+# recsizes = [10,20,40] # skip 1 since we already have results for it
 recsizes = [1]
 
 

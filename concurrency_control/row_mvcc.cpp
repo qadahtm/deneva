@@ -259,7 +259,8 @@ RC Row_mvcc::access(TxnManager * txn, TsType type, row_t * row) {
 			txn->ts_ready = false;
 		} else if (conf) { 
 			rc = Abort;
-			printf("\nshould never happen. rreq_len=%ld", rreq_len);
+			// will abort if the read request counts is maxed out.
+//			printf("\nshould never happen. rreq_len=%ld", rreq_len);
 		} else {
 			// return results immediately.
 			rc = RCOK;

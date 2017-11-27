@@ -258,6 +258,7 @@ RC OPTIMIZE_OUT row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
 #if CC_ALG == TICTOC || CC_ALG == SILO || CC_ALG == MOCC_SILO
 	// Record access for this row
 	row_pool.get(txn->get_thd_id(), row);
+	row->init(this->get_table(), this->get_part_id());
 	TsType ts_type = (type == RD)? R_REQ : P_REQ;
 	rc = this->manager->access(txn, ts_type, row);
 	goto end;

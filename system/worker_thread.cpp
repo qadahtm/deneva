@@ -187,13 +187,13 @@ void WorkerThread::abort() {
     txn_man->reset();
 #if ABORT_QUEUES
     uint64_t penalty = work_queue.abort_queues[txn_man->get_thd_id()]->enqueue(txn_man->get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
+    txn_man->txn_stats.total_abort_time += penalty;
+    release_txn_man();
 #else
     uint64_t penalty = abort_queue.enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
+    txn_man->txn_stats.total_abort_time += penalty;
 #endif
 
-    txn_man->txn_stats.total_abort_time += penalty;
-#else
-    release_txn_man();
 #endif
 }
 

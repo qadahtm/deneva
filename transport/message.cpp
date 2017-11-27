@@ -1658,6 +1658,7 @@ void YCSBClientQueryMessage::copy_to_txn(TxnManager * txn) {
   // this only copies over the pointers, so if requests are freed, we'll lose the request data
   ClientQueryMessage::copy_to_txn(txn);
   // Copies pointers to txn
+    ((YCSBQuery*)(txn->query))->requests.clear(); // clear before append
   ((YCSBQuery*)(txn->query))->requests.append(requests);
 /*
   for(uint64_t i = 0; i < requests.size(); i++) {

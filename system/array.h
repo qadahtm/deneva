@@ -110,6 +110,7 @@ public:
 
   void append(Array a) {
     M_ASSERT_V(count + a.size() <= capacity, "count=%ld,a.size()=%ld,capacity=%ld\n",count,a.size(),capacity);
+      assert(count + a.size() <= capacity);
     for(uint64_t i = 0; i < a.size(); i++) {
       add(a[i]);
     }
@@ -145,8 +146,8 @@ public:
         items[ecount] = item;
     }
   void add(T item){
-//    assert(count < capacity);
     M_ASSERT_V(count < capacity, "count < capacity failed, count = %ld, capacity = %ld\n", count, capacity);
+    assert(count < capacity);
     items[count] = item;
     ++count;
   }
