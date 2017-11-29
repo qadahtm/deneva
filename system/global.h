@@ -150,15 +150,6 @@ extern gdgcc::ActionBuffer* action_allocator;
 extern bool volatile warmup_done;
 extern bool volatile enable_thread_mem_pool;
 extern pthread_barrier_t warmup_bar;
-#if CC_ALG == QUECC && BARRIER_SYNC
-extern pthread_barrier_t plan_phase_start_bar;
-extern pthread_barrier_t exec_phase_start_bar;
-extern pthread_barrier_t commit_phase_start_bar;
-
-extern pthread_barrier_t plan_phase_end_bar;
-extern pthread_barrier_t exec_phase_end_bar;
-extern pthread_barrier_t commit_phase_end_bar;
-#endif
 /******************************************/
 // Client Global Params 
 /******************************************/

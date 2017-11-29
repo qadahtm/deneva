@@ -725,18 +725,6 @@ int main(int argc, char* argv[])
     warmup_done = true;
     pthread_barrier_init( &warmup_bar, NULL, all_thd_cnt);
 
-#if CC_ALG == QUECC && BARRIER_SYNC && !PIPELINED
-    pthread_barrier_init( &plan_phase_start_bar, NULL, all_thd_cnt);
-    pthread_barrier_init( &exec_phase_start_bar, NULL, all_thd_cnt);
-    pthread_barrier_init( &commit_phase_start_bar, NULL, all_thd_cnt);
-
-    pthread_barrier_init( &plan_phase_start_bar, NULL, all_thd_cnt);
-    pthread_barrier_init( &exec_phase_start_bar, NULL, all_thd_cnt);
-    pthread_barrier_init( &commit_phase_start_bar, NULL, all_thd_cnt);
-
-    // TODO: support pipelined phase
-#endif
-
   // spawn and run txns again.
   starttime = get_server_clock();
   simulation->run_starttime = starttime;

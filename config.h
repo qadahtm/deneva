@@ -202,8 +202,6 @@
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
 #define PIPELINED false
-#define BARRIER_SYNC false
-#define STATIC_TXN_CTXS true
 
 #define INIT_QUERY_MSGS false
 

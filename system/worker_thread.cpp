@@ -1759,9 +1759,6 @@ RC WorkerThread::run_normal_mode() {
 //                _thd_id, wbatch_id, batch_slot, work_queue.batch_plan_comp_cnts[batch_slot].load());
 //        DEBUG_Q("WT_%ld: going to plan batch_id = %ld at batch_slot = %ld\n",
 //                _thd_id, wbatch_id, batch_slot);
-#if BARRIER_SYNC
-        pthread_barrier_wait(&plan_phase_start_bar);
-#endif
         if (batch_proc_starttime > 0){
             hl_prof_starttime = get_sys_clock();
         }
@@ -1772,9 +1769,6 @@ RC WorkerThread::run_normal_mode() {
         if (src == SUCCESS){
         //Sync
 //            DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
-#if BARRIER_SYNC
-            pthread_barrier_wait(&plan_phase_end_bar);
-#endif
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
             }
@@ -1788,9 +1782,6 @@ RC WorkerThread::run_normal_mode() {
 
 //            DEBUG_Q("WT_%ld: Starting execution phase, batch_id = %ld at batch_slot = %ld, idle_time = %f\n",
 //                    _thd_id, wbatch_id, batch_slot, stats._stats[_thd_id]->exec_idle_time[_thd_id]/BILLION);
-#if BARRIER_SYNC
-            pthread_barrier_wait(&exec_phase_start_bar);
-#endif
         // Execute
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
@@ -1809,9 +1800,6 @@ RC WorkerThread::run_normal_mode() {
 //            DEBUG_Q("WT_%ld: going to sync for execution phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
                 // Sync
                 // spin on map_comp_cnts
-#if BARRIER_SYNC
-                pthread_barrier_wait(&exec_phase_end_bar);
-#endif
                 if (batch_proc_starttime > 0){
                     hl_prof_starttime = get_sys_clock();
                 }
@@ -1823,9 +1811,6 @@ RC WorkerThread::run_normal_mode() {
                     goto end_et;
                 }
                 //Commit
-#if BARRIER_SYNC
-                pthread_barrier_wait(&commit_phase_start_bar);
-#endif
 //                DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
 
                 // process txn contexts in the current batch that are assigned to me (deterministically)
@@ -1841,9 +1826,6 @@ RC WorkerThread::run_normal_mode() {
                 // indicate that I am done with all commit phase
 //                DEBUG_Q("ET_%ld: is done with commit task, going to sync for commit\n", _thd_id);
 
-#if BARRIER_SYNC
-                pthread_barrier_wait(&commit_phase_end_bar);
-#endif
                 if (batch_proc_starttime > 0){
                     hl_prof_starttime = get_sys_clock();
                 }
