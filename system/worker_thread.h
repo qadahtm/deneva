@@ -99,17 +99,10 @@ public:
         bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
 #else
         bool is_master = (_thd_id == 0);
-//        M_ASSERT_V(work_queue.gbatch_id == wbatch_id,
-//                   "ET_%ld: Missmatch plan phase gbatch_id = %ld, wbatch_id=%ld\n",_thd_id, work_queue.gbatch_id, wbatch_id);
 #endif
         if (is_master){
 //            DEBUG_Q("WT_%ld: going to wait for other WTs for batch_slot = %ld, plan_comp_cnt = %d\n",
 //                    _thd_id, batch_slot, work_queue.batch_plan_comp_cnts[batch_slot].load());
-//            if (idle_starttime > 0){
-//                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
-//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
-//                idle_starttime =0;
-//            }
 
             // wait for all ets to finish
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
@@ -188,18 +181,6 @@ public:
                 INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
-//#if DEBUG_QUECC
-//            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
-//                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-//                for (uint64_t j =0; j < planner_batch_size; ++j){
-//                    DEBUG_Q("ET_%ld: end of planning phase, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
-//                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
-//                    M_ASSERT_V(planner_pg->txn_ctxs[j].completion_cnt.load() == 0 ,
-//                               "ET_%ld: not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
-//                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
-//                }
-//            }
-//#endif
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
@@ -404,19 +385,10 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can SET batch_exec_comp_status\n", _thd_id);
         }
 #endif
-//        DEBUG_Q("ET_%ld: before INC for batch_id = %ld, map_com_cnts = %d\n",
-//                _thd_id, wbatch_id, expected16);
-//        DEBUG_Q("ET_%ld: after INC for batch_id = %ld, map_com_cnts = %d\n",
-//                _thd_id, wbatch_id, work_queue.batch_map_comp_cnts[batch_slot].load());
-//#if DEBUG_QUECC
-//        exec_active[_thd_id]->store(-1);
-//#endif
 #if SYNC_MASTER_RR
         bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
 #else
         bool is_master = (_thd_id == 0);
-//        M_ASSERT_V(work_queue.gbatch_id == wbatch_id,
-//                   "ET_%ld: Missmatch gbatch_id = %ld, wbatch_id=%ld\n",_thd_id, work_queue.gbatch_id, wbatch_id);
 #endif
         if (is_master){
 //            DEBUG_Q("ET_%ld: going to wait for other ETs for batch_id = %ld, map_com_cnts = %d\n",
@@ -497,47 +469,6 @@ public:
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
-
-//#if DEBUG_QUECC
-////            print_threads_status();
-//            // check that all transactions has completed, by checking txn status
-//            for (UInt32 i=0; i < g_plan_thread_cnt; ++i){
-//                priority_group * planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-//                for (uint64_t j =0; j < planner_batch_size; ++j){
-//                    if (planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel) != TXN_READY_TO_COMMIT){
-//                        uint64_t total_executed_entries = 0;
-//                        uint64_t total_executed_txns = 0;
-//                        for (uint64_t i =0; i < g_thread_cnt; ++i){
-//                            total_executed_entries+= stats._stats[i]->exec_txn_frag_cnt[i];
-//                            total_executed_txns += stats._stats[i]->exec_txn_cnts[i];
-//                        }
-//                        DEBUG_Q("ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %ld, txn_comp_cnt=%ld,"
-//                                        "batch_id = %ld, txn_id = %ld, txn_stat=%ld, total_executed_entries = %ld, total_executed_txns = %ld"
-//                                        "\n",
-//                                _thd_id,planner_pg->txn_ctxs[j].completion_cnt.load(),
-//                                planner_pg->txn_ctxs[j].txn_comp_cnt.load(memory_order_acq_rel),wbatch_id, planner_pg->txn_ctxs[j].txn_id,
-//                                planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel),total_executed_entries,total_executed_txns);
-//                    }
-//                    M_ASSERT_V(planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT,
-//                               "ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %ld, txn_comp_cnt=%ld,"
-//                                        "batch_id = %ld, txn_id = %ld, txn_stat=%ld"
-//                                        "\n",
-//                                _thd_id,planner_pg->txn_ctxs[j].completion_cnt.load(),
-//                                planner_pg->txn_ctxs[j].txn_comp_cnt.load(memory_order_acq_rel),wbatch_id, planner_pg->txn_ctxs[j].txn_id,
-//                               planner_pg->txn_ctxs[j].txn_state.load(memory_order_acq_rel))
-////                    if (planner_pg->txn_ctxs[j].completion_cnt.load() != planner_pg->txn_ctxs[j].txn_comp_cnt.load()){
-////                        DEBUG_Q("ET_%ld: end of exec phase not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d,"
-////                                        "batch_id = %ld, txn_id = %ld"
-////                                        "\n",
-////                                _thd_id,planner_pg->txn_ctxs[j].completion_cnt.fetch_add(0),
-////                                planner_pg->txn_ctxs[j].txn_comp_cnt.load(),wbatch_id, planner_pg->txn_ctxs[j].txn_id);
-////                    }
-////                    M_ASSERT_V(planner_pg->txn_ctxs[j].completion_cnt.load() == planner_pg->txn_ctxs[j].txn_comp_cnt.load(),
-////                               "ET_%ld: not all transactions has completed, completion_cnt = %d, txn_comp_cnt=%d\n",_thd_id,
-////                               planner_pg->txn_ctxs[j].completion_cnt.load(), planner_pg->txn_ctxs[j].txn_comp_cnt.load());
-//                }
-//            }
-//#endif
 
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
@@ -751,15 +682,10 @@ public:
             M_ASSERT_V(false, "WT_%ld: this should not happen, I am the only one who can SET batch_commit_comp_status\n", _thd_id);
         }
 #endif
-//#if DEBUG_QUECC
-//        commit_active[_thd_id]->store(-1);
-//#endif
 #if SYNC_MASTER_RR
         bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
 #else
         bool is_master = (_thd_id == 0);
-//        M_ASSERT_V(work_queue.gbatch_id == wbatch_id,
-//                   "ET_%ld: Missmatch commit stage gbatch_id = %ld, wbatch_id=%ld\n",_thd_id, work_queue.gbatch_id, wbatch_id);
 #endif
         if (is_master){
             // wait for others to finish
@@ -869,8 +795,6 @@ public:
             }
 #endif // -- #if SYNC_MASTER_BATCH_CLEANUP
 
-            // incrementing global batch id
-//            work_queue.gbatch_id++;
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
@@ -1015,9 +939,6 @@ public:
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
 //            idle_starttime =0;
         }
-//#if DEBUG_QUECC
-//        commit_active[_thd_id]->store(wbatch_id);
-//#endif
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC
         // Reset batch_exec_comp_status for next time since sync is done
         expected16 = 1;
@@ -1039,89 +960,6 @@ public:
 
         //TQ: we need a sync after this cleanup
 #if !SYNC_MASTER_BATCH_CLEANUP
-
-//        priority_group * planner_pg;
-//#if ATOMIC_PG_STATUS
-//        uint8_t desired8;
-//        uint8_t expected8;
-//#endif
-//        if (g_thread_cnt >= g_plan_thread_cnt){
-//            if (_thd_id < g_plan_thread_cnt) {
-//                planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
-//#if BUILD_TXN_DEPS
-////                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
-////                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
-//                // Clean up and clear txn_graph
-//#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-//                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-////                    delete it->second;
-//                std::vector<uint64_t> * tmp = it->second;
-//                quecc_pool.txn_list_release(tmp, _thd_id);
-//            }
-//#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-//                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-//                    Array<uint64_t> * tmp = it->second;
-//                    quecc_pool.txn_list_release(tmp, _thd_id);
-//                }
-//#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
-//                planner_pg->txn_dep_graph->clear();
-////                assert(planner_pg->txn_dep_graph->size() == 0);
-//#endif
-//                // Reset PG map so that planners can continue
-//#if ATOMIC_PG_STATUS
-//                desired8 = PG_AVAILABLE;
-//                expected8 = PG_READY;
-//                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-//                    M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
-//                };
-//#else
-//                // indicate that his PG is done
-//                planner_pg->done = 1;
-//                atomic_thread_fence(memory_order_release);
-//#endif
-//            }
-//        }
-//        else{
-//            // there are more planners than executors
-//            uint64_t s_et = 0;
-//            for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
-//                s_et = i % g_thread_cnt;
-//                if (_thd_id == s_et) {
-//                    planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
-//#if BUILD_TXN_DEPS
-////                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
-////                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
-//                    // Clean up and clear txn_graph
-//#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-//                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-////                    delete it->second;
-//                std::vector<uint64_t> * tmp = it->second;
-//                quecc_pool.txn_list_release(tmp, _thd_id);
-//            }
-//#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-//                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-//                        Array<uint64_t> * tmp = it->second;
-//                        quecc_pool.txn_list_release(tmp, _thd_id);
-//                    }
-//#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
-//                    planner_pg->txn_dep_graph->clear();
-////                assert(planner_pg->txn_dep_graph->size() == 0);
-//#endif
-//                    // Reset PG map so that planners can continue
-//#if ATOMIC_PG_STATUS
-//                    desired8 = PG_AVAILABLE;
-//                    expected8 = PG_READY;
-//                    if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-//                        M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
-//                    };
-//#else
-//                    planner_pg->done = 1;
-//                    atomic_thread_fence(memory_order_release);
-//#endif
-//                }
-//            }
-//        }
-
 // cleanup my batch part and allow planners waiting on me to
         for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
             cleanup_batch_part(batch_slot, i);
@@ -1265,54 +1103,7 @@ public:
     ALWAYS_INLINE{
 
         batch_partition * batch_part = get_curr_batch_part(batch_slot);
-
-//#if DEBUG_QUECC
-//        if ((uint64_t)batch_part == 0){
-//
-//            for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
-//                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-//                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, plan_sync: done[%d]=%ld, plan_next_stage=%ld\n", _thd_id,wbatch_id,j,work_queue.plan_sblocks[i][j].done, *work_queue.plan_next_stage[i]);
-//                }
-//                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-//                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, exec_sync: done[%d]=%ld, exec_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.exec_sblocks[i][j].done, *work_queue.exec_next_stage[i]);
-//                }
-//                for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-//                    DEBUG_Q("WT_%ld: get_batch_map, batch_id=%ld, commit_sync: done[%d]=%ld, commit_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.commit_sblocks[i][j].done, *work_queue.commit_next_stage[i]);
-//                }
-//            }
-//        }
-//#endif
-
         Array<exec_queue_entry> * exec_q;
-        //        M_ASSERT_V(batch_part->batch_id == wbatch_id, "Batch part map slot [%ld][%ld][%ld],"
-//                " wbatch_id=%ld, batch_part_batch_id = %ld\n",
-//                   batch_slot,_thd_id, wplanner_id, wbatch_id, batch_part->batch_id);
-//        double x = (double)(rand() % 1000000) / 1000000;
-//        if (x < SAMPLING_FACTOR){
-
-//#if DEBUG_QUECC
-//        int eq_cnt UNUSED = 0;
-//        if (batch_part->single_q){
-//            eq_cnt = 1;
-//            DEBUG_Q("ET_%ld: Got a PG %ld, wbatch_id = %ld, with %d EQs of size = %ld"
-//                            "\n",
-//                    _thd_id, wplanner_id, wbatch_id, eq_cnt, batch_part->exec_q->size());
-//        }
-//        else{
-//            eq_cnt = batch_part->exec_qs->size();
-//            DEBUG_Q("ET_%ld: Got a PG %ld, wbatch_id = %ld, with %d EQs"
-//                            "\n",
-//                    _thd_id, wplanner_id, wbatch_id, eq_cnt);
-//            for (int y=0; y < eq_cnt; ++y){
-//                if (!batch_part->single_q){
-//                    DEBUG_Q("ET_%ld: --- EQ[%d], size = %ld\n", _thd_id, y,
-//                            batch_part->exec_qs->get(y)->size());
-//                }
-//            }
-//        }
-//#endif
-
-//        }
 
         volatile uint64_t batch_part_eq_cnt = 0;
         exec_queue_entry * exec_qe_ptr UNUSED = NULL;
@@ -1471,14 +1262,6 @@ public:
                 }
 #endif
 
-//                uint64_t comp_cnt;
-//                if (rc == RCOK){
-//                    quecc_prof_time = get_sys_clock();
-//                    comp_cnt = exec_qe.txn_ctx->completion_cnt.fetch_add(1);
-//                    INC_STATS(_thd_id, exec_txn_ctx_update[_thd_id], get_sys_clock()-quecc_prof_time);
-//                    INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
-//                }
-
             }
             // recycle exec_q
             quecc_mem_free_startts = get_sys_clock();
@@ -1587,7 +1370,6 @@ public:
     context->accesses->clear();
 #endif
 #endif
-//    assert(context->accesses->size() == 0);
 #endif
     };
 
@@ -1602,13 +1384,6 @@ public:
         }
         // could not switch, using the same the same
         return;
-
-//    w_exec_q_index = (w_exec_q_index + 1) % batch_part->exec_qs->size();
-//    exec_q = batch_part->exec_qs->get(w_exec_q_index);
-//    while (eq_comp_cnts[w_exec_q_index] == exec_q->size()){
-//        w_exec_q_index = (w_exec_q_index+1) % batch_part->exec_qs->size();
-//        exec_q = batch_part->exec_qs->get(w_exec_q_index);
-//    }
     };
 
     uint64_t wbatch_id = 0;
@@ -1861,12 +1636,6 @@ public:
 
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
         // reset transaction context
-//        uint64_t ctx_status = tctx->txn_state.load();
-//        if (wbatch_id > BATCH_MAP_LENGTH){
-//            M_ASSERT_V(ctx_status == TXN_COMMITTED || ctx_status == TXN_ABORTED,
-//                       "ET_%ld: invalid txn status while planning, txn_state=%ld, batch_id=%ld\n",
-//                       _thd_id, ctx_status, wbatch_id);
-//        }
 
         tctx->txn_id = planner_txn_id;
         tctx->txn_state.store(TXN_INITIALIZED,memory_order_acq_rel);
@@ -1881,7 +1650,6 @@ public:
 #if !SERVER_GENERATE_QUERIES
         tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
 #endif
-//                tctx->batch_id = batch_id;
 
         // create execution entry, for now it will contain only one request
         // we need to reset the mutable values of tctx
