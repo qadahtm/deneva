@@ -138,10 +138,6 @@ struct priority_group{
 #if EXEC_BUILD_TXN_DEPS
     hash_table_tctx_t * exec_tdg[THREAD_CNT];
 #endif
-#if BUILD_TXN_DEPS
-    hash_table_t * access_table;
-    hash_table_tctx_t * txn_dep_graph;
-#endif
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
     transaction_context txn_ctxs[BATCH_SIZE/PLAN_THREAD_CNT];
@@ -322,15 +318,6 @@ private:
     uint8_t expected8 = 0;
     uint8_t desired8 = 0;
     uint64_t slot_num = 0;
-    bool eb = false;
-    bool db = true;
-
-    // For txn dependency tracking
-#if BUILD_TXN_DEPS
-    hash_table_t access_table;
-//    hash_table_t * txn_dep_graph;
-    hash_table_tctx_t * txn_dep_graph;
-#endif
 
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread

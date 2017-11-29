@@ -1259,42 +1259,6 @@ public:
             }
         }
 #endif
-
-#if BUILD_TXN_DEPS
-        // we are processing lower PGs, need to capture dependencies from
-        // we need to check access tables for higher PGS
-//        for (int j = wplanner_id; j > 0; --j) {
-//            batch_partition * part = get_batch_part(batch_slot,(j-1),_thd_id);
-//            hash_table_tctx_t * mytdg = mypart->planner_pg->txn_dep_graph;
-//            hash_table_t * at = part->planner_pg->access_table;
-//            spinlock * tdg_latch = mypart->planner_pg->tdg_lock;
-//            uint64_t key = get_key_from_entry(entry);
-//            // lookup the last transaction that wrote to this key in the higher PG
-//            auto at_search = at->find(key);
-//            if (at_search != at->end()){
-//                // found a dependency, add it to the this
-//                //TODO(tq): check performance of latching, if bad, use a per thread, tdg
-//                // latch  txn_dep_graph
-//                tdg_latch->lock();
-//                transaction_context * d_tctx = get_tctx_from_pg(at_search->second->last(), part->planner_pg);
-//                auto txn_search = mytdg->find(entry->txn_id);
-//                if (txn_search != mytdg->end()){
-//                    // found tdg entry
-//                    // this txn has other dependencies
-//                    txn_search->second->add(d_tctx);
-//                }
-//                else{
-//                    // a new dependency for this txn
-//                    Array<transaction_context *> * txn_list;
-//                    quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
-//                    txn_list->add(d_tctx);
-//                    mytdg->insert({entry->txn_id, txn_list});
-//                }
-//                // unlatch TDG
-//                tdg_latch->unlock();
-//            }
-//        }
-#endif
     }
 
     inline SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
@@ -1896,10 +1860,6 @@ public:
         txn_prof_starttime = get_sys_clock();
 
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
-#if WORKLOAD == YCSB && BUILD_TXN_DEPS
-        uint64_t pmprof_starttime = 0;
-        priority_group * planner_pg =  &work_queue.batch_pg_map[(wbatch_id%g_batch_map_length)][_planner_id];
-#endif
         // reset transaction context
 //        uint64_t ctx_status = tctx->txn_state.load();
 //        if (wbatch_id > BATCH_MAP_LENGTH){
@@ -2009,107 +1969,6 @@ public:
 //        prof_starttime = get_sys_clock();
 
 //        INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
-
-#if BUILD_TXN_DEPS
-        // add to dependency graph if needed
-        // lookup key in the access_table
-        // if key is not found:
-        //      if access type is write:
-        //          allocate a vector and append txnid and insert (key,vector) into access_table
-        //      if access type is read: do nothing
-        // if key is found:
-        //      if access type is write:
-        //          append to existing vector in access_table
-        //      if access type is read:
-        //          get the last txnd id from vector and insert into tdg
-
-
-        pmprof_starttime = get_sys_clock();
-        auto search = planner_pg->access_table->find(key);
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-        if (search != access_table.end()){
-            // found
-            if (ycsb_req->acctype == WR){
-                search->second->push_back(planner_txn_id);
-                // this is a write-write conflict,
-                // but since this is a single record operation, no need for dependencies
-            }
-            else{
-                M_ASSERT_V(search->second->back() >= batch_starting_txn_id,
-                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
-                           search->second->back(), batch_starting_txn_id
-                );
-
-                auto search_txn = planner_pg->txn_dep_graph->find(planner_txn_id);
-                if (search_txn != planner_pg->txn_dep_graph->end()){
-                    search_txn->second->push_back(search->second->back());
-                }
-                else{
-                    // first operation for this txn_id
-                    std::vector<uint64_t> * txn_list;
-                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
-                    txn_list->push_back(search->second->back());
-                    planner_pg->txn_dep_graph->insert({planner_txn_id, txn_list});
-                }
-//                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
-            }
-        }
-        else{
-            // not found
-            if (ycsb_req->acctype == WR){
-                std::vector<uint64_t> * txn_list;
-                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
-                txn_list->push_back(planner_txn_id);
-                access_table.insert({ycsb_req->key, txn_list});
-            }
-        }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-        if (search != planner_pg->access_table->end()){
-            // found
-            if (ycsb_req->acctype == WR){
-                search->second->add(planner_txn_id);
-                // this is a write-write conflict,
-                // but since this is a single record operation, no need for dependencies
-            }
-            else{
-                M_ASSERT_V(search->second->last() >= planner_pg->batch_starting_txn_id,
-                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
-                           search->second->last(), planner_pg->batch_starting_txn_id
-                );
-
-                auto search_txn = planner_pg->txn_dep_graph->find(planner_txn_id);
-                uint64_t d_txnid;
-                transaction_context * d_tctx;
-                d_txnid = search->second->last();
-                d_tctx = get_tctx_from_pg(d_txnid, planner_pg);
-
-                if (search_txn != planner_pg->txn_dep_graph->end()){
-                    M_ASSERT_V(d_tctx->txn_id == d_txnid, "WT_%ld: Mismatch txnid\n",_thd_id);
-                    search_txn->second->add(d_tctx);
-                }
-                else{
-                    // first operation for this txn_id
-                    Array<transaction_context *> * txn_list;
-                    quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
-                    txn_list->add(d_tctx);
-                    planner_pg->txn_dep_graph->insert({planner_txn_id, txn_list});
-                }
-//                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
-            }
-        }
-        else{
-            // not found
-            if (ycsb_req->acctype == WR){
-                Array<uint64_t> * txn_list;
-                quecc_pool.txn_id_list_get_or_create(txn_list,_planner_id);
-                txn_list->add(planner_txn_id);
-                planner_pg->access_table->insert({ycsb_req->key, txn_list});
-            }
-        }
-#endif // end - if TDG_ENTRY_TYPE == VECTOR_ENTRY
-        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-pmprof_starttime);
-#endif
-        // will always return RCOK, should we convert it to void??
     }
 
 #elif WORKLOAD == TPCC

@@ -967,40 +967,6 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         tdg->clear();
     }
 #endif
-#if BUILD_TXN_DEPS
-    // clear up meta data from previouse batch
-//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
-//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
-        // Clean up and clear txn_graph
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-        for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-//                    delete it->second;
-                    std::vector<uint64_t> * tmp = it->second;
-                    quecc_pool.txn_list_release(tmp, i);
-                }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-        for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-            Array<transaction_context *> * tmp = it->second;
-            quecc_pool.txn_ctx_list_release(tmp, _planner_id);
-        }
-#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
-        planner_pg->txn_dep_graph->clear();
-//                assert(planner_pg->txn_dep_graph->size() == 0);
-//        prof_starttime = get_sys_clock();
-        for (auto it = planner_pg->access_table->begin(); it != planner_pg->access_table->end(); ++it){
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-            std::vector<uint64_t> * tmp = it->second;
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-            Array<uint64_t> * tmp = it->second;
-#endif
-            quecc_pool.txn_id_list_release(tmp, _planner_id);
-        }
-        //TODO(tq): FIXME
-        planner_pg->access_table->clear();
-        M_ASSERT_V(planner_pg->access_table->size() == 0, "Access table is not empty!!\n");
-        M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
-#endif // #if BUILD_TXN_DEPS
-
     // use txn_dep from planner_pg
     planner_pg->batch_starting_txn_id = planner_txn_id;
 
@@ -1044,13 +1010,6 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         }
 
         txn_ctxs = planner_pg->txn_ctxs;
-
-        if (pbatch_cnt == 0){
-            // first transaction in batch
-#if BUILD_TXN_DEPS
-            M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0,"WT_%ld: first txn in batch_id = %ld\n", _thd_id, wbatch_id);
-#endif
-        }
 
         switch (msg->get_rtype()) {
             case CL_QRY: {
@@ -1412,95 +1371,6 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
         }
         // default is commit below
 #endif
-#if BUILD_TXN_DEPS
-        // We are ready to commit, now we need to check if we need to abort due to dependent aborted transactions
-        // to check if we need to abort, we lookup transaction dependency graph
-        auto search = planner_pg->txn_dep_graph->find(txn_ctxs[j].txn_id);
-        if (search != planner_pg->txn_dep_graph->end()){
-            // print dependenent transactions for now.
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-            if (search->second->size() > 0){
-                // there are dependent transactions
-//                DEBUG_Q("ET_%ld : txn_id = %ld depends on %ld other transactions\n", _thd_id, txn_ctxs[j].txn_id, search->second->size());
-//                for(std::vector<uint64_t>::iterator it = search->second->begin(); it != search->second->end(); ++it) {
-//                    DEBUG_Q("ET_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, txn_ctxs[j].txn_id, (uint64_t) *it);
-//                }
-                uint64_t d_txn_id = search->second->back();
-                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
-                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
-                           "ET_%ld: Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
-                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld), batch_id=%ld, j = %ld \n", _thd_id,
-                           txn_ctxs[d_txn_ctx_idx].txn_id,
-                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
-                           (uint64_t)txn_ctxs, wbatch_id, j
-                );
-                if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
-                    // abort due to dependencies on an aborted txn
-                    //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
-                    return Abort;
-                }
-                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
-                    // queue up this transaction j in the pedning txn list and check later if it can commit
-//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
-                    return WAIT;
-                }
-                else if (txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel) == TXN_COMMITTED){
-//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
-                    return Commit;
-//                    canCommit = true;
-//#if ROW_ACCESS_TRACKING
-//                    cascading_abort = false;
-//#endif
-                }
-                else{
-                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-                               _thd_id, txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel));
-
-                }
-            }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-            if (search->second->size() > 0){
-                // there are dependent transactions
-                transaction_context * d_tctx = search->second->last();
-//                uint64_t d_txn_id = search->second->last();
-//                uint64_t d_txn_ctx_idx = d_txn_id-planner_pg->batch_starting_txn_id;
-//                M_ASSERT_V(txn_ctxs[d_txn_ctx_idx].txn_id == d_txn_id,
-//                           "ET_%ld: Txn_id mismatch for d_ctx_txn_id %ld == tdg_d_txn_id %ld , d_txn_ctx_idx = %ld,"
-//                                   "c_txn_id = %ld, batch_starting_txn_id = %ld, txn_ctxs(%ld), batch_id=%ld, j = %ld \n", _thd_id,
-//                           txn_ctxs[d_txn_ctx_idx].txn_id,
-//                           d_txn_id, d_txn_ctx_idx, txn_ctxs[j].txn_id, planner_pg->batch_starting_txn_id,
-//                           (uint64_t)txn_ctxs, wbatch_id, j
-//                );
-#endif
-                uint64_t d_txn_state = d_tctx->txn_state.load(memory_order_acq_rel);
-                if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
-                    // abort due to dependencies on an aborted txn
-                    DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[j].txn_id);
-                    return Abort;
-                }
-                else if (d_txn_state == TXN_READY_TO_COMMIT){
-                    // queue up this transaction j in the pedning txn list and check later if it can commit
-//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, d_tctx->txn_id,wbatch_id);
-                    return WAIT;
-                }
-                else if (d_txn_state == TXN_COMMITTED){
-//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, d_tctx->txn_id,wbatch_id);
-                    return Commit;
-                }
-                else{
-//                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-//                               _thd_id, txn_ctxs[d_txn_ctx_idx].txn_state.load(memory_order_acq_rel));
-                    M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-                               _thd_id, d_txn_state);
-
-                }
-            }
-        }
-#endif // #if BUILD_TXN_DEPS
         return Commit;
     }
     else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){

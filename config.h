@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 32
@@ -15,7 +15,7 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 16
+#define PLAN_THREAD_CNT 32
 #define PART_CNT 1
 
 
@@ -235,7 +235,6 @@
 #define YCSB_INDEX_LOOKUP_PLAN false
 
 #define CT_ENABLED false
-#define BUILD_TXN_DEPS false
 #define EXEC_BUILD_TXN_DEPS true
 #define TDG_ENTRY_LENGTH 10000
 #define FREE_LIST_INITIAL_SIZE 100

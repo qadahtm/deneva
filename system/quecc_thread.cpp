@@ -1414,11 +1414,6 @@ RC PlannerThread::run_normal_mode() {
 
     planner_txn_id = txn_prefix_planner_base;
 
-#if BUILD_TXN_DEPS
-//    txn_dep_graph = new hash_table_t();
-    txn_dep_graph = new hash_table_tctx_t();
-#endif
-
     batch_starting_txn_id = planner_txn_id;
 
     uint64_t query_cnt = 0;
@@ -1859,11 +1854,6 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 
 #endif // end of if SPLIT_MERGE_ENABLED
 
-//            planner_pg->batch_txn_cnt = batch_cnt;
-//            planner_pg->batch_id = batch_id;
-#if BUILD_TXN_DEPS
-        planner_pg->txn_dep_graph = txn_dep_graph;
-#endif
         planner_pg->batch_starting_txn_id = batch_starting_txn_id;
 
         // deilvery  phase
@@ -2003,24 +1993,6 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
         INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
         INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
         INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
-#if BUILD_TXN_DEPS
-        prof_starttime = get_sys_clock();
-        for (auto it = access_table.begin(); it != access_table.end(); ++it){
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-            std::vector<uint64_t> * txn_list_tmp = it->second;
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-            Array<uint64_t> * txn_list_tmp = it->second;
-#endif
-            quecc_pool.txn_id_list_release(txn_list_tmp,_planner_id);
-        }
-        access_table.clear();
-
-        // TODO(tq): do we need to allocate a new hashtable???
-        txn_dep_graph = new hash_table_tctx_t();
-        M_ASSERT_V(access_table.size() == 0, "Access table is not empty!!\n");
-        M_ASSERT_V(txn_dep_graph->size() == 0, "TDG table is not empty!!\n");
-//        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-prof_starttime);
-#endif
         // batch delivered
         batch_id++;
         batch_cnt = 0;
@@ -2174,8 +2146,6 @@ inline void PlannerThread::plan_client_msg(Message *msg, priority_group * planne
      * We group keys that fall in the same range to be processed together
      * TODO(tq): add repartitioning
      */
-//    uint8_t e8 = TXN_INITIALIZED;
-//    uint8_t d8 = TXN_STARTED;
 
     uint64_t e8 = TXN_INITIALIZED;
     uint64_t d8 = TXN_STARTED;
@@ -2184,7 +2154,6 @@ inline void PlannerThread::plan_client_msg(Message *msg, priority_group * planne
     }
     YCSBClientQueryMessage *ycsb_msg = ((YCSBClientQueryMessage *) msg);
     for (uint64_t j = 0; j < ycsb_msg->requests.size(); j++) {
-//        memset(entry, 0, sizeof(exec_queue_entry));
         ycsb_request *ycsb_req = ycsb_msg->requests.get(j);
         uint64_t key = ycsb_req->key;
 //                    DEBUG_Q("Planner_%d looking up bucket for key %ld\n", _planner_id, key);
@@ -2195,7 +2164,6 @@ inline void PlannerThread::plan_client_msg(Message *msg, priority_group * planne
         Array<exec_queue_entry> *mrange = exec_queues->get(idx);
 
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
-//        et_id = eq_idx_rand->operator()(plan_rng);
         et_id = _thd_id;
         checkMRange(mrange, key, et_id);
 #endif
@@ -2211,103 +2179,9 @@ inline void PlannerThread::plan_client_msg(Message *msg, priority_group * planne
         // this actually performs a full memcopy when adding entries
         tctx->txn_comp_cnt.fetch_add(1);
         mrange->add(*entry);
-        prof_starttime = get_sys_clock();
+//        prof_starttime = get_sys_clock();
 
-        INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
-
-#if BUILD_TXN_DEPS
-        // add to dependency graph if needed
-        // lookup key in the access_table
-        // if key is not found:
-        //      if access type is write:
-        //          allocate a vector and append txnid and insert (key,vector) into access_table
-        //      if access type is read: do nothing
-        // if key is found:
-        //      if access type is write:
-        //          append to existing vector in access_table
-        //      if access type is read:
-        //          get the last txnd id from vector and insert into tdg
-
-
-        uint64_t _prof_starttime = get_sys_clock();
-        auto search = access_table.find(key);
-        if (search != access_table.end()){
-            // found
-            if (ycsb_req->acctype == WR){
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                search->second->push_back(planner_txn_id);
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                search->second->add(planner_txn_id);
-#endif
-                // this is a write-write conflict,
-                // but since this is a single record operation, no need for dependencies
-            }
-            else{
-                M_ASSERT_V(ycsb_req->acctype == RD, "only RD access type is supported");
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                M_ASSERT_V(search->second->back() >= batch_starting_txn_id,
-                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
-                           search->second->back(), batch_starting_txn_id
-                );
-                auto search_txn = txn_dep_graph->find(planner_txn_id);
-                if (search_txn != txn_dep_graph->end()){
-                    search_txn->second->push_back(search->second->back());
-                }
-                else{
-                    // first operation for this txn_id
-                    std::vector<uint64_t> * txn_list;
-                    quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
-
-                    txn_list->push_back(search->second->back());
-                    txn_dep_graph->insert({planner_txn_id, txn_list});
-                }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                M_ASSERT_V(search->second->last() >= batch_starting_txn_id,
-                           "invalid txn_id in access table!! last_txn_id = %ld, batch_starting_txn_id = %ld\n",
-                           search->second->last(), batch_starting_txn_id
-                );
-                auto search_txn = txn_dep_graph->find(planner_txn_id);
-                uint64_t d_txnid;
-                uint64_t d_txn_ctx_idx;
-                transaction_context * d_tctx;
-                d_txnid = search->second->last();
-                d_txn_ctx_idx = d_txnid-planner_pg->batch_starting_txn_id;
-                d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
-                if (search_txn != txn_dep_graph->end()){
-                    search_txn->second->add(d_tctx);
-                }
-                else{
-                    // first operation for this txn_id
-                    Array<transaction_context *> * txn_list;
-                    quecc_pool.txn_ctx_list_get_or_create(txn_list,_planner_id);
-
-                    txn_list->add(d_tctx);
-                    txn_dep_graph->insert({planner_txn_id, txn_list});
-                }
-#endif
-
-//                            DEBUG_Q("PT_%ld : txn_id = %ld depends on txn_id = %ld\n", _thd_id, planner_txn_id, (uint64_t) search->second->back());
-            }
-        }
-        else{
-            // not found
-            if (ycsb_req->acctype == WR){
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                std::vector<uint64_t> * txn_list;
-                quecc_pool.txn_list_get_or_create(txn_list,_planner_id);
-                txn_list->push_back(planner_txn_id);
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                Array<uint64_t> * txn_list;
-                quecc_pool.txn_id_list_get_or_create(txn_list,_planner_id);
-                txn_list->add(planner_txn_id);
-#endif
-                access_table.insert({ycsb_req->key, txn_list});
-            }
-        }
-
-        INC_STATS(_thd_id, plan_tdep_time[_planner_id], get_sys_clock()-_prof_starttime);
-#endif
-        // will always return RCOK, should we convert it to void??
+//        INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock() - prof_starttime);
     }
 
 #elif WORKLOAD == TPCC
