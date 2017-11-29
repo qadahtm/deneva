@@ -1037,88 +1037,90 @@ public:
 
     inline SRC batch_cleanup(uint64_t batch_slot) ALWAYS_INLINE{
 
+        //TQ: we need a sync after this cleanup
 #if !SYNC_MASTER_BATCH_CLEANUP
-        priority_group * planner_pg;
-#if ATOMIC_PG_STATUS
-        uint8_t desired8;
-        uint8_t expected8;
-#endif
-        if (g_thread_cnt >= g_plan_thread_cnt){
-            if (_thd_id < g_plan_thread_cnt) {
-                planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
-#if BUILD_TXN_DEPS
-//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
-//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
-                // Clean up and clear txn_graph
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-//                    delete it->second;
-                std::vector<uint64_t> * tmp = it->second;
-                quecc_pool.txn_list_release(tmp, _thd_id);
-            }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-                    Array<uint64_t> * tmp = it->second;
-                    quecc_pool.txn_list_release(tmp, _thd_id);
-                }
-#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                planner_pg->txn_dep_graph->clear();
-//                assert(planner_pg->txn_dep_graph->size() == 0);
-#endif
-                // Reset PG map so that planners can continue
-#if ATOMIC_PG_STATUS
-                desired8 = PG_AVAILABLE;
-                expected8 = PG_READY;
-                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-                    M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
-                };
-#else
-                // indicate that his PG is done
-                planner_pg->done = 1;
-                atomic_thread_fence(memory_order_release);
-#endif
-            }
-        }
-        else{
-            // there are more planners than executors
-            uint64_t s_et = 0;
-            for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
-                s_et = i % g_thread_cnt;
-                if (_thd_id == s_et) {
-                    planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
-#if BUILD_TXN_DEPS
-//                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
-//                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
-                    // Clean up and clear txn_graph
-#if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-//                    delete it->second;
-                std::vector<uint64_t> * tmp = it->second;
-                quecc_pool.txn_list_release(tmp, _thd_id);
-            }
-#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
-                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
-                        Array<uint64_t> * tmp = it->second;
-                        quecc_pool.txn_list_release(tmp, _thd_id);
-                    }
-#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
-                    planner_pg->txn_dep_graph->clear();
-//                assert(planner_pg->txn_dep_graph->size() == 0);
-#endif
-                    // Reset PG map so that planners can continue
-#if ATOMIC_PG_STATUS
-                    desired8 = PG_AVAILABLE;
-                    expected8 = PG_READY;
-                    if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-                        M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
-                    };
-#else
-                    planner_pg->done = 1;
-                    atomic_thread_fence(memory_order_release);
-#endif
-                }
-            }
-        }
+
+//        priority_group * planner_pg;
+//#if ATOMIC_PG_STATUS
+//        uint8_t desired8;
+//        uint8_t expected8;
+//#endif
+//        if (g_thread_cnt >= g_plan_thread_cnt){
+//            if (_thd_id < g_plan_thread_cnt) {
+//                planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
+//#if BUILD_TXN_DEPS
+////                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
+////                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
+//                // Clean up and clear txn_graph
+//#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+//                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+////                    delete it->second;
+//                std::vector<uint64_t> * tmp = it->second;
+//                quecc_pool.txn_list_release(tmp, _thd_id);
+//            }
+//#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+//                for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+//                    Array<uint64_t> * tmp = it->second;
+//                    quecc_pool.txn_list_release(tmp, _thd_id);
+//                }
+//#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
+//                planner_pg->txn_dep_graph->clear();
+////                assert(planner_pg->txn_dep_graph->size() == 0);
+//#endif
+//                // Reset PG map so that planners can continue
+//#if ATOMIC_PG_STATUS
+//                desired8 = PG_AVAILABLE;
+//                expected8 = PG_READY;
+//                if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+//                    M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+//                };
+//#else
+//                // indicate that his PG is done
+//                planner_pg->done = 1;
+//                atomic_thread_fence(memory_order_release);
+//#endif
+//            }
+//        }
+//        else{
+//            // there are more planners than executors
+//            uint64_t s_et = 0;
+//            for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
+//                s_et = i % g_thread_cnt;
+//                if (_thd_id == s_et) {
+//                    planner_pg = &work_queue.batch_pg_map[batch_slot][_thd_id];
+//#if BUILD_TXN_DEPS
+////                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
+////                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
+//                    // Clean up and clear txn_graph
+//#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+//                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+////                    delete it->second;
+//                std::vector<uint64_t> * tmp = it->second;
+//                quecc_pool.txn_list_release(tmp, _thd_id);
+//            }
+//#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+//                    for (auto it = planner_pg->txn_dep_graph->begin(); it != planner_pg->txn_dep_graph->end(); ++it){
+//                        Array<uint64_t> * tmp = it->second;
+//                        quecc_pool.txn_list_release(tmp, _thd_id);
+//                    }
+//#endif // - #if TDG_ENTRY_TYPE == VECTOR_ENTRY
+//                    planner_pg->txn_dep_graph->clear();
+////                assert(planner_pg->txn_dep_graph->size() == 0);
+//#endif
+//                    // Reset PG map so that planners can continue
+//#if ATOMIC_PG_STATUS
+//                    desired8 = PG_AVAILABLE;
+//                    expected8 = PG_READY;
+//                    if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
+//                        M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
+//                    };
+//#else
+//                    planner_pg->done = 1;
+//                    atomic_thread_fence(memory_order_release);
+//#endif
+//                }
+//            }
+//        }
 
 // cleanup my batch part and allow planners waiting on me to
         for (uint64_t i = 0; i < g_plan_thread_cnt; ++i){
@@ -2653,7 +2655,7 @@ public:
             desired = (uint64_t) batch_part;
 
 //#if DEBUG_QUECC
-//            print_eqs_ranges_after_swap();
+//            print_eqs_ranges_after_swap(_planner_id, i);
 //#endif
             // Deliver batch partition to the repective ET
 #if BATCH_MAP_ORDER == BATCH_ET_PT
@@ -2844,29 +2846,29 @@ private:
 
 #endif
 
-    void print_eqs_ranges_after_swap() const {
-#if SPLIT_MERGE_ENABLED
+    inline void print_eqs_ranges_after_swap(uint64_t pt_id, uint64_t et_id) const ALWAYS_INLINE{
         uint64_t total_eq_entries = 0;
-        for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
-            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
-        }
-
-        for (uint64_t i =0; i < ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->size(); ++i){
-            DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
-                    _planner_id, i, ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->get(i)->size(),
-                    (uint64_t) (((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->get(i)),
-                    ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
-        }
-#endif
-        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-            DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-        }
+//#if SPLIT_MERGE_ENABLED
+//        for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
+//            DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
+//        }
+//
+//        for (uint64_t i =0; i < ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->size(); ++i){
+//            DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+//                    _planner_id, i, ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->get(i)->size(),
+//                    (uint64_t) (((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->get(i)),
+//                    ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
+//        }
+//#endif
+//        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//            DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+//        }
         for (uint64_t i =0; i < exec_queues->size(); ++i){
-            DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
-                    _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//            DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                    _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
             total_eq_entries += exec_queues->get(i)->size();
         }
-        DEBUG_Q("total eq entries = %ld, txns =%f\n", total_eq_entries, ((double)total_eq_entries)/REQ_PER_QUERY);
+        DEBUG_Q("WT_%ld: total eq entries = %ld, batch_id=%ld, et_id=%ld, PG=%ld\n",_thd_id, total_eq_entries, wbatch_id, et_id,pt_id);
     }
 
     void print_eqs_ranges_before_swap() const;

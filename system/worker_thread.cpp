@@ -2008,20 +2008,22 @@ RC WorkerThread::run_normal_mode() {
                 if (batch_proc_starttime > 0){
                     hl_prof_starttime = get_sys_clock();
                 }
-                src = sync_on_commit_phase_end(batch_slot);
-                if (batch_proc_starttime > 0){
-                    INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
-                }
-                if (src == BREAK){
-                    goto end_et;
-                }
 
+                // Cleanup my parts of the batch
                 if (batch_proc_starttime > 0){
                     hl_prof_starttime = get_sys_clock();
                 }
                 batch_cleanup(batch_slot);
                 if (batch_proc_starttime > 0){
                     INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
+
+                src = sync_on_commit_phase_end(batch_slot);
+                if (batch_proc_starttime > 0){
+                    INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
+                if (src == BREAK){
+                    goto end_et;
                 }
 #else
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP

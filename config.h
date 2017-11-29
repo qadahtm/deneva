@@ -43,9 +43,9 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-//#define CPU_FREQ          2.0 // FOR GS32
+#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-#define CPU_FREQ            2.4//2.6 // FOR D15v3
+//#define CPU_FREQ            2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -57,7 +57,7 @@
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
 #define PROG_STATS          false
-#define TIME_ENABLE         false //STATS_ENABLE
+#define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      false
 #define NUMA_ENABLED        false
 
@@ -226,7 +226,7 @@
 #define RR  3
 
 #define QUECC_DB_ACCESS true
-#define SYNC_MASTER_BATCH_CLEANUP true
+#define SYNC_MASTER_BATCH_CLEANUP false
 #define SYNC_MASTER_RR false
 #define TDG_ENTRY_TYPE  ARRAY_ENTRY
 #define ARRAY_ENTRY     0

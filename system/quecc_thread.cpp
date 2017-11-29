@@ -1993,6 +1993,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
         if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
             M_ASSERT_V(false, "PL_%ld: For batch %ld : failed to SET status for planner_pg with slot_num = [%ld], value = %d, @%ld\n",
                        _planner_id, batch_id, slot_num, planner_pg->status.load(), (uint64_t) planner_pg);
+            assert(false);
         }
 #else
         planner_pg->done = 0;
@@ -2045,6 +2046,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
         // Spin here if PG map slot is not available, this is eager spnning
         // TODO(tq): see if we can delay this for later and do some usefl works
 
+        // TQ: waiting for PG here, we should wait on the batch_part
 #if BATCHING_MODE == TIME_BASED
         while(work_queue.batch_pg_map[slot_num][_planner_id].load() != 0) {
                 if(idle_starttime == 0){
