@@ -957,34 +957,18 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
     plan_starttime = get_sys_clock();
     planner_pg = &work_queue.batch_pg_map[batch_slot][_planner_id];
 
-    if (!planner_pg->initialized){
-#if BUILD_TXN_DEPS
-        // since we are doing effectively one batch at a time.
-        planner_pg->access_table = new hash_table_t();
-        planner_pg->txn_dep_graph = new hash_table_tctx_t();
-#endif
-#if EXEC_BUILD_TXN_DEPS && !PIPELINED
-        for (int i = 0; i < THREAD_CNT; ++i) {
-            planner_pg->exec_tdg[i] = new hash_table_tctx_t();
-        }
-#endif
-        planner_pg->initialized = true;
-
-    }
-    else{
-
 #if EXEC_BUILD_TXN_DEPS
-        for (int i = 0; i < THREAD_CNT; ++i) {
-            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
-            for (auto it = tdg->begin(); it != tdg->end(); ++it){
-                Array<transaction_context *> * tmp = it->second;
-                quecc_pool.txn_ctx_list_release(tmp, i);
-            }
-            tdg->clear();
+    for (int i = 0; i < THREAD_CNT; ++i) {
+        hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
+        for (auto it = tdg->begin(); it != tdg->end(); ++it){
+            Array<transaction_context *> * tmp = it->second;
+            quecc_pool.txn_ctx_list_release(tmp, i);
         }
+        tdg->clear();
+    }
 #endif
 #if BUILD_TXN_DEPS
-        // clear up meta data from previouse batch
+    // clear up meta data from previouse batch
 //                DEBUG_Q("WT_%ld: clearing out txn dep graph, graph_ptr=%ld, for PG=%ld, batch_id=%ld, batch_slot=%ld\n",
 //                        _thd_id, (uint64_t)planner_pg->txn_dep_graph,i, wbatch_id, batch_slot);
         // Clean up and clear txn_graph
@@ -1017,15 +1001,6 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
         M_ASSERT_V(planner_pg->txn_dep_graph->size() == 0, "ET_%ld: non-zero size for txn_dep_graph???\n", _thd_id);
 #endif // #if BUILD_TXN_DEPS
 
-#if !PIPELINED
-        // Reset PG map so that planners can continue
-        desired8 = PG_AVAILABLE;
-        expected8 = PG_READY;
-        if(!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-            M_ASSERT_V(false, "Reset failed for PG map, this should not happen\n");
-        };
-#endif
-    }
     // use txn_dep from planner_pg
     planner_pg->batch_starting_txn_id = planner_txn_id;
 
@@ -1279,12 +1254,6 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
             if (commit_et_id == _thd_id){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-#if ATOMIC_PG_STATUS
-                assert(planner_pg->status.load() == PG_READY);
-#else
-                atomic_thread_fence(memory_order_acquire);
-                M_ASSERT_V(planner_pg->ready == 1, "ET_%ld: trying to commit but PG %ld is not ready???\n", _thd_id, i);
-#endif
                 rc = commit_txn(planner_pg, j);
                 if (rc == Commit){
 //                    finalize_txn_commit(&planner_pg->txn_ctxs[j],rc);

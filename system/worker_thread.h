@@ -2705,25 +2705,9 @@ public:
 //                M_ASSERT_V(false, "For batch %ld : failing to SET batch_pg_map slot [%ld][%ld], current value = %ld, \n",
 //                           batch_id, slot_num, _planner_id, work_queue.batch_pg_map[slot_num][_planner_id].load());
         }
-
-#else
-#if ATOMIC_PG_STATUS
-        expected8 = PG_AVAILABLE;
-        desired8 = PG_READY;
-        if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-            M_ASSERT_V(false, "PL_%ld: For batch %ld : failed to SET status for planner_pg with slot_num = [%ld], value = %d, @%ld\n",
-                       _planner_id, wbatch_id, batch_slot, planner_pg->status.load(), (uint64_t) planner_pg);
-        }
-#else
-        planner_pg->ready = 1;
-        planner_pg->done = 0;
-        atomic_thread_fence(memory_order_release);
-
-#endif
 #endif // BATCHING_MODE == TIME_BASED
         // reset data structures and execution queues for the new batch
         prof_starttime = get_sys_clock();
-//        DEBUG_Q()
         exec_queues->clear();
         for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
             Array<exec_queue_entry> * exec_q;

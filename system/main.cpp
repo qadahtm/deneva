@@ -956,11 +956,6 @@ int main(int argc, char* argv[])
 }
 #if CC_ALG == QUECC
 void cleanup_quecc_runtime() {
-    for (uint64_t i =0; i < g_batch_map_length; ++i){
-        for (uint64_t j=0; j< g_plan_thread_cnt; ++j){
-            work_queue.batch_pg_map[i][j].status.store(0);
-        }
-    }
 #if BATCH_MAP_ORDER == BATCH_ET_PT
     for (uint64_t i=0; i < g_batch_map_length ; i++){
         for (uint64_t j=0; j < g_thread_cnt; j++){

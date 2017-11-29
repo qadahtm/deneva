@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 32
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 32
@@ -15,7 +15,7 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 32
+#define PLAN_THREAD_CNT 16
 #define PART_CNT 1
 
 
@@ -282,8 +282,6 @@
 #define IMMEDIATE           2
 #define COMMIT_BEHAVIOR     AFTER_BATCH_COMP
 
-#define PG_AVAILABLE 0
-#define PG_READY     1
 
 #define SINGLE_NODE true
 #define ABORT_THREAD false

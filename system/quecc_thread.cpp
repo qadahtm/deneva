@@ -1985,21 +1985,6 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
 //                M_ASSERT_V(false, "For batch %ld : failing to SET batch_pg_map slot [%ld][%ld], current value = %ld, \n",
 //                           batch_id, slot_num, _planner_id, work_queue.batch_pg_map[slot_num][_planner_id].load());
             }
-
-#else
-#if ATOMIC_PG_STATUS
-        expected8 = PG_AVAILABLE;
-        desired8 = PG_READY;
-        if (!planner_pg->status.compare_exchange_strong(expected8, desired8)){
-            M_ASSERT_V(false, "PL_%ld: For batch %ld : failed to SET status for planner_pg with slot_num = [%ld], value = %d, @%ld\n",
-                       _planner_id, batch_id, slot_num, planner_pg->status.load(), (uint64_t) planner_pg);
-            assert(false);
-        }
-#else
-        planner_pg->done = 0;
-        planner_pg->ready = 1;
-        atomic_thread_fence(memory_order_release);
-#endif
 #endif // BATCHING_MODE == TIME_BASED
         // reset data structures and execution queues for the new batch
         prof_starttime = get_sys_clock();
@@ -2065,15 +2050,6 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
             quecc_pool.pg_get_or_create(planner_pg, _planner_id);
 //            planner_pg->planner_id = _planner_id;
             planner_pg->txn_ctxs = txn_ctxs;
-#else
-//            DEBUG_Q("PL_%ld : checking PG map for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
-#if ATOMIC_PG_STATUS
-        while(work_queue.batch_pg_map[slot_num][_planner_id].status.load() != PG_AVAILABLE) {
-
-#else
-        while(work_queue.batch_pg_map[slot_num][_planner_id].done != 1) {
-            atomic_thread_fence(memory_order_acquire);
-#endif
 //#if DEBUG_QUECC
 //            if (plan_active[_planner_id]->fetch_add(0) >= 0){
 ////                DEBUG_Q("PT_%ld: will wait for its batch map slot %ld, batch_id=%ld\n",_planner_id, slot_num, batch_id);

@@ -135,17 +135,6 @@ struct exec_queue_entry {
 
 
 struct priority_group{
-//    uint64_t planner_id;
-//    uint64_t batch_id;
-//    uint64_t batch_txn_cnt;
-#if !ATOMIC_PG_STATUS
-    int64_t ready;
-    int64_t done;
-    char padding[48];
-#else
-    volatile atomic<uint8_t> status;
-#endif
-    volatile bool initialized = false;
 #if EXEC_BUILD_TXN_DEPS
     hash_table_tctx_t * exec_tdg[THREAD_CNT];
 #endif

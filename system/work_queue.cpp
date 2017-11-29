@@ -83,12 +83,12 @@ void QWorkQueue::init() {
         planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
         planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
 #endif
-#if EXEC_BUILD_TXN_DEPS && PIPELINED
-        for (int i = 0; i < THREAD_CNT; ++i) {
+      }
+#if EXEC_BUILD_TXN_DEPS
+      for (int i = 0; i < THREAD_CNT; ++i) {
           planner_pg->exec_tdg[i] = new hash_table_tctx_t();
         }
 #endif
-      }
     }
   }
 #endif
@@ -139,15 +139,7 @@ void QWorkQueue::init() {
 #endif
       // pointer-based implementation of PG_MAP
       // with static allocation there is no need fo this
-#if BATCHING_MODE == SIZE_BASED
-#if ATOMIC_PG_STATUS
-      (batch_pg_map[i][j]).status.store(PG_AVAILABLE);
-#else
-      (batch_pg_map[i][j]).done = 0;
-      (batch_pg_map[i][j]).ready = 0;
-      atomic_thread_fence(memory_order_release);
-#endif
-#else
+#if BATCHING_MODE != SIZE_BASED
       (batch_pg_map[i][j]).store(0);
 #endif
     }
