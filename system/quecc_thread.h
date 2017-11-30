@@ -37,13 +37,11 @@ struct transaction_context {
 // this need to be reset on reuse
     // 8bytes
     volatile atomic<uint64_t> completion_cnt; // used at execution time to track operations that have completed
-//    uint32_t completion_cnt;
     // 8bytes
     volatile atomic<uint64_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
 #endif
-//    uint64_t batch_id;
 #if PARALLEL_COMMIT
     // 8 bytes
     volatile atomic<uint64_t> txn_state;
@@ -111,8 +109,6 @@ enum tpcc_txn_frag_t{
 struct exec_queue_entry {
     transaction_context * txn_ctx; // 8
     uint64_t txn_id; //8
-//    int op_idx; //4
-//    uint64_t batch_id; // 8
 #if WORKLOAD == YCSB
      // 8 bytes for access_type
     // 8 bytes for key
@@ -147,8 +143,6 @@ struct priority_group{
 };
 
 struct batch_partition{
-//    uint64_t planner_id;
-//    uint64_t batch_id;
     atomic<uint64_t> status;
     priority_group * planner_pg;
     bool empty;
@@ -159,11 +153,7 @@ struct batch_partition{
     atomic<uint64_t> exec_q_status;
 
     // Info. related to having multiple exec. queues
-//    uint64_t sub_exec_qs_cnt;
-//    atomic<uint64_t> exec_qs_comp_cnt;
-//    Array<exec_queue_entry> ** exec_qs;
     Array<Array<exec_queue_entry> *> * exec_qs;
-//    atomic<uint8_t> * exec_qs_status;
 };
 
 
@@ -451,12 +441,8 @@ private:
     boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
     boost::lockfree::queue<Array<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
-//    boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[PLAN_THREAD_CNT];
     boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[THREAD_CNT];
 #endif
-
-
-//    boost::lockfree::queue<atomic<uint8_t> *> ** exec_qs_status_free_list;
 
     boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
     boost::lockfree::queue<priority_group *> ** pg_free_list;

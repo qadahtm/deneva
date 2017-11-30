@@ -2412,9 +2412,6 @@ private:
 //    uint64_t slot_num = 0;
 
     // For txn dependency tracking
-//#if BUILD_TXN_DEPS
-//    hash_table_t access_table;
-//#endif
 
     // create and and pre-allocate execution queues
     // For each mrange which will be assigned to an execution thread
