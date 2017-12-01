@@ -182,18 +182,19 @@ void WorkerThread::abort() {
 //    DEBUG_Q("WT_%ld: ABORT txn_id=%ld,txn_man_thd_id=%ld,thd_id=%ld -- %f\n",_thd_id, txn_man->get_txn_id(),txn_man->get_thd_id(),get_thd_id(), (double) get_sys_clock() - run_starttime / BILLION);
     // TODO: TPCC Rollback here
 
-    ++txn_man->abort_cnt;
 #if ABORT_THREAD || ABORT_QUEUES
+    ++txn_man->abort_cnt;
     txn_man->reset();
 #if ABORT_QUEUES
     uint64_t penalty = work_queue.abort_queues[txn_man->get_thd_id()]->enqueue(txn_man->get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
     txn_man->txn_stats.total_abort_time += penalty;
-    release_txn_man();
 #else
     uint64_t penalty = abort_queue.enqueue(get_thd_id(), txn_man->get_txn_id(), txn_man->get_abort_cnt());
     txn_man->txn_stats.total_abort_time += penalty;
 #endif
-
+#else
+    // on abort just release txn manager no retry
+    release_txn_man();
 #endif
 }
 
@@ -1307,7 +1308,7 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
     return RCOK;
 }
 
-inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx){
+RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx){
 
     transaction_context * txn_ctxs = planner_pg->txn_ctxs;
     uint64_t j = txn_idx;
@@ -1337,13 +1338,9 @@ inline RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx
 //                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
                         return Abort;
                     }
-                    else if (d_txn_state == TXN_COMMITTED){
-//                    SAMPLED_DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, txn_ctxs[d_txn_ctx_idx].txn_id,wbatch_id);
-                        return Commit;
-                    }
                     else{
-                        M_ASSERT_V(false, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
+                        // TQ: there is no need to check if the dependent txn transaction is committed
+                        M_ASSERT_V(d_txn_state == TXN_COMMITTED, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
                                    _thd_id, d_txn_state);
                     }
                 }

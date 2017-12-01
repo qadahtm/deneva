@@ -57,8 +57,8 @@
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
 #define PROG_STATS          false
-#define TIME_ENABLE         true //STATS_ENABLE
-#define ASSERT_ENABLED      false
+#define TIME_ENABLE         false //STATS_ENABLE
+#define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
 
 #define FIN_BY_TIME true
@@ -234,7 +234,7 @@
 
 #define CT_ENABLED false
 #define EXEC_BUILD_TXN_DEPS true
-#define TDG_ENTRY_LENGTH 10000
+#define TDG_ENTRY_LENGTH 1000
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
@@ -282,7 +282,7 @@
 
 #define SINGLE_NODE true
 #define ABORT_THREAD false
-#define ABORT_QUEUES true
+#define ABORT_QUEUES false
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20

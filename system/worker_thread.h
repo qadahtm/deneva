@@ -1205,8 +1205,6 @@ public:
 
             if (rc == WAIT){
                 quecc_txn_wait_starttime = get_sys_clock();
-                assert(rc == WAIT);
-
 
 //                DEBUG_Q("ET_%ld: waiting on batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
 //                                    " completed %ld out of %ld"
