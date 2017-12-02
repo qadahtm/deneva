@@ -935,7 +935,7 @@ RC WorkerThread::run_fixed_mode() {
 #if CC_ALG == QUECC
 
 #if !PIPELINED
-inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
+SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
 
     uint64_t next_part = 0; // we have client buffers are paritioned based on part cnt
     Message * msg = NULL;
@@ -1031,7 +1031,7 @@ inline SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man
 
 #endif // if !PIPELINED
 
-inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) {
+SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) {
 
 //    uint64_t wplanner_id = 0;
     wplanner_id = 0;
@@ -1123,7 +1123,7 @@ inline SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_c
     return FATAL_ERROR;
 }
 
-inline SRC WorkerThread::wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id, batch_partition *& batch_part) {
+SRC WorkerThread::wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id, batch_partition *& batch_part) {
 
     batch_part = get_batch_part(batch_slot, wplanner_id);
 #if ATOMIC_PG_STATUS
@@ -1154,7 +1154,7 @@ inline SRC WorkerThread::wait_for_batch_ready(uint64_t batch_slot, uint64_t wpla
     return BATCH_READY;
 }
 
-inline RC WorkerThread::commit_batch(uint64_t batch_slot){
+RC WorkerThread::commit_batch(uint64_t batch_slot){
     std::list<uint64_t> * pending_txns = new std::list<uint64_t>();
     priority_group * planner_pg = NULL;
 
@@ -1308,64 +1308,64 @@ inline RC WorkerThread::commit_batch(uint64_t batch_slot){
     return RCOK;
 }
 
-RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx){
-
-    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
-    uint64_t j = txn_idx;
-
-//    DEBUG_Q("ET_%ld:trying to commit txn_id = %ld\n",_thd_id, txn_ctxs[j].txn_id);
-    // check if transactio is ready to commit
-    atomic_thread_fence(memory_order_acq_rel);
-    if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
-        // check for any dependent transaction
-#if EXEC_BUILD_TXN_DEPS
-        for (uint64_t i = 0; i < g_thread_cnt; ++i) {
-            // check all tdgs built during execution
-            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
-            auto search = tdg->find(txn_ctxs[j].txn_id);
-            if (search != tdg->end()){
-                // a set of dependencies are found
-                // check all of them, if any of them is Abort, we have to abort
-                auto ds_tctx = search->second;
-                for (uint64_t k = 0; k < ds_tctx->size(); ++k) {
-                    uint64_t d_txn_state = ds_tctx->get(k)->txn_state.load(memory_order_acq_rel);
-                    if (d_txn_state == TXN_READY_TO_COMMIT){
-//                    DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, ds_tctx->get(k)->txn_id,wbatch_id);
-                        return WAIT;
-                    }
-                    else if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
-//                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
-                        return Abort;
-                    }
-                    else{
-                        // TQ: there is no need to check if the dependent txn transaction is committed
-                        M_ASSERT_V(d_txn_state == TXN_COMMITTED, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-                                   _thd_id, d_txn_state);
-                    }
-                }
-            }
-        }
-        // default is commit below
-#endif
-        return Commit;
-    }
-    else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
-        //     abort transaction, this abort decision is done by an ET during execution phase
-        return Abort;
-    }
-    else {
-//#if DEBUG_QUECC
-//        DEBUG_Q("ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, wbatch_id=%ld, gbatch_id=%ld, batch_slot=%ld, pt_cnt = %d, et_cnt=%d\n",
-//                _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, work_queue.gbatch_id, (wbatch_id % g_batch_map_length),
-//                g_plan_thread_cnt, g_thread_cnt);
+//RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx){
+//
+//    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
+//    uint64_t j = txn_idx;
+//
+////    DEBUG_Q("ET_%ld:trying to commit txn_id = %ld\n",_thd_id, txn_ctxs[j].txn_id);
+//    // check if transactio is ready to commit
+//    atomic_thread_fence(memory_order_acq_rel);
+//    if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
+//        // check for any dependent transaction
+//#if EXEC_BUILD_TXN_DEPS
+//        for (uint64_t i = 0; i < g_thread_cnt; ++i) {
+//            // check all tdgs built during execution
+//            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
+//            auto search = tdg->find(txn_ctxs[j].txn_id);
+//            if (search != tdg->end()){
+//                // a set of dependencies are found
+//                // check all of them, if any of them is Abort, we have to abort
+//                auto ds_tctx = search->second;
+//                for (uint64_t k = 0; k < ds_tctx->size(); ++k) {
+//                    uint64_t d_txn_state = ds_tctx->get(k)->txn_state.load(memory_order_acq_rel);
+//                    if (d_txn_state == TXN_READY_TO_COMMIT){
+////                    DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
+////                            _thd_id, txn_ctxs[j].txn_id, ds_tctx->get(k)->txn_id,wbatch_id);
+//                        return WAIT;
+//                    }
+//                    else if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
+////                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+//                        return Abort;
+//                    }
+//                    else{
+//                        // TQ: there is no need to check if the dependent txn transaction is committed
+//                        M_ASSERT_V(d_txn_state == TXN_COMMITTED, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
+//                                   _thd_id, d_txn_state);
+//                    }
+//                }
+//            }
+//        }
+//        // default is commit below
 //#endif
-        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
-                   _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_thread_cnt);
-    }
-
-    return Commit;
-}
+//        return Commit;
+//    }
+//    else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
+//        //     abort transaction, this abort decision is done by an ET during execution phase
+//        return Abort;
+//    }
+//    else {
+////#if DEBUG_QUECC
+////        DEBUG_Q("ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, wbatch_id=%ld, gbatch_id=%ld, batch_slot=%ld, pt_cnt = %d, et_cnt=%d\n",
+////                _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, work_queue.gbatch_id, (wbatch_id % g_batch_map_length),
+////                g_plan_thread_cnt, g_thread_cnt);
+////#endif
+//        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
+//                   _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_thread_cnt);
+//    }
+//
+//    return Commit;
+//}
 
 #endif
 

@@ -64,7 +64,7 @@ public:
 
 #if CC_ALG == QUECC
     int stage =0; //0=plan, 1=exec, 2,commit
-    inline SRC sync_on_planning_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
+    SRC sync_on_planning_phase_end(uint64_t batch_slot){
         uint64_t sync_idlestarttime = 0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint16_t desired16;
@@ -357,7 +357,7 @@ public:
         return SUCCESS;
     }
 
-    inline SRC sync_on_execution_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
+    SRC sync_on_execution_phase_end(uint64_t batch_slot){
         uint64_t sync_idlestarttime =0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint16_t desired16;
@@ -653,7 +653,7 @@ public:
     }
 #endif
 
-    inline SRC sync_on_commit_phase_end(uint64_t batch_slot) ALWAYS_INLINE{
+    SRC sync_on_commit_phase_end(uint64_t batch_slot){
         uint64_t sync_idlestarttime =0;
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
 //        uint8_t desired8;
@@ -956,7 +956,7 @@ public:
         return SUCCESS;
     }
 
-    inline SRC batch_cleanup(uint64_t batch_slot) ALWAYS_INLINE{
+    SRC batch_cleanup(uint64_t batch_slot){
 
         //TQ: we need a sync after this cleanup
 #if !SYNC_MASTER_BATCH_CLEANUP
@@ -969,12 +969,12 @@ public:
         return SUCCESS;
     }
 
-    inline SRC wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id,
-                                    batch_partition *& batch_part) ALWAYS_INLINE;
-    inline batch_partition * get_batch_part(uint64_t batch_slot, uint64_t wplanner_id) ALWAYS_INLINE{
+    SRC wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id,
+                                    batch_partition *& batch_part);
+    batch_partition * get_batch_part(uint64_t batch_slot, uint64_t wplanner_id){
         return get_batch_part(batch_slot,wplanner_id,_thd_id);
     }
-    inline batch_partition * get_batch_part(uint64_t batch_slot, uint64_t wplanner_id, uint64_t et_id) ALWAYS_INLINE{
+    batch_partition * get_batch_part(uint64_t batch_slot, uint64_t wplanner_id, uint64_t et_id){
         batch_partition * ret;
 #if BATCH_MAP_ORDER == BATCH_ET_PT
         ret = (batch_partition *)  work_queue.batch_map[batch_slot][et_id][wplanner_id].load();
@@ -984,10 +984,10 @@ public:
         return  ret;
     }
 
-    inline void cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id) ALWAYS_INLINE{
+    void cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id){
         cleanup_batch_part(batch_slot, wplanner_id, _thd_id);
     }
-    inline void cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id, uint64_t et_id) ALWAYS_INLINE{
+    void cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id, uint64_t et_id){
 
 //        DEBUG_Q("ET_%ld: PG %ld is done moving to th next PG\n",_thd_id, wplanner_id);
 
@@ -1031,9 +1031,9 @@ public:
         INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
     };
 
-    inline SRC plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) ALWAYS_INLINE;
-    inline SRC execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) ALWAYS_INLINE;
-    inline batch_partition * get_curr_batch_part(uint64_t batch_slot) ALWAYS_INLINE{
+    SRC plan_batch(uint64_t batch_slot, TxnManager * my_txn_man);
+    SRC execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man);
+    batch_partition * get_curr_batch_part(uint64_t batch_slot){
         batch_partition * batch_part;
 #if BATCH_MAP_ORDER == BATCH_ET_PT
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
@@ -1044,7 +1044,7 @@ public:
                    _thd_id, wplanner_id, batch_slot, wbatch_id);
         return batch_part;
     };
-    inline bool add_txn_dep(uint64_t txn_id, uint64_t d_txn_id, hash_table_tctx_t * tdg, priority_group * d_planner_pg) ALWAYS_INLINE{
+    bool add_txn_dep(uint64_t txn_id, uint64_t d_txn_id, hash_table_tctx_t * tdg, priority_group * d_planner_pg){
         transaction_context * d_tctx = get_tctx_from_pg(d_txn_id, d_planner_pg);
         if (d_tctx != NULL){
             auto txn_search = tdg->find(txn_id);
@@ -1067,8 +1067,8 @@ public:
         }
     };
 
-    inline void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc)
-    ALWAYS_INLINE{
+    void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc)
+    {
 #if EXEC_BUILD_TXN_DEPS
         if (rc == RCOK){
             batch_partition * mypart = get_batch_part(batch_slot,wplanner_id,_thd_id);
@@ -1099,8 +1099,8 @@ public:
 #endif
     }
 
-    inline SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
-    ALWAYS_INLINE{
+    SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
+    {
 
         batch_partition * batch_part = get_curr_batch_part(batch_slot);
         Array<exec_queue_entry> * exec_q;
@@ -1281,9 +1281,66 @@ public:
         return SUCCESS;
     };
 
-    inline RC commit_batch(uint64_t batch_slot) ALWAYS_INLINE;
-    inline RC commit_txn(priority_group * planner_pg, uint64_t txn_idx) ALWAYS_INLINE;
-    inline void finalize_txn_commit(transaction_context * tctx, RC rc) ALWAYS_INLINE{
+    RC commit_batch(uint64_t batch_slot);
+    RC commit_txn(priority_group * planner_pg, uint64_t txn_idx){
+
+        transaction_context * txn_ctxs = planner_pg->txn_ctxs;
+        uint64_t j = txn_idx;
+
+//    DEBUG_Q("ET_%ld:trying to commit txn_id = %ld\n",_thd_id, txn_ctxs[j].txn_id);
+        // check if transactio is ready to commit
+        atomic_thread_fence(memory_order_acq_rel);
+        if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
+            // check for any dependent transaction
+#if EXEC_BUILD_TXN_DEPS
+            for (uint64_t i = 0; i < g_thread_cnt; ++i) {
+            // check all tdgs built during execution
+            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
+            auto search = tdg->find(txn_ctxs[j].txn_id);
+            if (search != tdg->end()){
+                // a set of dependencies are found
+                // check all of them, if any of them is Abort, we have to abort
+                auto ds_tctx = search->second;
+                for (uint64_t k = 0; k < ds_tctx->size(); ++k) {
+                    uint64_t d_txn_state = ds_tctx->get(k)->txn_state.load(memory_order_acq_rel);
+                    if (d_txn_state == TXN_READY_TO_COMMIT){
+//                    DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
+//                            _thd_id, txn_ctxs[j].txn_id, ds_tctx->get(k)->txn_id,wbatch_id);
+                        return WAIT;
+                    }
+                    else if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
+//                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
+                        return Abort;
+                    }
+                    else{
+                        // TQ: there is no need to check if the dependent txn transaction is committed
+                        M_ASSERT_V(d_txn_state == TXN_COMMITTED, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
+                                   _thd_id, d_txn_state);
+                    }
+                }
+            }
+        }
+        // default is commit below
+#endif
+            return Commit;
+        }
+        else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
+            //     abort transaction, this abort decision is done by an ET during execution phase
+            return Abort;
+        }
+        else {
+//#if DEBUG_QUECC
+//        DEBUG_Q("ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, wbatch_id=%ld, gbatch_id=%ld, batch_slot=%ld, pt_cnt = %d, et_cnt=%d\n",
+//                _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, work_queue.gbatch_id, (wbatch_id % g_batch_map_length),
+//                g_plan_thread_cnt, g_thread_cnt);
+//#endif
+            M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
+                       _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_thread_cnt);
+        }
+
+        return Commit;
+    };
+    void finalize_txn_commit(transaction_context * tctx, RC rc){
         uint64_t commit_time = get_sys_clock(),e8,d8;
         uint64_t timespan_long = commit_time - tctx->starttime;
 
@@ -1315,7 +1372,7 @@ public:
 //                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
     };
 
-    inline void wt_release_accesses(transaction_context * context, RC rc) ALWAYS_INLINE{
+    void wt_release_accesses(transaction_context * context, RC rc){
 #if ROW_ACCESS_TRACKING
         // releaase accesses
 //    if (DEBUG_QUECC){
@@ -1371,8 +1428,8 @@ public:
 #endif
     };
 
-    inline void move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts,
-                                              Array<exec_queue_entry> *&exec_q, uint64_t &w_exec_q_index) const ALWAYS_INLINE{
+    void move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts,
+                                              Array<exec_queue_entry> *&exec_q, uint64_t &w_exec_q_index) const{
         for (uint64_t i =0; i < batch_part->exec_qs->size(); ++i){
             if (i != w_exec_q_index && batch_part->exec_qs->get(i)->size() > eq_comp_cnts[i]){
                 w_exec_q_index = i;
@@ -1387,7 +1444,7 @@ public:
     uint64_t wbatch_id = 0;
     uint64_t wplanner_id = 0;
 
-    inline transaction_context * get_tctx_from_pg(uint64_t txnid, priority_group *planner_pg) ALWAYS_INLINE{
+    transaction_context * get_tctx_from_pg(uint64_t txnid, priority_group *planner_pg){
         transaction_context * d_tctx;
         uint64_t d_txn_ctx_idx = txnid-planner_pg->batch_starting_txn_id;
 
@@ -1407,7 +1464,7 @@ public:
     uint64_t _planner_id;
     uint64_t query_cnt =0;
 
-    inline uint32_t get_split(uint64_t key, Array<uint64_t> * ranges) ALWAYS_INLINE{
+    inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
         for (uint32_t i = 0; i < ranges->size(); i++){
             if (key <= ranges->get(i)){
                 return i;
@@ -1422,21 +1479,21 @@ public:
         ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
         return ycsb_req_tmp->key;
 #else
-        return mrange->get(r).rid;
+        return etnry->rid;
 #endif
     }
 
-    inline void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id) ALWAYS_INLINE{
-        volatile uint64_t idx = get_split(key, exec_qs_ranges);
-        volatile uint64_t tidx;
-        volatile uint64_t nidx;
-        volatile Array<exec_queue_entry> * texec_q = NULL;
+    void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t et_id){
+//        uint64_t idx = get_split(key, exec_qs_ranges);
+        uint64_t tidx =0;
+        uint64_t nidx =0;
+        Array<exec_queue_entry> * texec_q = NULL;
 
         for (uint64_t r =0; r < mrange->size(); ++r){
             // TODO(tq): refactor this to respective benchmark implementation
             uint64_t lid = get_key_from_entry(mrange->get_ptr(r));
             tidx = get_split(lid, exec_qs_ranges);
-            M_ASSERT_V(((Array<exec_queue_entry> volatile * )exec_queues->get(tidx)) == mrange, "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+//            M_ASSERT_V(((Array<exec_queue_entry> volatile * )exec_queues->get(tidx)) == mrange, "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
             nidx = get_split(lid, ((Array<uint64_t> *)exec_qs_ranges_tmp));
 
             texec_q =  ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->get(nidx);
@@ -1463,12 +1520,12 @@ public:
 //            }
             }
 #endif
-            M_ASSERT_V(nidx == tidx || nidx == (tidx+1),"PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
+            M_ASSERT_V(nidx == tidx || nidx == (tidx+1),"PL_%ld: nidx=%ld, tidx = %ld,lid=%ld\n",_planner_id, nidx, tidx, lid);
 
-            ((Array<exec_queue_entry> *)texec_q)->add(mrange->get(r));
+            texec_q->add(mrange->get(r));
         }
     }
-    inline void checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id) ALWAYS_INLINE{
+    void checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
         int max_tries = 64;
@@ -1566,7 +1623,7 @@ public:
             }
 
             // use new ranges to split current execq
-            splitMRange(mrange,key,et_id);
+            splitMRange(mrange,et_id);
 
 //            if(exec_queues_tmp->get(idx)->size() == 0){
 //                M_ASSERT_V(false,"PT_%ld: LEFT EQ is empty after split\n",_planner_id);
@@ -1626,7 +1683,7 @@ public:
 #endif
     }
 
-    inline void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man) ALWAYS_INLINE{
+    void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man){
 
 // Query from client
 //        DEBUG_Q("PT_%ld planning txn %ld, pbatch_cnt=%ld\n", _planner_id, planner_txn_id,pbatch_cnt);
@@ -1880,7 +1937,7 @@ public:
 
     }
 
-    inline void do_batch_delivery(uint64_t batch_slot, priority_group * planner_pg) ALWAYS_INLINE{
+    void do_batch_delivery(uint64_t batch_slot, priority_group * planner_pg){
 
         batch_partition *batch_part = NULL;
 
@@ -2452,7 +2509,7 @@ private:
 
 #endif
 
-    inline void print_eqs_ranges_after_swap(uint64_t pt_id, uint64_t et_id) const ALWAYS_INLINE{
+    void print_eqs_ranges_after_swap(uint64_t pt_id, uint64_t et_id) const{
         uint64_t total_eq_entries = 0;
 //#if SPLIT_MERGE_ENABLED
 //        for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){

@@ -220,7 +220,7 @@ struct sync_block{
     char padding[56];
 };
 
-inline void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
+void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
 void txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id);
 
 class PlannerThread : public Thread {
@@ -230,7 +230,7 @@ public:
     uint64_t _planner_id;
     uint32_t get_bucket(uint64_t key);
     uint32_t get_split(uint64_t key, uint32_t range_cnt, uint64_t range_start, uint64_t range_end);
-    uint32_t get_split(uint64_t key, Array<uint64_t> * ranges) ALWAYS_INLINE{
+    inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
         for (uint64_t i = 0; i < ranges->size(); i++){
             if (key <= ranges->get(i)){
                 return i;
@@ -247,8 +247,8 @@ public:
 
 
     void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
-    inline void plan_client_msg(Message *msg, priority_group * planner_pg);
-    inline SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
+    void plan_client_msg(Message *msg, priority_group * planner_pg);
+    SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
 #if DEBUG_QUECC
     void print_threads_status() const {// print phase status
 //        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){

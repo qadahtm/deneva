@@ -63,7 +63,7 @@ void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_qu
     memset(a_entry, 0, sizeof(assign_entry));
 }
 
-inline void split_entry_get_or_create(split_entry *&s_entry,
+void split_entry_get_or_create(split_entry *&s_entry,
                                       boost::lockfree::spsc_queue<split_entry *> * split_entry_free_list) {
     if (!split_entry_free_list->pop(s_entry)){
         s_entry = (split_entry *) mem_allocator.alloc(sizeof(split_entry));
@@ -1319,7 +1319,7 @@ RC PlannerThread::run_normal_mode() {
 
 }
 
-inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs){
+SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs){
 
     if (force_batch_delivery) {
 //#if DEBUG_QUECC
@@ -1885,7 +1885,7 @@ inline SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_
     return SUCCESS;
 }
 
-inline void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
+void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 
 // Query from client
 //    DEBUG_Q("PT_%ld: planning txn %ld\n", _planner_id,planner_txn_id);

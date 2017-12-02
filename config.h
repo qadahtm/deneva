@@ -57,7 +57,7 @@
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
 #define PROG_STATS          false
-#define TIME_ENABLE         false //STATS_ENABLE
+#define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
 
@@ -186,8 +186,8 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 20736
-#define BATCH_SIZE 10368
-//#define BATCH_SIZE 10080
+//#define BATCH_SIZE 10368
+#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
 //#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
@@ -218,7 +218,7 @@
 // In lazy splot, we perform the splitting when we are have buffered enough operations for a batch
 #define LAZY_SPLIT  2
 
-#define MERGE_STRATEGY RR
+#define MERGE_STRATEGY BALANCE_EQ_SIZE
 #define BALANCE_EQ_SIZE 1
 #define GREEDY_RANGE_LOCALITY 2
 #define RR  3
