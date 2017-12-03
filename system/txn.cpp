@@ -858,9 +858,13 @@ void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_
         entry->txn_ctx->prev_tid[entry->req_idx] = row->last_tid;
         row->last_tid = entry->txn_id;
         uint64_t ri = entry->req_idx*rec_size;
+#if PROFILE_EXEC_TIMING
         uint64_t proftime = get_sys_clock();
+#endif
         memcpy(&entry->txn_ctx->undo_buffer_data[ri], row->data, rec_size);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+#endif
         INC_STATS(_thd_id, record_copy_cnt[_thd_id], 1);
         entry->txn_ctx->orig_rows[entry->req_idx] = row;
         entry->txn_ctx->a_types[entry->req_idx] = WR;

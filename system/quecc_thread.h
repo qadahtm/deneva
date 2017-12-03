@@ -33,7 +33,9 @@ class Workload;
  */
 struct transaction_context {
     uint64_t txn_id; // 8 bytes
+#if PROFILE_EXEC_TIMING
     uint64_t starttime; // 8bytes
+#endif
 // this need to be reset on reuse
     // 8bytes
     volatile atomic<uint64_t> completion_cnt; // used at execution time to track operations that have completed
@@ -296,12 +298,13 @@ private:
     boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
 
     // measurements
+#if PROFILE_EXEC_TIMING
     uint64_t idle_starttime = 0;
     uint64_t batch_start_time = 0;
     uint64_t prof_starttime = 0;
     uint64_t txn_prof_starttime = 0;
     uint64_t plan_starttime = 0;
-
+#endif
     // CAS related
     uint64_t expected = 0;
     uint64_t desired = 0;

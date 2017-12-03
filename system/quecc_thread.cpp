@@ -1241,15 +1241,16 @@ RC PlannerThread::run_normal_mode() {
 
     uint64_t next_part = 0;
     while(!simulation->is_done()) {
+#if PROFILE_EXEC_TIMING
         if (plan_starttime == 0 && simulation->is_warmup_done()){
             plan_starttime = get_sys_clock();
         }
-
+#endif
         // dequeue for repective input_queue: there is an input queue for each planner
         // entries in the input queue is placed by the I/O thread
         // for now just dequeue and print notification
 //        DEBUG_Q("Planner_%d is dequeuing\n", _planner_id);
-        prof_starttime = get_sys_clock();
+
 #if RANDOM_PLAN_DEQ
         next_part = RAND(g_part_cnt);
 #else
@@ -1258,26 +1259,33 @@ RC PlannerThread::run_normal_mode() {
 #endif
         query_cnt++;
 //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
+#if PROFILE_EXEC_TIMING
+        prof_starttime = get_sys_clock();
+#endif
         msg = work_queue.plan_dequeue(_planner_id, next_part);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-prof_starttime);
-
+#endif
         if(!msg) {
 //            SAMPLED_DEBUG_Q("PL_%ld: no message??\n", _planner_id);
+#if PROFILE_EXEC_TIMING
             if(idle_starttime == 0){
                 idle_starttime = get_sys_clock();
             }
+#endif
             // we have not recieved a transaction
                 continue;
         }
 
 //        DEBUG_Q("PL_%ld: got a query message, query_cnt = %ld\n", _planner_id, query_cnt);
         INC_STATS(_thd_id,plan_queue_deq_cnt[_planner_id],1);
-
+#if PROFILE_EXEC_TIMING
         if (idle_starttime != 0){
             // plan_idle_time includes dequeue time, which should be subtracted from it
             INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
             idle_starttime = 0;
         }
+#endif
 
 #if BATCHING_MODE == SIZE_BASED
         force_batch_delivery = (batch_cnt == planner_batch_size);
@@ -1289,12 +1297,12 @@ RC PlannerThread::run_normal_mode() {
         if (do_batch_delivery(force_batch_delivery, planner_pg, txn_ctxs) == BREAK){
             continue;
         }
-
+#if PROFILE_EXEC_TIMING
         // we have got a message, which is a transaction
         if (batch_start_time == 0){
             batch_start_time = get_sys_clock();
         }
-
+#endif
         switch (msg->get_rtype()) {
             case CL_QRY: {
 
@@ -1311,8 +1319,9 @@ RC PlannerThread::run_normal_mode() {
     }
 
     mem_allocator.free(entry, sizeof(exec_queue_entry));
+#if PROFILE_EXEC_TIMING
     INC_STATS(_thd_id, plan_total_time[_planner_id], get_sys_clock()-plan_starttime);
-
+#endif
     printf("FINISH PT %ld:%ld\n",_node_id,_thd_id);
     fflush(stdout);
     return FINISH;
@@ -1344,8 +1353,10 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
         // Split execution queues if needed
 
         batch_partition *batch_part = NULL;
+#if PROFILE_EXEC_TIMING
+        uint64_t _prof_starttime = get_sys_clock();
+#endif
 
-        prof_starttime = get_sys_clock();
 #if SPLIT_MERGE_ENABLED
 
 #if SPLIT_STRATEGY == EAGER_SPLIT
@@ -1396,7 +1407,10 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
         }
 //        M_ASSERT_V(assignment.size() == g_thread_cnt, "PL_%ld: size mismatch of assignments to threads, assignment size = %ld, thread-cnt = %d\n",
 //                   _planner_id, assignment.size(), g_thread_cnt);
-        INC_STATS(_thd_id, plan_merge_time[_planner_id], get_sys_clock()-prof_starttime);
+#if PROFILE_EXEC_TIMING
+        INC_STATS(_thd_id, plan_merge_time[_planner_id], get_sys_clock()-_prof_starttime);
+#endif
+
 #else // LAZY SPLIT
         #if BATCHING_MODE != SIZE_BASED
             exec_queue_limit = (batch_cnt/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
@@ -1735,25 +1749,30 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
 //                    M_ASSERT_V(false,"PT_%ld: non-zero batch map slot\n",_planner_id);
 //                }
 #endif
+#if PROFILE_EXEC_TIMING
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
 //                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
                 }
-
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     if (idle_starttime > 0){
                         INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
                         idle_starttime = 0;
                     }
+#endif
                     return BREAK;
                 }
             }
 #endif
             // include idle time from spinning above
+#if PROFILE_EXEC_TIMING
             if (idle_starttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
                 idle_starttime = 0;
             }
+#endif
 
             // Deliver batch partition to the repective ET
             // In case batch slot is not ready, spin!
@@ -1791,7 +1810,6 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
             }
 #endif // BATCHING_MODE == TIME_BASED
         // reset data structures and execution queues for the new batch
-        prof_starttime = get_sys_clock();
         exec_queues->clear();
         for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
             Array<exec_queue_entry> * exec_q;
@@ -1803,16 +1821,18 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
             quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
             exec_queues->add(exec_q);
         }
-
-        INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
-        INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
+#endif
+        INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
+
         // batch delivered
         batch_id++;
         batch_cnt = 0;
-        batch_start_time = 0;
         batch_starting_txn_id = planner_txn_id;
-
+#if PROFILE_EXEC_TIMING
+        batch_start_time = 0;
+#endif
         slot_num = (batch_id % g_batch_map_length);
         // Spin here if PG map slot is not available, this is eager spnning
         // TODO(tq): see if we can delay this for later and do some usefl works
@@ -1889,7 +1909,9 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 
 // Query from client
 //    DEBUG_Q("PT_%ld: planning txn %ld\n", _planner_id,planner_txn_id);
-    txn_prof_starttime = get_sys_clock();
+#if PROFILE_EXEC_TIMING
+    uint64_t _txn_prof_starttime = get_sys_clock();
+#endif
     transaction_context * txn_ctxs = planner_pg->txn_ctxs;
     // create transaction context
     // Reset tctx memblock for reuse
@@ -1901,8 +1923,9 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
     tctx->completion_cnt.store(0,memory_order_acq_rel);
 //    tctx->completion_cnt =0;
     tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
+#if PROFILE_EXEC_TIMING
     tctx->starttime = get_sys_clock(); // record start time of transaction
-
+#endif
     //TODO(tq): move to repective benchmark transaction manager implementation
 #if WORKLOAD == TPCC
     tctx->o_id.store(-1);
@@ -1962,10 +1985,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
         ycsb_request *ycsb_req = ycsb_msg->requests.get(j);
         uint64_t key = ycsb_req->key;
 //                    DEBUG_Q("Planner_%d looking up bucket for key %ld\n", _planner_id, key);
-
-        // TODO(tq): use get split with dynamic ranges
         uint64_t idx = get_split(key, exec_qs_ranges);
-        prof_starttime = get_sys_clock();
         Array<exec_queue_entry> *mrange = exec_queues->get(idx);
 
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
@@ -2147,9 +2167,9 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 
 
 #endif
-
-    INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - txn_prof_starttime);
-
+#if PROFILE_EXEC_TIMING
+    INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - _txn_prof_starttime);
+#endif
     // increment for next ransaction
     planner_txn_id++;
 
@@ -2170,10 +2190,13 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
     uint64_t c_range_end;
     uint64_t idx;
     uint64_t nidx;
+#if PROFILE_EXEC_TIMING
     uint64_t _prof_starttime;
-
+#endif
     idx = get_split(key, exec_qs_ranges);
+#if PROFILE_EXEC_TIMING
     _prof_starttime = get_sys_clock();
+#endif
     mrange = exec_queues->get(idx);
 
     while (mrange->is_full()){
@@ -2287,7 +2310,9 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
 //        print_eqs_ranges_after_swap();
 //#endif
     }
+#if PROFILE_EXEC_TIMING
     INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-_prof_starttime);
+#endif
 
 #else
     M_ASSERT(false, "LAZY_SPLIT not supported in TPCC")

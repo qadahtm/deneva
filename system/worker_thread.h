@@ -65,7 +65,9 @@ public:
 #if CC_ALG == QUECC
     int stage =0; //0=plan, 1=exec, 2,commit
     SRC sync_on_planning_phase_end(uint64_t batch_slot){
+#if PROFILE_EXEC_TIMING
         uint64_t sync_idlestarttime = 0;
+#endif
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint16_t desired16;
         uint16_t expected16;
@@ -145,13 +147,17 @@ public:
                 if (done_cnt == g_plan_thread_cnt){
                     break;
                 }
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
             }
@@ -177,10 +183,12 @@ public:
 
             }
 #endif
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
             desired16 = 0;
@@ -215,22 +223,26 @@ public:
                 if (done_cnt == 0){
                     break;
                 }
-
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
             }
-
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 
 //            DEBUG_Q("WT_%ld: plan_stage - all WT_* are ready to move to next stage, batch_id = %ld\n", _thd_id,wbatch_id);
             // all other threads are ready to exit sync
@@ -283,22 +295,26 @@ public:
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             atomic_thread_fence(memory_order_acquire);
             while(*(work_queue.plan_next_stage[batch_slot]) != 1){
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
                 atomic_thread_fence(memory_order_acquire);
             };
-
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
-
+#endif
 //            DEBUG_Q("WT_%ld: plan_stage WT_0 has SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
 
             work_queue.plan_sblocks[batch_slot][_thd_id].done = 0;
@@ -306,12 +322,16 @@ public:
 
             atomic_thread_fence(memory_order_acquire);
             while(*(work_queue.plan_next_stage[batch_slot]) != 0){
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to RESET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
                 atomic_thread_fence(memory_order_acquire);
@@ -330,10 +350,12 @@ public:
                 SAMPLED_DEBUG_Q("WT_%ld: waiting for WT_0 to SET batch_plan_sync_status, batch_id = %ld\n", _thd_id,wbatch_id);
             }
 #endif
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
 //            idle_starttime =0;
@@ -358,7 +380,9 @@ public:
     }
 
     SRC sync_on_execution_phase_end(uint64_t batch_slot){
+#if PROFILE_EXEC_TIMING
         uint64_t sync_idlestarttime =0;
+#endif
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
         uint16_t desired16;
         uint16_t expected16;
@@ -432,13 +456,17 @@ public:
                 if (done_cnt == g_thread_cnt){
                     break;
                 }
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
 
@@ -465,10 +493,12 @@ public:
 
             }
 #endif
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 
             // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
@@ -503,21 +533,26 @@ public:
                 if (done_cnt == 0){
                     break;
                 }
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
             }
-
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 
             *(work_queue.exec_next_stage[batch_slot]) = 0;
             atomic_thread_fence(memory_order_release);
@@ -566,33 +601,42 @@ public:
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             atomic_thread_fence(memory_order_acquire);
             while (*work_queue.exec_next_stage[batch_slot] != 1){
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
                 atomic_thread_fence(memory_order_acquire);
             }
-
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 
             work_queue.exec_sblocks[batch_slot][_thd_id].done = 0;
             atomic_thread_fence(memory_order_release);
 
             atomic_thread_fence(memory_order_acquire);
             while (*work_queue.exec_next_stage[batch_slot] != 0){
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: exec_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
                 atomic_thread_fence(memory_order_acquire);
@@ -612,10 +656,12 @@ public:
                 SAMPLED_DEBUG_Q("WT_%ld: waiting for WT_0 to SET batch_exec_sync_status, batch_id = %ld\n", _thd_id,wbatch_id);
             }
 #endif
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 //                DEBUG_Q("ET_%ld: execution phase is done, starting commit phase for batch_id = %ld\n", _thd_id, wbatch_id);
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
@@ -654,7 +700,9 @@ public:
 #endif
 
     SRC sync_on_commit_phase_end(uint64_t batch_slot){
+#if PROFILE_EXEC_TIMING
         uint64_t sync_idlestarttime =0;
+#endif
 #if WT_SYNC_METHOD == CAS_GLOBAL_SC ||  WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC ||  WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
 //        uint8_t desired8;
 //        uint8_t expected8;
@@ -728,13 +776,17 @@ public:
                 if (done_cnt == g_thread_cnt){
                     break;
                 }
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
             }
@@ -759,10 +811,12 @@ public:
                 }
             }
 #endif
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 //                DEBUG_Q("ET_%ld: all other ETs has finished their commit\n", _thd_id);
 
             //TODO(tq): remove this later
@@ -827,21 +881,26 @@ public:
                 if (done_cnt == 0){
                     break;
                 }
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 //TQ: no need to preeempt this wait
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
             }
-
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 
             *(work_queue.commit_next_stage[batch_slot]) = 0;
             atomic_thread_fence(memory_order_release);
@@ -887,32 +946,40 @@ public:
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             atomic_thread_fence(memory_order_acquire);
             while (*work_queue.commit_next_stage[batch_slot] != 1){
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
             }
-
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
-
+#endif
             work_queue.commit_sblocks[batch_slot][_thd_id].done = 0;
             atomic_thread_fence(memory_order_release);
 
             atomic_thread_fence(memory_order_acquire);
             while (*work_queue.commit_next_stage[batch_slot] != 0){
+#if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
 //                    DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
                 }
+#endif
                 if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
                     return BREAK;
                 }
                 atomic_thread_fence(memory_order_acquire);
@@ -930,10 +997,12 @@ public:
                 SAMPLED_DEBUG_Q("WT_%ld: waiting for WT_0 to SET batch_commit_sync_status, batch_id = %ld\n", _thd_id,wbatch_id);
             }
 #endif
+#if PROFILE_EXEC_TIMING
             if (sync_idlestarttime > 0){
                 INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
+#endif
 //                DEBUG_Q("ET_%ld: commit phase is done for batch_slot=%ld, going to work on the next batch\n", _thd_id,batch_slot);
 //                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
 //            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
@@ -1007,15 +1076,22 @@ public:
             M_ASSERT_V(false, "ET_%ld: failing to RESET map slot \n", et_id);
         }
 #endif
+#if PROFILE_EXEC_TIMING
         uint64_t quecc_prof_time;
+#endif
         if (batch_part->empty){
+#if PROFILE_EXEC_TIMING
             quecc_prof_time = get_sys_clock();
+#endif
             quecc_pool.batch_part_release(batch_part, wplanner_id, et_id);
+#if PROFILE_EXEC_TIMING
             INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
+#endif
             return;
         }
-
+#if PROFILE_EXEC_TIMING
         quecc_prof_time = get_sys_clock();
+#endif
         if (!batch_part->single_q){
             // free batch_partition
             batch_part->exec_qs->clear();
@@ -1028,7 +1104,9 @@ public:
 
         // free/release batch_part
         quecc_pool.batch_part_release(batch_part, wplanner_id, et_id);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
+#endif
     };
 
     SRC plan_batch(uint64_t batch_slot, TxnManager * my_txn_man);
@@ -1109,8 +1187,10 @@ public:
         exec_queue_entry * exec_qe_ptr UNUSED = NULL;
         uint64_t w_exec_q_index = 0;
         volatile bool eq_switch = false;
+#if PROFILE_EXEC_TIMING
         uint64_t quecc_prof_time =0;
         uint64_t quecc_txn_wait_starttime =0;
+#endif
         RC rc = RCOK;
 
 //        DEBUG_Q("ET_%ld: going to work on PG %ld, batch_id = %ld\n",_thd_id, wplanner_id, wbatch_id);
@@ -1143,38 +1223,51 @@ public:
 
             // Select an entry from selected exec_q
             if (exec_q->size() > 0){
+#if PROFILE_EXEC_TIMING
                 quecc_prof_time = get_sys_clock();
+#endif
                 if (exec_q->size() > eq_comp_cnts[w_exec_q_index]){
                     exec_qe_ptr = exec_q->get_ptr(eq_comp_cnts[w_exec_q_index]);
                 }
+#if PROFILE_EXEC_TIMING
                 INC_STATS(_thd_id,exec_entry_deq_time[_thd_id],get_sys_clock() - quecc_prof_time);
+#endif
 
             }
             else{
                 // empty EQ
                 batch_part_eq_cnt--;
+#if PROFILE_EXEC_TIMING
                 quecc_prof_time = get_sys_clock();
+#endif
                 quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
+#if PROFILE_EXEC_TIMING
                 INC_STATS(_thd_id,exec_mem_free_time[_thd_id],get_sys_clock() - quecc_prof_time);
+#endif
                 eq_switch = true;
                 goto eq_done;
             }
             // execute selected entry
 //            DEBUG_Q("ET_%ld: Processing an entry, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
 //                            _thd_id, wbatch_id, exec_qe_ptr->txn_id, wplanner_id);
-
+#if PROFILE_EXEC_TIMING
             quecc_prof_time = get_sys_clock();
+#endif
 //            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
             rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
             capture_txn_deps(batch_slot, exec_qe_ptr, rc);
+#if PROFILE_EXEC_TIMING
             INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
+#endif
 
             while (rc == RCOK){
                 INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
+#if PROFILE_EXEC_TIMING
                 if (quecc_txn_wait_starttime > 0){
                     INC_STATS(_thd_id,exec_txn_wait_time[_thd_id],get_sys_clock() - quecc_txn_wait_starttime);
                     quecc_txn_wait_starttime = 0;
                 }
+#endif
 //                DEBUG_Q("ET_%ld: Processed an entry successfully, batch_id=%ld, txn_id=%ld, planner_id = %ld\n",
 //                _thd_id, wbatch_id, exec_qe_ptr->txn_id, wplanner_id);
                 eq_comp_cnts[w_exec_q_index]++;
@@ -1188,24 +1281,31 @@ public:
 //                            _thd_id,wbatch_id, wplanner_id,
 //                            eq_comp_cnts[w_exec_q_index], exec_q->size()
 //                    );
+#if PROFILE_EXEC_TIMING
                     quecc_prof_time = get_sys_clock();
+#endif
                     quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
+#if PROFILE_EXEC_TIMING
                     INC_STATS(_thd_id,exec_mem_free_time[_thd_id],get_sys_clock() - quecc_prof_time);
-
+#endif
                     eq_switch = true;
                     break;
                 }
-
+#if PROFILE_EXEC_TIMING
                 quecc_prof_time = get_sys_clock();
+#endif
                 exec_qe_ptr = exec_q->get_ptr(eq_comp_cnts[w_exec_q_index]);
                 rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
                 capture_txn_deps(batch_slot, exec_qe_ptr, rc);
+#if PROFILE_EXEC_TIMING
                 INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
+#endif
             }
 
             if (rc == WAIT){
+#if PROFILE_EXEC_TIMING
                 quecc_txn_wait_starttime = get_sys_clock();
-
+#endif
 //                DEBUG_Q("ET_%ld: waiting on batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
 //                                    " completed %ld out of %ld"
 //                                    " exec_idle_time = %f,  waiting for txn_id = %ld\n",
@@ -1217,7 +1317,9 @@ public:
                 eq_switch = true;
             }
             eq_done:
+#if PROFILE_EXEC_TIMING
             quecc_prof_time = get_sys_clock();
+#endif
             if (!batch_part->single_q && eq_switch){
 //                uint64_t p_w_exec_q_index = w_exec_q_index;
 
@@ -1226,8 +1328,9 @@ public:
 //                    DEBUG_Q("ET_%ld: switching EQ[%ld] to EQ[%ld]\n", _thd_id, p_w_exec_q_index, w_exec_q_index);
 //                }
             }
+#if PROFILE_EXEC_TIMING
             INC_STATS(_thd_id,exec_eq_swtich_time[_thd_id],get_sys_clock() - quecc_prof_time);
-
+#endif
             eq_switch = false;
 
 #else
@@ -1341,11 +1444,13 @@ public:
         return Commit;
     };
     void finalize_txn_commit(transaction_context * tctx, RC rc){
-        uint64_t commit_time = get_sys_clock(),e8,d8;
+        uint64_t e8,d8;
+#if PROFILE_EXEC_TIMING
+        uint64_t commit_time = get_sys_clock();
         uint64_t timespan_long = commit_time - tctx->starttime;
-
         // Committing
         INC_STATS_ARR(_thd_id, first_start_commit_latency, timespan_long);
+#endif
         // Sending response to client a
 #if !SERVER_GENERATE_QUERIES
         Message * rsp_msg = Message::create_message(CL_RSP);
@@ -1528,8 +1633,11 @@ public:
     void checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
-        int max_tries = 64;
+        int max_tries = 64; //TODO(tq): make this configurable
         int trial =0;
+#if PROFILE_EXEC_TIMING
+        uint64_t _prof_starttime =0;
+#endif
 
         volatile uint64_t c_range_start;
         volatile uint64_t c_range_end;
@@ -1539,12 +1647,12 @@ public:
         Array<exec_queue_entry> * oexec_q = NULL;
 
         mrange = exec_queues->get(idx);
-
-        uint64_t _prof_starttime =0;
         while (mrange->is_full()){
+#if PROFILE_EXEC_TIMING
             if (_prof_starttime == 0){
                 _prof_starttime  = get_sys_clock();
             }
+#endif
             trial++;
             if (trial == max_tries){
                 M_ASSERT_V(false, "Execeded max split tries\n");
@@ -1675,9 +1783,12 @@ public:
 //#endif
 
         }
+#if PROFILE_EXEC_TIMING
         if (_prof_starttime > 0){
             INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-_prof_starttime);
         }
+#endif
+
 #else
         M_ASSERT(false, "LAZY_SPLIT not supported in TPCC")
 #endif
@@ -1687,8 +1798,9 @@ public:
 
 // Query from client
 //        DEBUG_Q("PT_%ld planning txn %ld, pbatch_cnt=%ld\n", _planner_id, planner_txn_id,pbatch_cnt);
-        txn_prof_starttime = get_sys_clock();
-
+#if PROFILE_EXEC_TIMING
+        uint64_t _txn_prof_starttime = get_sys_clock();
+#endif
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
         // reset transaction context
 
@@ -1696,7 +1808,9 @@ public:
         tctx->txn_state.store(TXN_INITIALIZED,memory_order_acq_rel);
         tctx->completion_cnt.store(0,memory_order_acq_rel);
         tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
+#if PROFILE_EXEC_TIMING
         tctx->starttime = get_sys_clock(); // record start time of transaction
+#endif
         //TODO(tq): move to repective benchmark transaction manager implementation
 #if WORKLOAD == TPCC
         tctx->o_id.store(-1);
@@ -1923,9 +2037,9 @@ public:
 
 
 #endif
-
-        INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - txn_prof_starttime);
-
+#if PROFILE_EXEC_TIMING
+        INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - _txn_prof_starttime);
+#endif
         // increment for next ransaction
         planner_txn_id++;
         pbatch_cnt++;
@@ -1951,8 +2065,9 @@ public:
         // and the execution threads who are spinning can start execution
         // Here major ranges have one-to-one mapping to worker threads
         // Split execution queues if needed
-
+#if PROFILE_EXEC_TIMING
         uint64_t _prof_starttime = get_sys_clock();
+#endif
 #if SPLIT_MERGE_ENABLED
 
 #if SPLIT_STRATEGY == EAGER_SPLIT
@@ -2013,7 +2128,9 @@ public:
         }
 //        M_ASSERT_V(assignment.size() == g_thread_cnt, "PL_%ld: size mismatch of assignments to threads, assignment size = %ld, thread-cnt = %d\n",
 //                   _planner_id, assignment.size(), g_thread_cnt);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, plan_merge_time[_planner_id], get_sys_clock()-_prof_starttime);
+#endif
 #else // LAZY SPLIT
         #if BATCHING_MODE != SIZE_BASED
         exec_queue_limit = (batch_cnt/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
@@ -2389,7 +2506,9 @@ public:
         }
 #endif // BATCHING_MODE == TIME_BASED
         // reset data structures and execution queues for the new batch
-        prof_starttime = get_sys_clock();
+#if PROFILE_EXEC_TIMING
+        _prof_starttime = get_sys_clock();
+#endif
         exec_queues->clear();
         for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
             Array<exec_queue_entry> * exec_q;
@@ -2401,10 +2520,11 @@ public:
             quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
             exec_queues->add(exec_q);
         }
-
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
-        INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
         INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);
+#endif
+        INC_STATS(_thd_id, plan_batch_cnts[_planner_id], 1);
 
         //reset batch_cnt for next time
         pbatch_cnt = 0;
@@ -2454,11 +2574,12 @@ private:
     boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
 
     // measurements
+#if PROFILE_EXEC_TIMING
     uint64_t batch_start_time = 0;
     uint64_t prof_starttime = 0;
     uint64_t txn_prof_starttime = 0;
     uint64_t plan_starttime = 0;
-
+#endif
     // CAS related
     uint64_t expected = 0;
     uint64_t desired = 0;

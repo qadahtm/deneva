@@ -203,6 +203,18 @@ public:
     uint64_t * plan_batch_cnts;
     uint64_t * plan_size_batch_cnts;
     uint64_t * plan_time_batch_cnts;
+
+    uint64_t * plan_queue_deq_cnt;
+    uint64_t * plan_reuse_exec_queue_cnt;
+    uint64_t * plan_alloc_exec_queue_cnt;
+    uint64_t plan_full_batch_cnt;
+    uint64_t plan_queue_enq_cnt;
+
+    uint64_t * exec_batch_part_cnt;
+    uint64_t * exec_batch_cnt;
+    uint64_t * exec_txn_cnts;
+    uint64_t * exec_txn_frag_cnt;
+#if PROFILE_EXEC_TIMING
     double * plan_batch_process_time;
     double * plan_idle_time;
     double * plan_split_time;
@@ -213,27 +225,17 @@ public:
     double * plan_queue_deq_pop_time;
     double * plan_queue_deq_free_mem_time;
     double * plan_batch_delivery_time;
-    uint64_t * plan_queue_deq_cnt;
     double * plan_txn_process_time;
     double * plan_total_time;
-    uint64_t * plan_reuse_exec_queue_cnt;
-    uint64_t * plan_alloc_exec_queue_cnt;
-    uint64_t plan_full_batch_cnt;
+
     double plan_batch_time;
-    uint64_t plan_queue_enq_cnt;
     double plan_queue_wait_time;
     double plan_queue_enqueue_time;
 
-
-
-    uint64_t * exec_batch_part_cnt;
-    uint64_t * exec_batch_cnt;
-    uint64_t * exec_txn_cnts;
-    uint64_t * exec_txn_frag_cnt;
     double * exec_batch_proc_time;
     double * exec_idle_time;
     double * exec_mem_free_time;
-    double * exec_txn_ctx_update;
+
     double * exec_resp_msg_create_time;
     double * exec_batch_part_proc_time;
     double * exec_txn_commit_time;
@@ -251,8 +253,7 @@ public:
     double * wt_hl_sync_plan_time;
     double * wt_hl_sync_exec_time;
     double * wt_hl_sync_commit_time;
-
-
+#endif
 
   // OCC
   double occ_validate_time;

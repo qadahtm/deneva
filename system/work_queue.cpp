@@ -188,10 +188,11 @@ void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
 Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
   assert(ISSERVER);
   Message * msg = NULL;
-
+#if PROFILE_EXEC_TIMING
   uint64_t prof_starttime = 0;
 //    DEBUG_Q("thread %ld, planner_%ld, poping from queue\n", thd_id, home_partition);
   prof_starttime = get_sys_clock();
+#endif
 #if SERVER_GENERATE_QUERIES
   if(ISSERVER) {
 #if INIT_QUERY_MSGS
@@ -221,9 +222,9 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
     INC_STATS(thd_id, plan_queue_deq_free_mem_time[home_partition], get_sys_clock()-prof_starttime);
   }
 #endif
-
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id, plan_queue_deq_pop_time[home_partition], get_sys_clock()-prof_starttime);
-
+#endif
   return msg;
 
 }
