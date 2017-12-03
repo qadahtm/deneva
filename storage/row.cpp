@@ -38,6 +38,7 @@ row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id) {
 	tuple_size = schema->get_tuple_size();
 #if SIM_FULL_ROW
 	data = (char *) mem_allocator.alloc(sizeof(char) * tuple_size);
+//	data = (char *) mem_allocator.align_alloc(sizeof(char) * tuple_size);
 #else
 	data = (char *) mem_allocator.alloc(sizeof(uint64_t) * 1);
 #endif
@@ -57,6 +58,7 @@ row_t::init_from_pool(table_t *host_table, uint64_t part_id, uint64_t row_id, ui
 	quecc_pool.databuff_get_or_create(data,tuple_size, thd_id);
 #else
 	data = (char *) mem_allocator.alloc(sizeof(char) * tuple_size);
+//	data = (char *) mem_allocator.align_alloc(sizeof(char) * tuple_size);
 #endif
 #else
 	data = (char *) mem_allocator.alloc(sizeof(uint64_t) * 1);

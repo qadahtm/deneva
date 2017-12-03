@@ -21,7 +21,7 @@
 #include "mem_alloc.h"
 #include "manager.h"
 #include "stdint.h"
-
+#if CC_ALG == TIMESTAMP
 void Row_ts::init(row_t * row) {
 	_row = row;
 	wts = 0;
@@ -166,7 +166,9 @@ ts_t Row_ts::cal_min(TsType type) {
 
 RC Row_ts::access(TxnManager * txn, TsType type, row_t * row) {
 	RC rc = Abort;
+#if PROFILE_EXEC_TIMING
 	uint64_t starttime = get_sys_clock();
+#endif
 	ts_t ts = txn->get_timestamp();
 	if (g_central_man)
 		glob_manager.lock_row(_row);
@@ -255,9 +257,11 @@ RC Row_ts::access(TxnManager * txn, TsType type, row_t * row) {
 		assert(false);
 	
 final:
+#if PROFILE_EXEC_TIMING
     uint64_t timespan = get_sys_clock() - starttime;
     txn->txn_stats.cc_time += timespan;
     txn->txn_stats.cc_time_short += timespan;
+#endif
 	if (g_central_man)
 		glob_manager.release_row(_row);
 	else
@@ -322,3 +326,4 @@ void Row_ts::update_buffer(uint64_t thd_id) {
 	}
 }
 
+#endif // if CC_ALG == TIMESTAMP

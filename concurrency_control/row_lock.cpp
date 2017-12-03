@@ -20,7 +20,7 @@
 #include "mem_alloc.h"
 #include "manager.h"
 #include "helper.h"
-
+#if CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC || CC_ALG == LADS
 void Row_lock::init(row_t * row) {
     _row = row;
     owners_size = 1;//1031;
@@ -52,15 +52,21 @@ RC OPTIMIZE_OUT Row_lock::lock_get(lock_t type, TxnManager * txn) {
 RC OPTIMIZE_OUT Row_lock::lock_get(lock_t type, TxnManager * txn, uint64_t* &txnids, int &txncnt) {
     assert (CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN);
     RC rc;
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
+#endif
 
     if (g_central_man) {
         glob_manager.lock_row(_row);
     }
     else {
+#if PROFILE_EXEC_TIMING
         uint64_t mtx_wait_starttime = get_sys_clock();
+#endif
         pthread_mutex_lock( latch );
+#if PROFILE_EXEC_TIMING
         INC_STATS(txn->get_thd_id(),mtx[17],get_sys_clock() - mtx_wait_starttime);
+#endif
     }
 
     if(owner_cnt > 0) {
@@ -196,6 +202,7 @@ RC OPTIMIZE_OUT Row_lock::lock_get(lock_t type, TxnManager * txn, uint64_t* &txn
 
     }
 final:
+#if PROFILE_EXEC_TIMING
     uint64_t curr_time = get_sys_clock();
     uint64_t timespan = curr_time - starttime;
     if (rc == WAIT && txn->twopl_wait_start == 0) {
@@ -203,9 +210,9 @@ final:
     }
     txn->txn_stats.cc_time += timespan;
     txn->txn_stats.cc_time_short += timespan;
-INC_STATS(txn->get_thd_id(),twopl_getlock_time,timespan);
-INC_STATS(txn->get_thd_id(),twopl_getlock_cnt,1);
-	
+    INC_STATS(txn->get_thd_id(),twopl_getlock_time,timespan);
+    INC_STATS(txn->get_thd_id(),twopl_getlock_cnt,1);
+#endif
     if (g_central_man)
         glob_manager.release_row(_row);
     else
@@ -223,15 +230,20 @@ RC Row_lock::lock_release(TxnManager * txn) {
         return RCOK;
     }
 #endif
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
+#endif
       if (g_central_man)
           glob_manager.lock_row(_row);
       else {
+#if PROFILE_EXEC_TIMING
       uint64_t mtx_wait_starttime = get_sys_clock();
+#endif
           pthread_mutex_lock( latch );
+#if PROFILE_EXEC_TIMING
       INC_STATS(txn->get_thd_id(),mtx[18],get_sys_clock() - mtx_wait_starttime);
+#endif
     }
-
 
       DEBUG("unlock (%ld,%ld): owners %d, own type %d, key %ld %lx\n",txn->get_txn_id(),txn->get_batch_id(),owner_cnt,lock_type,_row->get_primary_key(),(uint64_t)_row);
 
@@ -242,14 +254,20 @@ RC Row_lock::lock_release(TxnManager * txn) {
       owner_cnt--;
       if (owner_cnt == 0) {
         INC_STATS(txn->get_thd_id(),twopl_owned_cnt,1);
+#if PROFILE_EXEC_TIMING
         uint64_t endtime = get_sys_clock();
         INC_STATS(txn->get_thd_id(),twopl_owned_time,endtime - own_starttime);
+#endif
         if(lock_type == LOCK_SH) {
+#if PROFILE_EXEC_TIMING
           INC_STATS(txn->get_thd_id(),twopl_sh_owned_time,endtime - own_starttime);
+#endif
           INC_STATS(txn->get_thd_id(),twopl_sh_owned_cnt,1);
         }
         else {
+#if PROFILE_EXEC_TIMING
           INC_STATS(txn->get_thd_id(),twopl_ex_owned_time,endtime - own_starttime);
+#endif
           INC_STATS(txn->get_thd_id(),twopl_ex_owned_cnt,1);
         }
         lock_type = LOCK_NONE;
@@ -273,14 +291,20 @@ RC Row_lock::lock_release(TxnManager * txn) {
           owner_cnt --;
       if (owner_cnt == 0) {
         INC_STATS(txn->get_thd_id(),twopl_owned_cnt,1);
+#if PROFILE_EXEC_TIMING
         uint64_t endtime = get_sys_clock();
         INC_STATS(txn->get_thd_id(),twopl_owned_time,endtime - own_starttime);
+#endif
         if(lock_type == LOCK_SH) {
+#if PROFILE_EXEC_TIMING
           INC_STATS(txn->get_thd_id(),twopl_sh_owned_time,endtime - own_starttime);
+#endif
           INC_STATS(txn->get_thd_id(),twopl_sh_owned_cnt,1);
         }
         else {
+#if PROFILE_EXEC_TIMING
           INC_STATS(txn->get_thd_id(),twopl_ex_owned_time,endtime - own_starttime);
+#endif
           INC_STATS(txn->get_thd_id(),twopl_ex_owned_cnt,1);
         }
         lock_type = LOCK_NONE;
@@ -320,6 +344,7 @@ RC Row_lock::lock_release(TxnManager * txn) {
           printf("LOCK %ld %ld\n",entry->txn->get_txn_id(),get_sys_clock());
 #endif
           DEBUG("2lock (%ld,%ld): owners %d, own type %d, req type %d, key %ld %lx\n",entry->txn->get_txn_id(),entry->txn->get_batch_id(),owner_cnt,lock_type,entry->type,_row->get_primary_key(),(uint64_t)_row);
+#if PROFILE_EXEC_TIMING
           uint64_t timespan = get_sys_clock() - entry->txn->twopl_wait_start;
           entry->txn->twopl_wait_start = 0;
 #if CC_ALG != CALVIN
@@ -327,6 +352,7 @@ RC Row_lock::lock_release(TxnManager * txn) {
           entry->txn->txn_stats.cc_block_time_short += timespan;
 #endif
           INC_STATS(txn->get_thd_id(),twopl_wait_time,timespan);
+#endif
 
 #if CC_ALG != NO_WAIT
           STACK_PUSH(owners[hash(entry->txn->get_txn_id())], entry);
@@ -341,9 +367,12 @@ RC Row_lock::lock_release(TxnManager * txn) {
           if(entry->txn->decr_lr() == 0) {
               if(ATOM_CAS(entry->txn->lock_ready,false,true)) {
 #if CC_ALG == CALVIN
+#if PROFILE_EXEC_TIMING
                   entry->txn->txn_stats.cc_block_time += timespan;
                   entry->txn->txn_stats.cc_block_time_short += timespan;
+#endif //#if PROFILE_EXEC_TIMING
 #endif
+
                   txn_table.restart_txn(txn->get_thd_id(),entry->txn->get_txn_id(),entry->txn->get_batch_id());
               }
           }
@@ -355,11 +384,12 @@ RC Row_lock::lock_release(TxnManager * txn) {
           return_entry(entry);
 #endif
       }
-
+#if PROFILE_EXEC_TIMING
       uint64_t timespan = get_sys_clock() - starttime;
       txn->txn_stats.cc_time += timespan;
       txn->txn_stats.cc_time_short += timespan;
       INC_STATS(txn->get_thd_id(),twopl_release_time,timespan);
+#endif
       INC_STATS(txn->get_thd_id(),twopl_release_cnt,1);
 
       if (g_central_man)
@@ -393,3 +423,4 @@ void OPTIMIZE_OUT Row_lock::return_entry(LockEntry * entry) {
     mem_allocator.free(entry, sizeof(LockEntry));
 }
 
+#endif //if CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN || CC_ALG == QUECC || CC_ALG == DUMMY_CC || CC_ALG == LADS

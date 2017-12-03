@@ -34,6 +34,7 @@
 #include "message.h"
 #include "work_queue.h"
 
+#if CC_ALG == CALVIN
 void CalvinLockThread::setup() {
 }
 
@@ -169,3 +170,4 @@ RC CalvinSequencerThread::run() {
     return FINISH;
 
 }
+#endif //#if CC_ALG == CALVIN

@@ -22,7 +22,7 @@
 #include "mem_alloc.h"
 #include "row_occ.h"
 
-
+#if CC_ALG == OCC
 set_ent::set_ent() {
     set_size = 0;
     txn = NULL;
@@ -41,13 +41,17 @@ void OptCC::init() {
 
 RC OptCC::validate(TxnManager *txn) {
     RC rc;
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
+#endif
 #if PER_ROW_VALID
     rc = per_row_validate(txn);
 #else
     rc = central_validate(txn);
 #endif
+#if PROFILE_EXEC_TIMING
     INC_STATS(txn->get_thd_id(), occ_validate_time, get_sys_clock() - starttime);
+#endif
     return rc;
 }
 
@@ -115,8 +119,10 @@ OptCC::per_row_validate(TxnManager *txn) {
 
 RC OptCC::central_validate(TxnManager *txn) {
     RC rc;
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
     uint64_t total_starttime = starttime;
+#endif
     uint64_t start_tn = txn->get_start_timestamp();
     uint64_t finish_tn;
     //set_ent ** finish_active;
@@ -135,8 +141,10 @@ RC OptCC::central_validate(TxnManager *txn) {
 
     //pthread_mutex_lock( &latch );
     sem_wait(&_semaphore);
+#if PROFILE_EXEC_TIMING
     INC_STATS(txn->get_thd_id(), occ_cs_wait_time, get_sys_clock() - starttime);
     starttime = get_sys_clock();
+#endif
     //finish_tn = tnc;
     assert(!g_ts_batch_alloc);
     finish_tn = glob_manager.get_ts(txn->get_thd_id());
@@ -157,10 +165,10 @@ RC OptCC::central_validate(TxnManager *txn) {
     DEBUG("Start Validation %ld: start_ts %ld, finish_ts %ld, active size %ld\n", txn->get_txn_id(), start_tn,
           finish_tn, f_active_len);
     sem_post(&_semaphore);
+#if PROFILE_EXEC_TIMING
     INC_STATS(txn->get_thd_id(), occ_cs_time, get_sys_clock() - starttime);
     starttime = get_sys_clock();
-    starttime = get_sys_clock();
-
+#endif
     uint64_t checked = 0;
     uint64_t active_checked = 0;
     uint64_t hist_checked = 0;
@@ -173,15 +181,18 @@ RC OptCC::central_validate(TxnManager *txn) {
             ++checked;
             valid = test_valid(his, rset);
             if (!valid) {
+#if PROFILE_EXEC_TIMING
                 INC_STATS(txn->get_thd_id(), occ_hist_validate_fail_time, get_sys_clock() - starttime);
+#endif
                 goto final;
             }
             his = his->next;
         }
     }
-
+#if PROFILE_EXEC_TIMING
     INC_STATS(txn->get_thd_id(), occ_hist_validate_time, get_sys_clock() - starttime);
     starttime = get_sys_clock();
+#endif
     stop = 1;
     for (UInt32 i = 0; i < f_active_len; i++) {
         set_ent *wact = finish_active[i];
@@ -194,12 +205,16 @@ RC OptCC::central_validate(TxnManager *txn) {
             valid = test_valid(wact, wset);
         }
         if (!valid) {
+#if PROFILE_EXEC_TIMING
             INC_STATS(txn->get_thd_id(), occ_act_validate_fail_time, get_sys_clock() - starttime);
+#endif
             goto final;
         }
     }
+#if PROFILE_EXEC_TIMING
     INC_STATS(txn->get_thd_id(), occ_act_validate_time, get_sys_clock() - starttime);
     starttime = get_sys_clock();
+#endif
     final:
     /*
       if (valid)
@@ -235,7 +250,9 @@ RC OptCC::central_validate(TxnManager *txn) {
         sem_post(&_semaphore);
     }
     DEBUG("End Validation %ld: active# %ld, hist# %ld\n", txn->get_txn_id(), active_checked, hist_checked);
+#if PROFILE_EXEC_TIMING
     INC_STATS(txn->get_thd_id(), occ_validate_time, get_sys_clock() - total_starttime);
+#endif
     return rc;
 }
 
@@ -254,7 +271,9 @@ void OptCC::central_finish(RC rc, TxnManager *txn) {
 
     if (!readonly) {
         // only update active & tnc for non-readonly transactions
+#if PROFILE_EXEC_TIMING
         uint64_t starttime = get_sys_clock();
+#endif
 //		pthread_mutex_lock( &latch );
         sem_wait(&_semaphore);
         set_ent *act = active;
@@ -290,7 +309,9 @@ void OptCC::central_finish(RC rc, TxnManager *txn) {
         }
         //	pthread_mutex_unlock( &latch );
         sem_post(&_semaphore);
+#if PROFILE_EXEC_TIMING
         INC_STATS(txn->get_thd_id(), occ_finish_time, get_sys_clock() - starttime);
+#endif
     }
 }
 
@@ -326,3 +347,4 @@ bool OptCC::test_valid(set_ent *set1, set_ent *set2) {
         }
     return true;
 }
+#endif // #if CC_ALG == OCC

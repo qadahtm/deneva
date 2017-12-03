@@ -20,7 +20,7 @@
 #include "manager.h"
 #include "row_mvcc.h"
 #include "mem_alloc.h"
-
+#if CC_ALG == MVCC
 void Row_mvcc::init(row_t * row) {
 	_row = row;
 	readreq_mvcc = NULL;
@@ -242,8 +242,9 @@ bool Row_mvcc::conflict(TsType type, ts_t ts) {
 RC Row_mvcc::access(TxnManager * txn, TsType type, row_t * row) {
 	RC rc = RCOK;
 	ts_t ts = txn->get_timestamp();
+#if PROFILE_EXEC_TIMING
 	uint64_t starttime = get_sys_clock();
-
+#endif
 	if (g_central_man)
 		glob_manager.lock_row(_row);
 	else
@@ -321,11 +322,11 @@ RC Row_mvcc::access(TxnManager * txn, TsType type, row_t * row) {
 			}
 		}
 	}
-	
+#if PROFILE_EXEC_TIMING
 	uint64_t timespan = get_sys_clock() - starttime;
 	txn->txn_stats.cc_time += timespan;
 	txn->txn_stats.cc_time_short += timespan;
-
+#endif
 	if (g_central_man)
 		glob_manager.release_row(_row);
 	else
@@ -353,9 +354,11 @@ void Row_mvcc::update_buffer(TxnManager * txn) {
 		assert(row->get_schema() == _row->get_schema());
 
 		req->txn->ts_ready = true;
+#if PROFILE_EXEC_TIMING
 		uint64_t timespan = get_sys_clock() - req->starttime;
 		req->txn->txn_stats.cc_block_time += timespan;
 		req->txn->txn_stats.cc_block_time_short += timespan;
+#endif
     txn_table.restart_txn(txn->get_thd_id(),req->txn->get_txn_id(),0);
 		tofree = req;
 		req = req->next;
@@ -363,3 +366,4 @@ void Row_mvcc::update_buffer(TxnManager * txn) {
 		return_req_entry(tofree);
 	}
 }
+#endif //#if CC_ALG == MVCC

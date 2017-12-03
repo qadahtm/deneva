@@ -55,7 +55,9 @@ RC WorkerThread::process(Message *msg) {
 //    DEBUG_Q("%ld Processing %ld %d \n",get_thd_id(),msg->get_txn_id(),msg->get_rtype());
 
     assert(msg->get_rtype() == CL_QRY || msg->get_txn_id() != UINT64_MAX);
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
+#endif
     switch (msg->get_rtype()) {
         case RPASS:
             //rc = process_rpass(msg);
@@ -111,11 +113,13 @@ RC WorkerThread::process(Message *msg) {
             assert(false);
             break;
     }
+#if PROFILE_EXEC_TIMING
     uint64_t timespan = get_sys_clock() - starttime;
-    INC_STATS(_thd_id, worker_process_cnt, 1);
     INC_STATS(_thd_id, worker_process_time, timespan);
-    INC_STATS(_thd_id, worker_process_cnt_by_type[msg->rtype], 1);
     INC_STATS(_thd_id, worker_process_time_by_type[msg->rtype], timespan);
+#endif
+    INC_STATS(_thd_id, worker_process_cnt, 1);
+    INC_STATS(_thd_id, worker_process_cnt_by_type[msg->rtype], 1);
     DEBUG("%ld EndProcessing %d %ld\n", get_thd_id(), msg->get_rtype(), msg->get_txn_id());
     return rc;
 }
@@ -136,7 +140,7 @@ void WorkerThread::release_txn_man() {
     txn_table.release_transaction_manager(get_thd_id(), txn_man->get_txn_id(), txn_man->get_batch_id());
     txn_man = NULL;
 }
-
+#if CC_ALG == CALVIN
 void WorkerThread::calvin_wrapup() {
     DEBUG("(%ld,%ld) calvin ack to %ld\n", txn_man->get_txn_id(), txn_man->get_batch_id(), txn_man->return_id);
     txn_man->release_locks(RCOK);
@@ -152,6 +156,7 @@ void WorkerThread::calvin_wrapup() {
 #endif
     release_txn_man();
 }
+#endif
 
 // Can't use txn_man after this function
 void WorkerThread::commit() {
@@ -160,11 +165,13 @@ void WorkerThread::commit() {
     //        txn_man->commit_stats();
     assert(txn_man);
 //    assert(IS_LOCAL(txn_man->get_txn_id()));
-
+#if PROFILE_EXEC_TIMING
     uint64_t timespan = get_sys_clock() - txn_man->txn_stats.starttime;
+    DEBUG("WT_%ld: COMMIT %ld %f -- %f\n",_thd_id,txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
+#endif
 //    DEBUG_Q("COMMIT %ld %f -- %f\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
 //          (double) timespan / BILLION);
-    DEBUG("WT_%ld: COMMIT %ld %f -- %f\n",_thd_id,txn_man->get_txn_id(),simulation->seconds_from_start(get_sys_clock()),(double)timespan/ BILLION);
+
     // Send result back to client
 #if !SERVER_GENERATE_QUERIES
     msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
@@ -177,11 +184,12 @@ void WorkerThread::commit() {
 }
 
 void WorkerThread::abort() {
-
+#if PROFILE_EXEC_TIMING
     DEBUG("ABORT %ld -- %f\n", txn_man->get_txn_id(), (double) get_sys_clock() - run_starttime / BILLION);
+#endif
 //    DEBUG_Q("WT_%ld: ABORT txn_id=%ld,txn_man_thd_id=%ld,thd_id=%ld -- %f\n",_thd_id, txn_man->get_txn_id(),txn_man->get_thd_id(),get_thd_id(), (double) get_sys_clock() - run_starttime / BILLION);
     // TODO: TPCC Rollback here
-
+    // TQ: we should not do TPCC rollback here, it should be done earlier
 #if ABORT_THREAD || ABORT_QUEUES
     ++txn_man->abort_cnt;
     txn_man->reset();
@@ -1390,7 +1398,9 @@ RC WorkerThread::run_normal_mode() {
     tsetup();
     printf("Running WorkerThread %ld\n", _thd_id);
 #if !(CC_ALG == QUECC || CC_ALG == DUMMY_CC)
+#if PROFILE_EXEC_TIMING
     uint64_t ready_starttime;
+#endif
 #endif
 
 #if CC_ALG == QUECC
@@ -1419,15 +1429,15 @@ RC WorkerThread::run_normal_mode() {
     // Array to track ranges
     exec_qs_ranges->init(g_exec_qs_max_size);
 #if WORKLOAD == YCSB
-    for (uint64_t i =0; i<g_thread_cnt; ++i){
+    for (uint64_t i =0; i<g_thread_cnt-1; ++i){
 
         if (i == 0){
             exec_qs_ranges->add(bucket_size);
             continue;
         }
-
         exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
     }
+    exec_qs_ranges->add(g_synth_table_size); // last range is the table size
 #elif WORKLOAD == TPCC
     for (uint64_t i =0; i<g_num_wh; ++i){
 
@@ -1438,6 +1448,7 @@ RC WorkerThread::run_normal_mode() {
 
         exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
     }
+    exec_qs_ranges->add(UINT64_MAX); // last range is the table size
 #else
     M_ASSERT(false,"only YCSB and TPCC are currently supported\n")
 #endif
@@ -1910,15 +1921,19 @@ RC WorkerThread::run_normal_mode() {
 #else
         Message * msg = work_queue.dequeue(_thd_id);
         if(!msg) {
+#if PROFILE_EXEC_TIMING
             if(idle_starttime ==0){
                 idle_starttime = get_sys_clock();
             }
+#endif
             continue;
         }
+#if PROFILE_EXEC_TIMING
         if(idle_starttime > 0) {
             INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
             idle_starttime = 0;
         }
+#endif
 
         //uint64_t starttime = get_sys_clock();
         if(msg->rtype != CL_QRY || CC_ALG == CALVIN) {
@@ -1955,10 +1970,13 @@ RC WorkerThread::run_normal_mode() {
           msg->wq_time = 0;
           txn_man->txn_stats.work_queue_cnt += 1;
 #endif
-
+#if PROFILE_EXEC_TIMING
           ready_starttime = get_sys_clock();
+#endif
           bool ready = txn_man->unset_ready();
+#if PROFILE_EXEC_TIMING
           INC_STATS(get_thd_id(),worker_activate_txn_time,get_sys_clock() - ready_starttime);
+#endif
           if(!ready) {
             // Return to work queue, end processing
             work_queue.enqueue(get_thd_id(),msg,true);
@@ -1968,23 +1986,30 @@ RC WorkerThread::run_normal_mode() {
         }
 
         process(msg);
-
+#if PROFILE_EXEC_TIMING
         ready_starttime = get_sys_clock();
+#endif
         if(txn_man) {
           bool ready = txn_man->set_ready();
           assert(ready);
         }
+#if PROFILE_EXEC_TIMING
         INC_STATS(get_thd_id(),worker_deactivate_txn_time,get_sys_clock() - ready_starttime);
+#endif
 
-        // delete message
-        ready_starttime = get_sys_clock();
 #if CC_ALG != CALVIN
 #if !INIT_QUERY_MSGS
+#if PROFILE_EXEC_TIMING
+        // delete message
+        ready_starttime = get_sys_clock();
+#endif
         msg->release();
 //        Message::release_message(msg);
-#endif
-#endif
+#endif //#if !INIT_QUERY_MSGS
+#endif // #if CC_ALG != CALVIN
+#if PROFILE_EXEC_TIMING
         INC_STATS(get_thd_id(),worker_release_msg_time,get_sys_clock() - ready_starttime);
+#endif
 #endif // if QueCCC
     }
 
@@ -2203,19 +2228,23 @@ RC WorkerThread::process_rtxn(Message *msg) {
         DEBUG("WT_%ld: Getting txn man txn_id = %ld\n",_thd_id, txn_id);
         txn_man = txn_table.get_transaction_manager(ctid, txn_id, 0);
         txn_man->register_thread(this);
-
+#if PROFILE_EXEC_TIMING
         uint64_t ready_starttime = get_sys_clock();
+#endif
         bool ready = txn_man->unset_ready();
+#if PROFILE_EXEC_TIMING
         INC_STATS(ctid, worker_activate_txn_time, get_sys_clock() - ready_starttime);
+#endif
         assert(ready);
         if (CC_ALG == WAIT_DIE) {
             txn_man->set_timestamp(get_next_ts());
         }
-
+#if PROFILE_EXEC_TIMING
         txn_man->txn_stats.starttime = get_sys_clock();
         txn_man->txn_stats.restart_starttime = txn_man->txn_stats.starttime;
         DEBUG("WT_%ld: START %ld %f %lu\n",_thd_id, txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
                 txn_man->txn_stats.starttime);
+#endif
         // this should make a copy of the query object to the txn_man
         msg->copy_to_txn(txn_man);
         INC_STATS(ctid, local_txn_start_cnt, 1);
@@ -2333,9 +2362,8 @@ RC WorkerThread::process_rfwd(Message *msg) {
     return WAIT;
 
 }
-
+#if CC_ALG == CALVIN
 RC WorkerThread::process_calvin_rtxn(Message *msg) {
-
     DEBUG("START %ld %f %lu\n", txn_man->get_txn_id(), simulation->seconds_from_start(get_sys_clock()),
           txn_man->txn_stats.starttime);
 #if !SINGLE_NODE
@@ -2351,7 +2379,7 @@ RC WorkerThread::process_calvin_rtxn(Message *msg) {
     return RCOK;
 
 }
-
+#endif
 bool WorkerThread::is_cc_new_timestamp() {
     return (CC_ALG == MVCC || CC_ALG == TIMESTAMP);
 }

@@ -29,7 +29,7 @@
 #include "message.h"
 #include "stats.h"
 #include <boost/lockfree/queue.hpp>
-
+#if CC_ALG == CALVIN
 void Sequencer::init(Workload * wl) {
   next_txn_id = 0;
   rsp_cnt = g_node_cnt + g_client_node_cnt;
@@ -280,6 +280,7 @@ void Sequencer::process_txn( Message * msg,uint64_t thd_id, uint64_t early_start
         en->list[id].seq_first_startts = early_start;
     }
     assert(en->size == en->txns_left);
+    M_ASSERT_V(en->size <= ((uint64_t)g_inflight_max * g_node_cnt), "en->size=%lu\n", en->size);
     assert(en->size <= ((uint64_t)g_inflight_max * g_node_cnt));
 
     // Add new txn to fill queue
@@ -356,3 +357,4 @@ void Sequencer::send_next_batch(uint64_t thd_id) {
   next_txn_id = 0;
 }
 
+#endif //#if CC_ALG == CALVIN

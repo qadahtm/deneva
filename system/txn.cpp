@@ -39,7 +39,9 @@
 
 void TxnStats::init() {
     starttime = 0;
+#if PROFILE_EXEC_TIMING
     wait_starttime = get_sys_clock();
+#endif
     total_process_time = 0;
     process_time = 0;
     total_local_wait_time = 0;
@@ -77,7 +79,9 @@ void TxnStats::clear_short() {
 }
 
 void TxnStats::reset() {
+#if PROFILE_EXEC_TIMING
     wait_starttime = get_sys_clock();
+#endif
     total_process_time += process_time;
     process_time = 0;
     total_local_wait_time += local_wait_time;
@@ -312,20 +316,26 @@ void Transaction::release(uint64_t thd_id) {
 }
 
 void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
+#if PROFILE_EXEC_TIMING
     uint64_t prof_starttime = get_sys_clock();
+#endif
     if (!txn) {
         DEBUG_M("Transaction alloc\n");
         txn_pool.get(thd_id, txn);
 
     }
+#if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[15], get_sys_clock() - prof_starttime);
     prof_starttime = get_sys_clock();
+#endif
     //txn->init();
     if (!query) {
         DEBUG_M("TxnManager::init Query alloc\n");
         qry_pool.get(thd_id, query);
     }
+#if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[16], get_sys_clock() - prof_starttime);
+#endif
     query->init();
 //    reset();
     sem_init(&rsp_mutex, 0, 1);
@@ -413,13 +423,21 @@ void TxnManager::reset() {
 
 void
 TxnManager::release() {
+#if PROFILE_EXEC_TIMING
     uint64_t prof_starttime = get_sys_clock();
+#endif
     qry_pool.put(get_thd_id(), query);
+#if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[0], get_sys_clock() - prof_starttime);
+#endif
     query = NULL;
+#if PROFILE_EXEC_TIMING
     prof_starttime = get_sys_clock();
+#endif
     txn_pool.put(get_thd_id(), txn);
+#if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[1], get_sys_clock() - prof_starttime);
+#endif
     txn = NULL;
 
 #if CC_ALG == MAAT
@@ -592,26 +610,30 @@ bool TxnManager::is_multi_part() {
 }
 
 void TxnManager::commit_stats() {
+#if PROFILE_EXEC_TIMING
     uint64_t commit_time = get_sys_clock();
     uint64_t timespan_short = commit_time - txn_stats.restart_starttime;
     uint64_t timespan_long = commit_time - txn_stats.starttime;
-
-    uint64_t ctid = get_thd_id();
     uint64_t txn_id =  get_txn_id();
     uint64_t batch_id = get_batch_id();
-
+#endif
+    uint64_t ctid = get_thd_id();
     INC_STATS(ctid, total_txn_commit_cnt, 1);
 
-//    if (!IS_LOCAL(ctid) && CC_ALG != CALVIN) {
-//        INC_STATS(ctid, remote_txn_commit_cnt, 1);
-//        txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
-//        return;
-//    }
+#if !SINGLE_NODE
+    if (!IS_LOCAL(ctid) && CC_ALG != CALVIN) {
+        INC_STATS(ctid, remote_txn_commit_cnt, 1);
+        txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
+        return;
+    }
+#endif
 
 
     INC_STATS(ctid, txn_cnt, 1);
     INC_STATS(ctid, local_txn_commit_cnt, 1);
+#if PROFILE_EXEC_TIMING
     INC_STATS(ctid, txn_run_time, timespan_long);
+#endif
 //    if(STRICT_PPT && PART_PER_TXN == 1) {
 //        if (query->partitions_touched.size() != PART_PER_TXN){
 //            for (uint64_t i =0; i <query->partitions_touched.size(); ++i){
@@ -623,25 +645,32 @@ void TxnManager::commit_stats() {
 //                   "query->partitions_touched.size() = %ld\n",
 //                   query->partitions_touched.size());
 //    }
+
     if (query->partitions_touched.size() > 1) {
         INC_STATS(ctid, multi_part_txn_cnt, 1);
+#if PROFILE_EXEC_TIMING
         INC_STATS(ctid, multi_part_txn_run_time, timespan_long);
+#endif
     } else {
         INC_STATS(ctid, single_part_txn_cnt, 1);
+#if PROFILE_EXEC_TIMING
         INC_STATS(ctid, single_part_txn_run_time, timespan_long);
+#endif
     }
     /*if(cflt) {
       INC_STATS(get_thd_id(),cflt_cnt_txn,1);
     }*/
+#if PROFILE_EXEC_TIMING
     txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
+#endif
 #if CC_ALG == CALVIN
     return;
 #endif
-
+#if PROFILE_EXEC_TIMING
     INC_STATS_ARR(ctid, start_abort_commit_latency, timespan_short);
     INC_STATS_ARR(ctid, last_start_commit_latency, timespan_short);
     INC_STATS_ARR(ctid, first_start_commit_latency, timespan_long);
-
+#endif
 
     assert(query->partitions_touched.size() > 0);
     INC_STATS(ctid, parts_touched, query->partitions_touched.size());
@@ -807,8 +836,9 @@ void TxnManager::cleanup(RC rc) {
 #if CC_ALG == OCC && MODE == NORMAL_MODE
     occ_man.finish(rc, this);
 #endif
-
+#if PROFILE_EXEC_TIMING
     ts_t starttime = get_sys_clock();
+#endif
     uint64_t row_cnt = txn->accesses.get_count();
     assert(txn->accesses.get_count() == txn->row_cnt);
     //assert((WORKLOAD == YCSB && row_cnt <= g_req_per_query) || (WORKLOAD == TPCC && row_cnt <= g_max_items_per_txn*2 + 3));
@@ -829,8 +859,9 @@ void TxnManager::cleanup(RC rc) {
     if (rc == Abort) {
         txn->release_inserts(get_thd_id());
         txn->insert_rows.clear();
-
+#if PROFILE_EXEC_TIMING
         INC_STATS(get_thd_id(), abort_time, get_sys_clock() - starttime);
+#endif
     }
 }
 
@@ -921,8 +952,10 @@ void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_
 #endif // #if CC_ALG == QUECC
 
 RC  TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
     uint64_t timespan;
+#endif
     RC rc = RCOK;
     uint64_t ctid = get_thd_id();
     DEBUG_M("TxnManager::get_row access alloc\n");
@@ -941,8 +974,10 @@ RC  TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
         DEBUG_M("TxnManager::get_row(abort) access free\n");
 //        DEBUG_Q("ET_%ld: TxnManager::get_row(abort) access free, write_cnt = %ld\n", _thd_id, txn_stats.write_cnt);
         access_pool.put(get_thd_id(), access);
+#if PROFILE_EXEC_TIMING
         timespan = get_sys_clock() - starttime;
         INC_STATS(ctid, txn_manager_time, timespan);
+#endif
         INC_STATS(ctid, txn_conflict_cnt, 1);
         //cflt = true;
 #if DEBUG_TIMELINE
@@ -969,9 +1004,13 @@ RC  TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
     DEBUG_M("TxnManager::get_row row_t alloc\n")
     row_pool.get(ctid,access->orig_data);
     access->orig_data->init(row->get_table(), part_id, 0);
+#if PROFILE_EXEC_TIMING
         uint64_t proftime = get_sys_clock();
+#endif
     access->orig_data->copy(row);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+#endif
         INC_STATS(_thd_id, record_copy_cnt[_thd_id],1);
     assert(access->orig_data->get_schema() == row->get_schema());
 
@@ -993,9 +1032,10 @@ RC  TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
         ++txn->write_cnt;
 
     txn->accesses.add(access);
-
+#if PROFILE_EXEC_TIMING
     timespan = get_sys_clock() - starttime;
     INC_STATS(get_thd_id(), txn_manager_time, timespan);
+#endif
     row_rtn = access->data;
 
 
@@ -1006,8 +1046,9 @@ RC  TxnManager::get_row(row_t *row, access_t type, row_t *&row_rtn) {
 
 RC TxnManager::get_row_post_wait(row_t *&row_rtn) {
     assert(CC_ALG != HSTORE && CC_ALG != HSTORE_SPEC);
-
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
+#endif
     row_t *row = this->last_row;
     access_t type = this->last_type;
     assert(row != NULL);
@@ -1027,9 +1068,13 @@ RC TxnManager::get_row_post_wait(row_t *&row_rtn) {
     DEBUG_M("TxnManager::get_row_post_wait row_t alloc\n")
     row_pool.get(get_thd_id(),access->orig_data);
         access->orig_data->init(row->get_table(), part_id, 0);
+#if PROFILE_EXEC_TIMING
         uint64_t proftime = get_sys_clock();
+#endif
         access->orig_data->copy(row);
+#if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, record_copy_time[_thd_id], get_sys_clock()-proftime);
+#endif
         INC_STATS(_thd_id, record_copy_cnt[_thd_id], 1);
     }
 #endif
@@ -1040,8 +1085,10 @@ RC TxnManager::get_row_post_wait(row_t *&row_rtn) {
 
 
     txn->accesses.add(access);
+#if PROFILE_EXEC_TIMING
     uint64_t timespan = get_sys_clock() - starttime;
     INC_STATS(get_thd_id(), txn_manager_time, timespan);
+#endif
     this->last_row_rtn = access->data;
     row_rtn = access->data;
     return RCOK;
@@ -1072,13 +1119,15 @@ TxnManager::index_read(INDEX *index, idx_key_t key, int part_id) {
 
 itemid_t *
 TxnManager::index_read(INDEX *index, idx_key_t key, int part_id, int count) {
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
-
+#endif
     itemid_t *item;
     index->index_read(key, count, item, part_id);
-
+#if PROFILE_EXEC_TIMING
     uint64_t t = get_sys_clock() - starttime;
     INC_STATS(get_thd_id(), txn_index_time, t);
+#endif
     //txn_time_idx += t;
 
     return item;
@@ -1093,7 +1142,9 @@ RC TxnManager::validate() {
         return RCOK;
     }
     RC rc = RCOK;
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
+#endif
 #if CC_ALG == OCC
     rc = occ_man.validate(this);
 #endif
@@ -1104,9 +1155,9 @@ RC TxnManager::validate() {
         rc = maat_man.find_bound(this);
     }
 #endif
-
-
+#if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), txn_validate_time, get_sys_clock() - starttime);
+#endif
     return rc;
 }
 
@@ -1147,10 +1198,12 @@ bool TxnManager::calvin_collect_phase_done() {
 }
 
 void TxnManager::release_locks(RC rc) {
+#if PROFILE_EXEC_TIMING
     uint64_t starttime = get_sys_clock();
-
+#endif
     cleanup(rc);
-
+#if PROFILE_EXEC_TIMING
     uint64_t timespan = (get_sys_clock() - starttime);
     INC_STATS(get_thd_id(), txn_cleanup_time, timespan);
+#endif
 }

@@ -231,8 +231,11 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
 
 #endif // - if CC_ALG == QUECC
 
+#if CC_ALG == CALVIN
 void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
+#if PROFILE_EXEC_TIMING
   uint64_t starttime = get_sys_clock();
+#endif
   assert(msg);
   DEBUG_M("SeqQueue::enqueue work_queue_entry alloc\n");
   work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
@@ -245,8 +248,9 @@ void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
 
   DEBUG("Seq Enqueue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
   while(!seq_queue->push(entry) && !simulation->is_done()) {}
-
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,seq_queue_enqueue_time,get_sys_clock() - starttime);
+#endif
   INC_STATS(thd_id,seq_queue_enq_cnt,1);
 
 }
@@ -302,8 +306,9 @@ void QWorkQueue::sched_enqueue(uint64_t thd_id, Message * msg) {
   assert(CC_ALG == CALVIN);
   assert(msg);
   assert(ISSERVERN(msg->return_node_id));
+#if PROFILE_EXEC_TIMING
   uint64_t starttime = get_sys_clock();
-
+#endif
   DEBUG_M("QWorkQueue::sched_enqueue work_queue_entry alloc\n");
   work_queue_entry * entry = (work_queue_entry*)mem_allocator.alloc(sizeof(work_queue_entry));
   entry->msg = msg;
@@ -313,22 +318,26 @@ void QWorkQueue::sched_enqueue(uint64_t thd_id, Message * msg) {
   entry->starttime = get_sys_clock();
 
   DEBUG("Sched Enqueue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
+#if PROFILE_EXEC_TIMING
   uint64_t mtx_time_start = get_sys_clock();
+#endif
 #if SINGLE_NODE
   while(!sched_queue[0]->push(entry) && !simulation->is_done()) {}
 #else
   while(!sched_queue[msg->get_return_id()]->push(entry) && !simulation->is_done()) {}
 #endif
 
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,mtx[37],get_sys_clock() - mtx_time_start);
-
   INC_STATS(thd_id,sched_queue_enqueue_time,get_sys_clock() - starttime);
+#endif
   INC_STATS(thd_id,sched_queue_enq_cnt,1);
 }
 
 Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
+#if PROFILE_EXEC_TIMING
   uint64_t starttime = get_sys_clock();
-
+#endif
   assert(CC_ALG == CALVIN);
   Message * msg = NULL;
   work_queue_entry * entry = NULL;
@@ -339,9 +348,10 @@ Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
 
     msg = entry->msg;
     DEBUG("Sched Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
-
+#if PROFILE_EXEC_TIMING
     uint64_t queue_time = get_sys_clock() - entry->starttime;
     INC_STATS(thd_id,sched_queue_wait_time,queue_time);
+#endif
     INC_STATS(thd_id,sched_queue_cnt,1);
 
     DEBUG_M("QWorkQueue::sched_enqueue work_queue_entry free\n");
@@ -372,21 +382,25 @@ Message * QWorkQueue::sched_dequeue(uint64_t thd_id) {
       M_ASSERT_V(msg->batch_id == simulation->get_worker_epoch(), "WT_%ld: msg->batch_id = %ld, simulation->get_worker_epoch() = %ld ",
                  thd_id, msg->batch_id , simulation->get_worker_epoch());
     }
-
+#if PROFILE_EXEC_TIMING
     INC_STATS(thd_id,sched_queue_dequeue_time,get_sys_clock() - starttime);
+#endif
   }
 
 
   return msg;
 
 }
+#endif //#if CC_ALG == CALVIN
 
 void QWorkQueue::enqueue(uint64_t thd_id, Message * msg,bool busy) {
   if (CC_ALG == QUECC && msg->rtype == CL_QRY){
     DEBUG_Q("With QueCC, enq. to workQ should not happen\n");
     assert(false);
   }
+#if PROFILE_EXEC_TIMING
   uint64_t starttime = get_sys_clock();
+#endif
   assert(msg);
   DEBUG_M("QWorkQueue::enqueue work_queue_entry alloc\n");
   work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
@@ -397,29 +411,35 @@ void QWorkQueue::enqueue(uint64_t thd_id, Message * msg,bool busy) {
   entry->starttime = get_sys_clock();
   assert(ISSERVER || ISREPLICA);
   DEBUG("Work Enqueue (%ld,%ld) %d\n",entry->txn_id,entry->batch_id,entry->rtype);
-
+#if PROFILE_EXEC_TIMING
   uint64_t mtx_wait_starttime = get_sys_clock();
+#endif
   if(msg->rtype == CL_QRY) {
     while(!new_txn_queue->push(entry) && !simulation->is_done()) {}
   } else {
     while(!work_queue->push(entry) && !simulation->is_done()) {}
   }
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,mtx[13],get_sys_clock() - mtx_wait_starttime);
+#endif
 
   if(busy) {
     INC_STATS(thd_id,work_queue_conflict_cnt,1);
   }
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,work_queue_enqueue_time,get_sys_clock() - starttime);
+#endif
   INC_STATS(thd_id,work_queue_enq_cnt,1);
 }
 
 Message * QWorkQueue::dequeue(uint64_t thd_id) {
-
-  uint64_t starttime = get_sys_clock();
   assert(ISSERVER || ISREPLICA);
   Message * msg = NULL;
   work_queue_entry * entry = NULL;
+#if PROFILE_EXEC_TIMING
   uint64_t mtx_wait_starttime = get_sys_clock();
+  uint64_t starttime = get_sys_clock();
+#endif
 #if ABORT_QUEUES
   // process abort queue for this thread
   abort_queues[thd_id]->process(thd_id);
@@ -448,34 +468,49 @@ Message * QWorkQueue::dequeue(uint64_t thd_id) {
     valid = new_txn_queue->pop(entry);
 #endif // if CC_ALG != CALVIN
   }
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,mtx[14],get_sys_clock() - mtx_wait_starttime);
-  
+#endif
   if(valid) {
     msg = entry->msg;
     assert(msg);
     DEBUG("%ld WQdequeue %ld\n",thd_id,entry->txn_id);
     //printf("%ld WQdequeue %ld\n",thd_id,entry->txn_id);
+
+#if PROFILE_EXEC_TIMING
     uint64_t queue_time = get_sys_clock() - entry->starttime;
     INC_STATS(thd_id,work_queue_wait_time,queue_time);
+#endif
+
     INC_STATS(thd_id,work_queue_cnt,1);
     if(msg->rtype == CL_QRY) {
+#if PROFILE_EXEC_TIMING
       INC_STATS(thd_id,work_queue_new_wait_time,queue_time);
+#endif
       INC_STATS(thd_id,work_queue_new_cnt,1);
     } else {
+#if PROFILE_EXEC_TIMING
       INC_STATS(thd_id,work_queue_old_wait_time,queue_time);
+#endif
       INC_STATS(thd_id,work_queue_old_cnt,1);
     }
+#if PROFILE_EXEC_TIMING
     msg->wq_time = queue_time;
     DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
+#endif
     DEBUG("Work Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
     DEBUG_M("QWorkQueue::dequeue work_queue_entry free\n");
     mem_allocator.free(entry,sizeof(work_queue_entry));
+#if PROFILE_EXEC_TIMING
     INC_STATS(thd_id,work_queue_dequeue_time,get_sys_clock() - starttime);
+#endif
   }
 
 #if SERVER_GENERATE_QUERIES
   if(msg && msg->rtype == CL_QRY) {
+#if PROFILE_EXEC_TIMING
     INC_STATS(thd_id,work_queue_new_wait_time,get_sys_clock() - starttime);
+#endif
     INC_STATS(thd_id,work_queue_new_cnt,1);
   }
 #endif
