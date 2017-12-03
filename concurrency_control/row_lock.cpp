@@ -43,13 +43,13 @@ void Row_lock::init(row_t * row) {
 
 }
 
-RC OPTIMIZE_OUT Row_lock::lock_get(lock_t type, TxnManager * txn) {
+RC Row_lock::lock_get(lock_t type, TxnManager * txn) {
 	uint64_t *txnids = NULL;
 	int txncnt = 0;
 	return lock_get(type, txn, txnids, txncnt);
 }
 
-RC OPTIMIZE_OUT Row_lock::lock_get(lock_t type, TxnManager * txn, uint64_t* &txnids, int &txncnt) {
+RC Row_lock::lock_get(lock_t type, TxnManager * txn, uint64_t* &txnids, int &txncnt) {
     assert (CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE || CC_ALG == CALVIN);
     RC rc;
 #if PROFILE_EXEC_TIMING
@@ -401,7 +401,7 @@ RC Row_lock::lock_release(TxnManager * txn) {
     return RCOK;
 }
 
-bool OPTIMIZE_OUT Row_lock::conflict_lock(lock_t l1, lock_t l2) {
+bool Row_lock::conflict_lock(lock_t l1, lock_t l2) {
     if (l1 == LOCK_NONE || l2 == LOCK_NONE)
         return false;
     else if (l1 == LOCK_EX || l2 == LOCK_EX)
@@ -410,7 +410,7 @@ bool OPTIMIZE_OUT Row_lock::conflict_lock(lock_t l1, lock_t l2) {
         return false;
 }
 
-LockEntry * OPTIMIZE_OUT Row_lock::get_entry() {
+LockEntry * Row_lock::get_entry() {
     LockEntry * entry = (LockEntry *)
         mem_allocator.alloc(sizeof(LockEntry));
     entry->type = LOCK_NONE;
@@ -418,7 +418,7 @@ LockEntry * OPTIMIZE_OUT Row_lock::get_entry() {
     //DEBUG_M("row_lock::get_entry alloc %lx\n",(uint64_t)entry);
     return entry;
 }
-void OPTIMIZE_OUT Row_lock::return_entry(LockEntry * entry) {
+void Row_lock::return_entry(LockEntry * entry) {
     //DEBUG_M("row_lock::return_entry free %lx\n",(uint64_t)entry);
     mem_allocator.free(entry, sizeof(LockEntry));
 }

@@ -104,10 +104,10 @@ public:
 	void free_row_pool(uint64_t thd_id);
 
 	// for concurrency control. can be lock, timestamp etc.
-  RC OPTIMIZE_OUT get_lock(access_t type, TxnManager * txn);
-	RC OPTIMIZE_OUT get_row(access_t type, TxnManager * txn, row_t *& row);
-  RC get_row_post_wait(access_t type, TxnManager * txn, row_t *& row); 
-	void OPTIMIZE_OUT return_row(RC rc, access_t type, TxnManager * txn, row_t * row);
+  	RC get_lock(access_t type, TxnManager * txn);
+	RC get_row(access_t type, TxnManager * txn, row_t *& row);
+  	RC get_row_post_wait(access_t type, TxnManager * txn, row_t *& row);
+	void return_row(RC rc, access_t type, TxnManager * txn, row_t * row);
 #if CC_ALG == QUECC
     // last transaction id who inserted/updated this row
     uint64_t last_tid;

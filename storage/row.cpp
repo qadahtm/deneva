@@ -231,7 +231,7 @@ RC row_t::get_lock(access_t type, TxnManager * txn) {
   return rc;
 }
 
-RC OPTIMIZE_OUT row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
+RC row_t::get_row(access_t type, TxnManager * txn, row_t *& row) {
     RC rc = RCOK;
 #if MODE==NOCC_MODE || MODE==QRY_ONLY_MODE 
     row = this;
