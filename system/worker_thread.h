@@ -1124,35 +1124,33 @@ public:
                    _thd_id, wplanner_id, batch_slot, wbatch_id);
         return batch_part;
     };
-    bool add_txn_dep(uint64_t txn_id, uint64_t d_txn_id, hash_table_tctx_t * tdg, priority_group * d_planner_pg){
+#if EXEC_BUILD_TXN_DEPS
+    bool add_txn_dep(transaction_context * context, uint64_t d_txn_id, priority_group * d_planner_pg){
         transaction_context * d_tctx = get_tctx_from_pg(d_txn_id, d_planner_pg);
         if (d_tctx != NULL){
-            auto txn_search = tdg->find(txn_id);
-            if (txn_search != tdg->end()){
-                // found tdg entry
-                // this txn has other dependencies
-                txn_search->second->add_unique(d_tctx);
-            }
-            else{
-                // a new dependency for this txn
-                Array<transaction_context *> * txn_list;
-                quecc_pool.txn_ctx_list_get_or_create(txn_list, _thd_id);
-                txn_list->add(d_tctx);
-                tdg->insert({txn_id, txn_list});
-            }
+            // found txn context for dependent d_txn_id
+            // increment my dep counter in my context
+
+            int64_t e=0;
+            do {
+                e = context->commit_dep_cnt.load(memory_order_acq_rel);
+                M_ASSERT_V(e >= 0, "ET_%ld: commit dep count = %ld\n", _thd_id, e);
+            }while(!context->commit_dep_cnt.compare_exchange_strong(e,e+1,memory_order_acq_rel));
+            // add my txn pointer to dependency set
+            d_tctx->depslock->lock();
+            d_tctx->commit_deps->push_back(context);
+            d_tctx->depslock->unlock();
             return true;
         }
         else{
             return false;
         }
     };
-
+#endif
     void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc)
     {
 #if EXEC_BUILD_TXN_DEPS
         if (rc == RCOK){
-            batch_partition * mypart = get_batch_part(batch_slot,wplanner_id,_thd_id);
-            hash_table_tctx_t * mytdg = mypart->planner_pg->exec_tdg[_thd_id];
             uint64_t last_tid = entry->row->last_tid;
             if (last_tid == 0){
                 //  if this is a read, and record has not been update before, so no dependency
@@ -1169,9 +1167,9 @@ public:
             int64_t cplan_id = (int64_t)wplanner_id;
             for (int64_t j = cplan_id; j >= 0; --j) {
                 batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
-                if (add_txn_dep(entry->txn_id,last_tid,mytdg,part->planner_pg)){
-//                    DEBUG_Q("ET_%ld: added dependency : entry_txnid=%ld, row_last_tid=%ld, PG=%ld, batch_id=%ld\n",
-//                            _thd_id,entry->txn_id,last_tid, wplanner_id,wbatch_id);
+                if (add_txn_dep(entry->txn_ctx,last_tid,part->planner_pg)){
+//                    DEBUG_Q("ET_%ld: added dependency : entry_txnid=%ld, row_last_tid=%ld, PG=%ld, batch_id=%ld, on key=%ld\n",
+//                            _thd_id,entry->txn_id,last_tid, wplanner_id,wbatch_id,get_key_from_entry(entry));
                     break;
                 }
             }
@@ -1388,7 +1386,6 @@ public:
 
     RC commit_batch(uint64_t batch_slot);
     RC commit_txn(priority_group * planner_pg, uint64_t txn_idx){
-
         transaction_context * txn_ctxs = planner_pg->txn_ctxs;
         uint64_t j = txn_idx;
 
@@ -1398,34 +1395,23 @@ public:
         if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
             // check for any dependent transaction
 #if EXEC_BUILD_TXN_DEPS
-            for (uint64_t i = 0; i < g_thread_cnt; ++i) {
-            // check all tdgs built during execution
-            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
-            auto search = tdg->find(txn_ctxs[j].txn_id);
-            if (search != tdg->end()){
-                // a set of dependencies are found
-                // check all of them, if any of them is Abort, we have to abort
-                auto ds_tctx = search->second;
-                for (uint64_t k = 0; k < ds_tctx->size(); ++k) {
-                    uint64_t d_txn_state = ds_tctx->get(k)->txn_state.load(memory_order_acq_rel);
-                    if (d_txn_state == TXN_READY_TO_COMMIT){
-//                    DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-//                            _thd_id, txn_ctxs[j].txn_id, ds_tctx->get(k)->txn_id,wbatch_id);
-                        return WAIT;
-                    }
-                    else if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
-//                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
-                        return Abort;
-                    }
-                    else{
-                        // TQ: there is no need to check if the dependent txn transaction is committed
-                        M_ASSERT_V(d_txn_state == TXN_COMMITTED, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-                                   _thd_id, d_txn_state);
-                    }
+            if (txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel) > 0){
+                DEBUG_Q("CT_%ld: txn_id %lu has %lu dependent txns that has not committed or aborted, batch_id=%lu\n",
+                        _thd_id, txn_ctxs[j].txn_id, txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel),wbatch_id);
+                return WAIT;
+            }
+            else{
+                if (txn_ctxs[j].should_abort){
+                    DEBUG_Q("CT_%ld: txn_id %lu should be aborted\n",
+                            _thd_id, txn_ctxs[j].txn_id);
+                    return Abort;
+                }
+                else{
+                    DEBUG_Q("CT_%ld: txn_id %lu should be committed, batch_id=%lu\n",
+                            _thd_id, txn_ctxs[j].txn_id,wbatch_id);
+                    return Commit;
                 }
             }
-        }
-        // default is commit below
 #endif
             return Commit;
         }
@@ -1441,6 +1427,7 @@ public:
 //#endif
             M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
                        _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_thread_cnt);
+            assert(false);
         }
 
         return Commit;
@@ -1608,7 +1595,7 @@ public:
             // all entries must fall into one of the splits
 #if DEBUG_QUECC
             if (!(nidx == tidx || nidx == (tidx+1))){
-                DEBUG_Q("PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
+//                DEBUG_Q("PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
                 for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
                     DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
                 }
@@ -1810,6 +1797,11 @@ public:
         tctx->txn_state.store(TXN_INITIALIZED,memory_order_acq_rel);
         tctx->completion_cnt.store(0,memory_order_acq_rel);
         tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
+#if EXEC_BUILD_TXN_DEPS
+        tctx->should_abort = false;
+        tctx->commit_dep_cnt.store(0,memory_order_acq_rel);
+        tctx->commit_deps->clear();
+#endif
 #if PROFILE_EXEC_TIMING
         tctx->starttime = get_sys_clock(); // record start time of transaction
 #endif

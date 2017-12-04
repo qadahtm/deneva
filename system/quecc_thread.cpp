@@ -2384,7 +2384,19 @@ void QueCCPool::init(Workload * wl, uint64_t size){
         for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {
             for (uint64_t k = 0; k < planner_batch_size; ++k) {
                 work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_inialized = true;
-                work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_data = (char *) malloc(tuple_size*REQ_PER_QUERY);
+                work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_data = (char *) mem_allocator.alloc(tuple_size*REQ_PER_QUERY);
+            }
+        }
+    }
+#endif
+
+#if EXEC_BUILD_TXN_DEPS
+// intialize for QueCC txn dependency data structures
+    for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+        for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {
+            for (uint64_t k = 0; k < planner_batch_size; ++k) {
+                work_queue.batch_pg_map[i][j].txn_ctxs[k].commit_deps = new std::vector<transaction_context *>();
+                work_queue.batch_pg_map[i][j].txn_ctxs[k].depslock = new spinlock();
             }
         }
     }

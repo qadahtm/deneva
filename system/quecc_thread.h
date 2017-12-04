@@ -41,6 +41,14 @@ struct transaction_context {
     volatile atomic<uint64_t> completion_cnt; // used at execution time to track operations that have completed
     // 8bytes
     volatile atomic<uint64_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
+#if EXEC_BUILD_TXN_DEPS
+    // 8bytes
+    volatile atomic<int64_t> commit_dep_cnt; // used during execution to track the number of dependent transactions
+    // 8bytes
+    std::vector<transaction_context*> * commit_deps;
+    spinlock * depslock;
+    bool should_abort;
+#endif
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
 #endif
@@ -133,9 +141,6 @@ struct exec_queue_entry {
 
 
 struct priority_group{
-#if EXEC_BUILD_TXN_DEPS
-    hash_table_tctx_t * exec_tdg[THREAD_CNT];
-#endif
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
     transaction_context txn_ctxs[BATCH_SIZE/PLAN_THREAD_CNT];

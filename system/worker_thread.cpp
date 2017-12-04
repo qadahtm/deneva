@@ -944,7 +944,6 @@ RC WorkerThread::run_fixed_mode() {
 
 #if !PIPELINED
 SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
-
     uint64_t next_part = 0; // we have client buffers are paritioned based on part cnt
     Message * msg = NULL;
     transaction_context * txn_ctxs = NULL;
@@ -969,16 +968,6 @@ SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
 #endif
     planner_pg = &work_queue.batch_pg_map[batch_slot][_planner_id];
 
-#if EXEC_BUILD_TXN_DEPS
-    for (int i = 0; i < THREAD_CNT; ++i) {
-        hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
-        for (auto it = tdg->begin(); it != tdg->end(); ++it){
-            Array<transaction_context *> * tmp = it->second;
-            quecc_pool.txn_ctx_list_release(tmp, i);
-        }
-        tdg->clear();
-    }
-#endif
     // use txn_dep from planner_pg
     planner_pg->batch_starting_txn_id = planner_txn_id;
 
@@ -1076,11 +1065,13 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
         // wait for batch to be ready
         if (wait_for_batch_ready(batch_slot, wplanner_id, batch_part) == BATCH_WAIT){
             if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
                 if(idle_starttime > 0) {
                     INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
                     INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
                     idle_starttime = 0;
                 }
+#endif
                 return BREAK;
             }
             continue;
@@ -1106,11 +1097,13 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
 //
 //        // collect some stats
 ////        quecc_batch_part_proc_starttime = get_sys_clock();
+#if PROFILE_EXEC_TIMING
         if(idle_starttime > 0) {
             INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
             INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
             idle_starttime = 0;
         }
+#endif
 
 #endif
 //        DEBUG_Q("ET_%ld: got a PG from planner %ld, batch_slot = %ld, batch_part = %lu\n",_thd_id, wplanner_id, batch_slot, (uint64_t) batch_part);
@@ -1191,8 +1184,12 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
     uint64_t d8 =0;
 
     RC rc;
-//    uint64_t commit_thread_cnt = COMMIT_THREAD_CNT;
-    uint64_t commit_thread_cnt UNUSED = g_thread_cnt;
+#if FIXED_COMMIT_THREAD_CNT
+    uint64_t commit_thread_cnt = COMMIT_THREAD_CNT;
+#else
+    uint64_t commit_thread_cnt = g_thread_cnt;
+#endif
+
 
     for (uint64_t i=0; i < g_plan_thread_cnt;++i){
         abort_cnt = 0;
@@ -1203,13 +1200,14 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
         // committing a PG
         for (uint64_t j = 0; j < txn_per_pg; ++j){
 
-#if BATCH_SIZE >= TXN_CNT_COMMIT_THRESHOLD
-            txn_commit_seq = (i*txn_per_pg) + j;
-            commit_et_id = (txn_commit_seq / txn_wl_per_et) % commit_thread_cnt;
-#else
-            commit_et_id = 0; // single threaded commit
-#endif
-            if (commit_et_id == _thd_id){
+//#if BATCH_SIZE >= TXN_CNT_COMMIT_THRESHOLD
+//            txn_commit_seq = (i*txn_per_pg) + j;
+//            commit_et_id = (txn_commit_seq / txn_wl_per_et) % commit_thread_cnt;
+            commit_et_id = j % commit_thread_cnt; // Using RR to assign txns to CTs
+//#else
+//            commit_et_id = 0; // single threaded commit
+//#endif
+            if (_thd_id < commit_thread_cnt && commit_et_id == _thd_id){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
                 rc = commit_txn(planner_pg, j);
@@ -1281,20 +1279,42 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
                         }
                     }
                 }
+#if EXEC_BUILD_TXN_DEPS
+                if (rc != WAIT){
+                    // transaction j has committed. We need to decrement CommitDepCnt for dependent transactions
+                    transaction_context * j_ctx = &planner_pg->txn_ctxs[j];
+                    for (auto it = j_ctx->commit_deps->begin(); it != j_ctx->commit_deps->end(); it++ ){
+                        transaction_context * d_ctx = (*it);
+                        int64_t tmp;
+                        int64_t tmp2;
+                        do {
+                            tmp = d_ctx->commit_dep_cnt.load(memory_order_acq_rel);
+                            tmp2 = tmp -1;
+//                            M_ASSERT_V(tmp2 >=0, "CT_%ld: committing txn_id=%ld, updating dep from %ld counter to %ld, for txn_id=%ld, commit_deps size=%lu\n",
+//                                       _thd_id, j_ctx->txn_id, tmp, tmp2,d_ctx->txn_id, j_ctx->commit_deps->size());
+                        }while(!d_ctx->commit_dep_cnt.compare_exchange_strong(tmp, tmp2, memory_order_acq_rel));
+
+                        if (rc == Abort){
+                            d_ctx->should_abort = true;
+                        }
+                    }
+
+                }
+#endif
             }
 
         }
+
         // check for transactions that requires the result status of their dependents transactions
         // and are pending
-
         while(!pending_txns->empty()){
             uint64_t txn_idx = pending_txns->front();
             rc = commit_txn(planner_pg, txn_idx);
             if (rc == WAIT){
                 /// collect wait times
-//                DEBUG_Q("ET_%ld: wating on txn_id = %ld, batch_id = %ld, rc = %d, commit_cnt = %ld\n",
-//                            _thd_id, planner_pg->txn_ctxs[txn_idx].txn_id, wbatch_id, rc, commit_cnt);
-
+//                DEBUG_Q("ET_%ld: wating on txn_id = %ld, batch_id = %ld, rc = %d, commit_cnt = %ld, commit_dep_cnt=%ld\n",
+//                            _thd_id, planner_pg->txn_ctxs[txn_idx].txn_id, wbatch_id, rc,
+//                                commit_cnt, planner_pg->txn_ctxs[txn_idx].commit_dep_cnt.load(memory_order_acq_rel));
                 continue;
             }
             if (rc == Commit){
@@ -1316,6 +1336,24 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
                     M_ASSERT_V(false, "ET_%ld: trying to abort a transaction with invalid status\n", _thd_id);
                 }
             }
+#if EXEC_BUILD_TXN_DEPS
+            transaction_context * j_ctx = &planner_pg->txn_ctxs[txn_idx];
+            for (auto it = j_ctx->commit_deps->begin(); it != j_ctx->commit_deps->end(); it++ ){
+                transaction_context * d_ctx = (*it);
+                // decrement counter for dependent txns
+                int64_t tmp;
+                int64_t tmp2;
+                do {
+                    tmp = d_ctx->commit_dep_cnt.load(memory_order_acq_rel);
+                    tmp2 = tmp -1;
+//                    M_ASSERT_V(tmp2 >=0, "CT_%ld: committing txn_id=%ld, updating dep from %ld counter to %ld, for txn_id=%ld, commit_deps size=%lu\n",
+//                               _thd_id, j_ctx->txn_id, tmp, tmp2,d_ctx->txn_id, j_ctx->commit_deps->size());
+                }while(!d_ctx->commit_dep_cnt.compare_exchange_strong(tmp, tmp2, memory_order_acq_rel));
+                if (rc == Abort){
+                    d_ctx->should_abort = true;
+                }
+            }
+#endif
             pending_txns->pop_front();
         }
 
@@ -1332,66 +1370,6 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
 
     return RCOK;
 }
-
-//RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx){
-//
-//    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
-//    uint64_t j = txn_idx;
-//
-////    DEBUG_Q("ET_%ld:trying to commit txn_id = %ld\n",_thd_id, txn_ctxs[j].txn_id);
-//    // check if transactio is ready to commit
-//    atomic_thread_fence(memory_order_acq_rel);
-//    if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
-//        // check for any dependent transaction
-//#if EXEC_BUILD_TXN_DEPS
-//        for (uint64_t i = 0; i < g_thread_cnt; ++i) {
-//            // check all tdgs built during execution
-//            hash_table_tctx_t * tdg = planner_pg->exec_tdg[i];
-//            auto search = tdg->find(txn_ctxs[j].txn_id);
-//            if (search != tdg->end()){
-//                // a set of dependencies are found
-//                // check all of them, if any of them is Abort, we have to abort
-//                auto ds_tctx = search->second;
-//                for (uint64_t k = 0; k < ds_tctx->size(); ++k) {
-//                    uint64_t d_txn_state = ds_tctx->get(k)->txn_state.load(memory_order_acq_rel);
-//                    if (d_txn_state == TXN_READY_TO_COMMIT){
-////                    DEBUG_Q("ET_%ld:current txn_id = %ld, depends on txn_id = %ld, which has not committed, batch_id=%ld\n",
-////                            _thd_id, txn_ctxs[j].txn_id, ds_tctx->get(k)->txn_id,wbatch_id);
-//                        return WAIT;
-//                    }
-//                    else if (d_txn_state == TXN_READY_TO_ABORT || d_txn_state == TXN_ABORTED){
-////                            DEBUG_Q("CT_%ld : going to abort txn_id = %ld due to dependencies\n", _thd_id, txn_ctxs[i].txn_id);
-//                        return Abort;
-//                    }
-//                    else{
-//                        // TQ: there is no need to check if the dependent txn transaction is committed
-//                        M_ASSERT_V(d_txn_state == TXN_COMMITTED, "ET_%ld: found invalid transaction state of dependent txn, state = %ld\n",
-//                                   _thd_id, d_txn_state);
-//                    }
-//                }
-//            }
-//        }
-//        // default is commit below
-//#endif
-//        return Commit;
-//    }
-//    else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
-//        //     abort transaction, this abort decision is done by an ET during execution phase
-//        return Abort;
-//    }
-//    else {
-////#if DEBUG_QUECC
-////        DEBUG_Q("ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, wbatch_id=%ld, gbatch_id=%ld, batch_slot=%ld, pt_cnt = %d, et_cnt=%d\n",
-////                _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, work_queue.gbatch_id, (wbatch_id % g_batch_map_length),
-////                g_plan_thread_cnt, g_thread_cnt);
-////#endif
-//        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
-//                   _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_thread_cnt);
-//    }
-//
-//    return Commit;
-//}
-
 #endif
 
 RC WorkerThread::run_normal_mode() {
@@ -1526,26 +1504,33 @@ RC WorkerThread::run_normal_mode() {
 //        batch_slot = work_queue.gbatch_id % g_batch_map_length;
 
 #if PIPELINED
+#if PROFILE_EXEC_TIMING
         if (batch_proc_starttime > 0){
             hl_prof_starttime = get_sys_clock();
         }
+#endif
         src = execute_batch(batch_slot, eq_comp_cnts, my_txn_man);
+#if PROFILE_EXEC_TIMING
         if (batch_proc_starttime > 0) {
             INC_STATS(_thd_id, wt_hl_exec_time[_thd_id], get_sys_clock() - hl_prof_starttime);
         }
+#endif
         if (src == SUCCESS) {
 
 #if PARALLEL_COMMIT
             // ET is done with its PGs for the current batch
 //            DEBUG_Q("ET_%ld: done with my batch partition, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
-
+#if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
             }
+#endif
             src = sync_on_execution_phase_end(batch_slot);
+#if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 INC_STATS(_thd_id, wt_hl_sync_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
             }
+#endif
             if (src == BREAK){
                 goto end_et;
             }
@@ -1553,34 +1538,45 @@ RC WorkerThread::run_normal_mode() {
 //            DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
 
             // process txn contexts in the current batch that are assigned to me (deterministically)
+#if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
             }
+#endif
             commit_batch(batch_slot);
+#if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 INC_STATS(_thd_id, wt_hl_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
             }
+#endif
 
             // indicate that I am done with all commit phase
 //            DEBUG_Q("ET_%ld: is done with commit task for batch_slot = %ld\n", _thd_id, batch_slot);
 
+#if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
             }
+#endif
+            batch_cleanup(batch_slot);
+#if PROFILE_EXEC_TIMING
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
+#endif
+#if PROFILE_EXEC_TIMING
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
+#endif
             src = sync_on_commit_phase_end(batch_slot);
+#if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 INC_STATS(_thd_id, wt_hl_sync_commit_time[_thd_id], get_sys_clock()-hl_prof_starttime);
             }
+#endif
             if (src == BREAK){
                 goto end_et;
-            }
-
-            if (batch_proc_starttime > 0){
-                hl_prof_starttime = get_sys_clock();
-            }
-            batch_cleanup(batch_slot);
-            if (batch_proc_starttime > 0){
-                INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
             }
 #else
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
