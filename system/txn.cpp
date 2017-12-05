@@ -153,6 +153,7 @@ void TxnStats::commit_stats(uint64_t thd_id, uint64_t txn_id, uint64_t batch_id,
                   (double) total_cc_time / BILLION, (double) total_process_time / BILLION
     );
 #else
+#if !SINGLE_NODE
     // latency from start of transaction
     if (IS_LOCAL(txn_id)) {
       INC_STATS(thd_id,lat_l_loc_work_queue_time,total_work_queue_time);
@@ -184,6 +185,7 @@ void TxnStats::commit_stats(uint64_t thd_id, uint64_t txn_id, uint64_t batch_id,
       INC_STATS(thd_id,lat_l_rem_cc_time,total_cc_time);
       INC_STATS(thd_id,lat_l_rem_process_time,total_process_time);
     }
+
     if (IS_LOCAL(txn_id)) {
       PRINT_LATENCY("lat_s %ld %ld %f %f %f %f %f %f\n"
             , txn_id
@@ -237,12 +239,37 @@ void TxnStats::commit_stats(uint64_t thd_id, uint64_t txn_id, uint64_t batch_id,
             );
     }
     */
+#else
+    //single node
+#if PROFILE_EXEC_TIMING
+    INC_STATS(thd_id,lat_l_loc_work_queue_time,total_work_queue_time);
+    INC_STATS(thd_id,lat_l_loc_msg_queue_time,total_msg_queue_time);
+    INC_STATS(thd_id,lat_l_loc_cc_block_time,total_cc_block_time);
+    INC_STATS(thd_id,lat_l_loc_cc_time,total_cc_time);
+    INC_STATS(thd_id,lat_l_loc_process_time,total_process_time);
+    INC_STATS(thd_id,lat_l_loc_abort_time,total_abort_time);
+
+    INC_STATS(thd_id,lat_s_loc_work_queue_time,work_queue_time);
+    INC_STATS(thd_id,lat_s_loc_msg_queue_time,msg_queue_time);
+    INC_STATS(thd_id,lat_s_loc_cc_block_time,cc_block_time);
+    INC_STATS(thd_id,lat_s_loc_cc_time,cc_time);
+    INC_STATS(thd_id,lat_s_loc_process_time,process_time);
+
+    INC_STATS(thd_id,lat_short_work_queue_time,work_queue_time_short);
+    INC_STATS(thd_id,lat_short_msg_queue_time,msg_queue_time_short);
+    INC_STATS(thd_id,lat_short_cc_block_time,cc_block_time_short);
+    INC_STATS(thd_id,lat_short_cc_time,cc_time_short);
+    INC_STATS(thd_id,lat_short_process_time,process_time_short);
+    INC_STATS(thd_id,lat_short_network_time,network_time_short);
+#endif // #if PROFILE_EXEC_TIMING
+
+#endif
 #endif
 
     if (!IS_LOCAL(txn_id)) {
         return;
     }
-
+#if PROFILE_EXEC_TIMING
     INC_STATS(thd_id, txn_total_process_time, total_process_time);
     INC_STATS(thd_id, txn_process_time, process_time);
     INC_STATS(thd_id, txn_total_local_wait_time, total_local_wait_time);
@@ -251,6 +278,7 @@ void TxnStats::commit_stats(uint64_t thd_id, uint64_t txn_id, uint64_t batch_id,
     INC_STATS(thd_id, txn_remote_wait_time, remote_wait_time);
     INC_STATS(thd_id, txn_total_twopc_time, total_twopc_time);
     INC_STATS(thd_id, txn_twopc_time, twopc_time);
+#endif
     if (write_cnt > 0) {
         INC_STATS(thd_id, txn_write_cnt, 1);
     }
@@ -487,7 +515,7 @@ RC TxnManager::abort() {
     txn->rc = Abort;
     INC_STATS(get_thd_id(), total_txn_abort_cnt, 1);
     txn_stats.abort_cnt++;
-#if SINGLE_NODE
+#if !SINGLE_NODE
     if (IS_LOCAL(get_txn_id())) {
         INC_STATS(get_thd_id(), local_txn_abort_cnt, 1);
     } else {

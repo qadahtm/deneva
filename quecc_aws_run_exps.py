@@ -511,16 +511,17 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-# wthreads = [vm_cores]
+wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
-num_trials = 1
+num_trials = 2
 # cc_algs = ['SILO']
 # cc_algs = ['NO_WAIT']
-# cc_algs = ['MVCC']  
+# cc_algs = ['MVCC'] 
+# cc_algs = ['TIMESTAMP']  
 # cc_algs = ['QUECC']  
-# cc_algs = ['TIMESTAMP','OCC','WAIT_DIE']  
+cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
-cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
+# cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'QUECC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'WAIT_DIE'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC','QUECC'] # + QueCC
@@ -557,6 +558,7 @@ pt_perc = [1]
 #ratio of commit threads from execution threads
 # ct_perc = [0.25,0.5,1]
 # ct_perc = [0.25,1]
+# ct_perc = [0.25]
 ct_perc = [1]
 
 # parts_accessed = [1,32]
@@ -573,8 +575,8 @@ parts_accessed = [1]
 
 ############### YCSB specific
 # zipftheta = [0.0,0.3,0.6,0.8,0.99]
-# zipftheta = [0.0]
-zipftheta = [0.0,0.8,0.6] #redo
+# zipftheta = [0.8] #redo
+zipftheta = [0.0,0.8,0.6] # defaults
 # zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
 
@@ -591,10 +593,10 @@ mpt_perc = [0.0]
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
 ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
-# recsizes = [1,5,10,20,40]
+recsizes = [0.2,1,5,10,20,40]
 # recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it
 # recsizes = [10,20,40] # skip 1 since we already have results for it
-recsizes = [1]
+# recsizes = [1]
 
 
 ############### TPCC specific
@@ -692,6 +694,16 @@ if is_ycsb:
                                                                 if not dry_run:
                                                                     build_project()
                                                                 for trial in list(range(num_trials)):
+                                                                    if rs <= 1:
+                                                                        rs_str = str(int(rs*100))
+                                                                    else:
+                                                                        rs_str = str(int(rs)*100)
+
+                                                                    if ct <= 1:
+                                                                        ct_cnt = str(int(ct*wthd))
+                                                                    else:
+                                                                        ct_cnt = str(int(ct))
+
                                                                     if pt <= 1:
                                                                         pt_cnt = str(int(pt*wthd))
                                                                         et_cnt = str(wthd-int(pt*wthd));
@@ -706,14 +718,14 @@ if is_ycsb:
 
                                                                     if prefix != "":
                                                                         if ppts:
-                                                                            nprefix = prefix + '_'+ str(int(rs)) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                            nprefix = prefix + '_ct'+ ct_cnt + '_'+ rs_str + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
                                                                         else:
-                                                                            nprefix = prefix + '_'+ str(int(rs)) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                                            nprefix = prefix + '_ct'+ ct_cnt + '_'+ rs_str + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
                                                                     else:
                                                                         if ppts:
-                                                                            nprefix = str(int(rs)*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                            nprefix = 'ct'+ ct_cnt + '_' + rs_str +'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
                                                                         else:
-                                                                            nprefix = str(int(rs)*100) + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                                            nprefix = 'ct'+ ct_cnt + '_' + rs_str  + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
                                                                     run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
                                                                     # print('Dry run: {}, {}, {}, t{}, {}'
                                                                     #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
@@ -756,6 +768,10 @@ else: #TPC-C
                                                         if not dry_run:
                                                             build_project()
                                                         for trial in list(range(num_trials)):
+                                                            if ct <= 1:
+                                                                ct_cnt = str(int(ct*wthd))
+                                                            else:
+                                                                ct_cnt = str(int(ct))
                                                             if pt <= 1:
                                                                 pt_cnt = str(int(pt*wthd))
                                                                 et_cnt = str(wthd-int(pt*wthd));
@@ -770,14 +786,14 @@ else: #TPC-C
 
                                                             if prefix != "":
                                                                 if ppts:
-                                                                    nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                    nprefix = prefix + '_ct' + str(ct_cnt) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
                                                                 else:
-                                                                    nprefix = prefix + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                                    nprefix = prefix + '_ct' + str(ct_cnt) + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
                                                             else:
                                                                 if ppts:
-                                                                    nprefix = 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                    nprefix = 'ct' + str(ct_cnt) + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
                                                                 else:
-                                                                    nprefix = 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                                    nprefix = 'ct' + str(ct_cnt) + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
                                                             run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
                                                             # print('Dry run: {}, {}, {}, t{}, {}'
                                                             #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))

@@ -101,11 +101,12 @@ public:
     void reset();
     void abort_stats(uint64_t thd_id);
     void commit_stats(uint64_t thd_id, uint64_t txn_id, uint64_t batch_id, uint64_t timespan_long, uint64_t timespan_short);
+    uint64_t write_cnt;
+    uint64_t abort_cnt;
+
     uint64_t starttime;
     uint64_t restart_starttime;
     uint64_t wait_starttime;
-    uint64_t write_cnt;
-    uint64_t abort_cnt;
     double total_process_time;
     double process_time;
     double total_local_wait_time;
