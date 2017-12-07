@@ -303,17 +303,6 @@ RC CommitThread::run() {
 void PlannerThread::setup() {
 }
 
-uint32_t PlannerThread::get_split(uint64_t key, uint32_t range_cnt, uint64_t range_start, uint64_t range_end) {
-    uint64_t range_size = (range_end - range_start)/range_cnt;
-    for (uint64_t i = 0; i < range_cnt; i++){
-        if (key >= ((i*range_size)+range_start) && key < (((i+1)*range_size)+range_start)){
-            return i;
-        }
-    }
-    return 0;
-}
-
-
 RC PlannerThread::run() {
 
 #if MODE == NORMAL_MODE
@@ -1295,7 +1284,8 @@ RC PlannerThread::run_normal_mode() {
 #endif
 
         if (do_batch_delivery(force_batch_delivery, planner_pg, txn_ctxs) == BREAK){
-            continue;
+//            continue;
+            goto end_pt;
         }
 #if PROFILE_EXEC_TIMING
         // we have got a message, which is a transaction
@@ -1317,7 +1307,7 @@ RC PlannerThread::run_normal_mode() {
         }
 
     }
-
+    end_pt:
     mem_allocator.free(entry, sizeof(exec_queue_entry));
 #if PROFILE_EXEC_TIMING
     INC_STATS(_thd_id, plan_total_time[_planner_id], get_sys_clock()-plan_starttime);
@@ -1725,55 +1715,6 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
 //                        final_assignment.top().curr_sum
 //                );
 
-
-#if BATCH_MAP_ORDER == BATCH_ET_PT
-            while(work_queue.batch_map[slot_num][i][_planner_id].fetch_add(0) != 0) {
-                if(idle_starttime == 0){
-                    idle_starttime = get_sys_clock();
-//                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
-                }
-
-                if (simulation->is_done()){
-                    if (idle_starttime > 0){
-                        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
-                        idle_starttime = 0;
-                    }
-                    return BREAK;
-                }
-            }
-#else
-            while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
-#if DEBUG_QUECC
-//                if (_planner_id == 0){
-//                    print_threads_status();
-//                    M_ASSERT_V(false,"PT_%ld: non-zero batch map slot\n",_planner_id);
-//                }
-#endif
-#if PROFILE_EXEC_TIMING
-                if(idle_starttime == 0){
-                    idle_starttime = get_sys_clock();
-//                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
-                }
-#endif
-                if (simulation->is_done()){
-#if PROFILE_EXEC_TIMING
-                    if (idle_starttime > 0){
-                        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
-                        idle_starttime = 0;
-                    }
-#endif
-                    return BREAK;
-                }
-            }
-#endif
-            // include idle time from spinning above
-#if PROFILE_EXEC_TIMING
-            if (idle_starttime > 0){
-                INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
-                idle_starttime = 0;
-            }
-#endif
-
             // Deliver batch partition to the repective ET
             // In case batch slot is not ready, spin!
             expected = 0;
@@ -1834,17 +1775,17 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
         batch_start_time = 0;
 #endif
         slot_num = (batch_id % g_batch_map_length);
-        // Spin here if PG map slot is not available, this is eager spnning
-        // TODO(tq): see if we can delay this for later and do some usefl works
 
-        // TQ: waiting for PG here, we should wait on the batch_part
+        // TQ: check if the previous batch parts is done, if not wait, otherwise go ahead and start planning
+        // Here we wait for all of batch parts to be done.
+        // We probably can go ahead and plan based on ET granularity but that will complicate things
 #if BATCHING_MODE == TIME_BASED
         while(work_queue.batch_pg_map[slot_num][_planner_id].load() != 0) {
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
                 }
 //                DEBUG_Q("Planner_%ld : spinning for batch_%ld at b_slot = %ld\n", _planner_id, batch_id, slot_num);
-            }
+//            }
 
                         // include idle time from spinning above
             if (idle_starttime != 0){
@@ -1899,6 +1840,64 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
 //        DEBUG_Q("PL_%ld: Starting to work on planner_pg @%ld with batch_id = %ld, with slot_num =%ld\n",
 //                _planner_id, (uint64_t) planner_pg, batch_id, slot_num);
         txn_ctxs = planner_pg->txn_ctxs;
+#elif BATCHING_MODE == SIZE_BASED
+
+        for (uint64_t i = 0; i < g_thread_cnt; i++) {
+#if BATCH_MAP_ORDER == BATCH_ET_PT
+            while(work_queue.batch_map[slot_num][i][_planner_id].fetch_add(0) != 0) {
+                if(idle_starttime == 0){
+                    idle_starttime = get_sys_clock();
+//                    SAMPLED_DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
+                }
+
+                if (simulation->is_done()){
+                    if (idle_starttime > 0){
+                        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+                        idle_starttime = 0;
+                    }
+                    return BREAK;
+                }
+            }
+#else
+            while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
+#if PROFILE_EXEC_TIMING
+                if(idle_starttime == 0){
+                    idle_starttime = get_sys_clock();
+//                    DEBUG_Q("PT_%ld: SPINNING!!! for batch %ld  Completed a lap up to map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id);
+                }
+#endif
+                if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                    if (idle_starttime > 0){
+                        INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+                        idle_starttime = 0;
+                    }
+#endif
+                    return BREAK;
+                }
+            }
+#endif
+
+        }
+        // include idle time from spinning above
+#if PROFILE_EXEC_TIMING
+        if (idle_starttime > 0){
+            INC_STATS(_thd_id,plan_idle_time[_planner_id],get_sys_clock() - idle_starttime);
+            idle_starttime = 0;
+        }
+#endif
+#else
+        assert(false); // not supported
+#endif
+
+#if BATCHING_MODE == TIME_BASED
+        quecc_pool.txn_ctxs_get_or_create(txn_ctxs, planner_batch_size, _planner_id);
+    quecc_pool.pg_get_or_create(planner_pg, _planner_id);
+    planner_pg->txn_ctxs = txn_ctxs;
+#else
+        planner_pg = &work_queue.batch_pg_map[slot_num][_planner_id];
+//    DEBUG_Q("PL_%ld: Starting to work on planner_pg @%ld with batch_id = %ld, with slot_num =%ld\n",
+//            _planner_id, (uint64_t)planner_pg, batch_id, slot_num);
 #endif
 
     }
@@ -1923,6 +1922,11 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
     tctx->completion_cnt.store(0,memory_order_acq_rel);
 //    tctx->completion_cnt =0;
     tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
+#if EXEC_BUILD_TXN_DEPS
+    tctx->should_abort = false;
+    tctx->commit_dep_cnt.store(0,memory_order_acq_rel);
+    tctx->commit_deps->clear();
+#endif
 #if PROFILE_EXEC_TIMING
     tctx->starttime = get_sys_clock(); // record start time of transaction
 #endif
@@ -1989,7 +1993,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
         Array<exec_queue_entry> *mrange = exec_queues->get(idx);
 
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
-        et_id = _thd_id;
+        et_id = mrange->et_id();
         checkMRange(mrange, key, et_id);
 #endif
 
@@ -1998,6 +2002,10 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
         req_buff->acctype = ycsb_req->acctype;
         req_buff->key = ycsb_req->key;
         req_buff->value = ycsb_req->value;
+
+#if YCSB_INDEX_LOOKUP_PLAN
+        ((YCSBTxnManager *)my_txn_man)->lookup_key(req_buff->key,entry);
+#endif
 
         // add entry into range/bucket queue
         // entry is a sturct, need to double check if this works
@@ -2180,26 +2188,29 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 
 }
 
-void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id){
+void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id) {
 #if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
 
-    int max_tries = 64;
+    int max_tries = 64; //TODO(tq): make this configurable
     int trial =0;
+#if PROFILE_EXEC_TIMING
+    uint64_t _prof_starttime =0;
+#endif
 
-    uint64_t c_range_start;
-    uint64_t c_range_end;
-    uint64_t idx;
-    uint64_t nidx;
-#if PROFILE_EXEC_TIMING
-    uint64_t _prof_starttime;
-#endif
-    idx = get_split(key, exec_qs_ranges);
-#if PROFILE_EXEC_TIMING
-    _prof_starttime = get_sys_clock();
-#endif
+    volatile uint64_t c_range_start;
+    volatile uint64_t c_range_end;
+    volatile uint64_t idx = get_split(key, exec_qs_ranges);
+    volatile uint64_t split_point;
+    Array<exec_queue_entry> * nexec_q = NULL;
+    Array<exec_queue_entry> * oexec_q = NULL;
+
     mrange = exec_queues->get(idx);
-
     while (mrange->is_full()){
+#if PROFILE_EXEC_TIMING
+        if (_prof_starttime == 0){
+            _prof_starttime  = get_sys_clock();
+        }
+#endif
         trial++;
         if (trial == max_tries){
             M_ASSERT_V(false, "Execeded max split tries\n");
@@ -2219,13 +2230,23 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
         }
         c_range_end = exec_qs_ranges->get(idx);
 
-        uint64_t split_point = (c_range_end-c_range_start)/2;
-
 //        DEBUG_Q("Planner_%ld : Eagerly we need to split mrange ptr = %lu, key = %lu, current size = %ld,"
 //                        " batch_id = %ld, c_range_start = %lu, c_range_end = %lu, split_point = %lu, trial=%d"
 //                        "\n",
-//                _planner_id, (uint64_t) mrange, key, mrange->size(), batch_id, c_range_start, c_range_end, split_point, trial);
+//                _planner_id, (uint64_t) mrange, key, mrange->size(), wbatch_id, c_range_start, c_range_end, split_point, trial);
+#if EXPANDABLE_EQS
+        // if we cannot split, we must expand this, otherwise, we fail
+        if ((c_range_end-c_range_start) <= 1){
+            // expand current EQ
+            assert(false);
+            if (mrange->expand()){
+                assert(!mrange->is_full());
+                return;
+            }
+        }
+#endif
 
+        split_point = (c_range_end-c_range_start)/2;
         M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
                    _planner_id, c_range_end-c_range_start, mrange->size());
 
@@ -2234,17 +2255,15 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
         exec_queues_tmp->clear();
         M_ASSERT_V(exec_queues->size() == exec_qs_ranges->size(), "PL_%ld: Size mismatch : EQS(%lu) Ranges (%lu)\n",
                    _planner_id, exec_queues->size(), exec_qs_ranges->size());
+        // update ranges
+        // add two new and empty exec_queues
         for (uint64_t r=0; r < exec_qs_ranges->size(); ++r){
             if (r == idx){
                 // insert split
                 M_ASSERT_V(exec_qs_ranges->get(r) != split_point+c_range_start,
                            "PL_%ld: old range = %lu, new range = %lu",
                            _planner_id,exec_qs_ranges->get(r), split_point+c_range_start);
-                exec_qs_ranges_tmp->add(split_point+c_range_start);
-
-                // add two new and empty exec_queues
-                Array<exec_queue_entry> * nexec_q = NULL;
-                Array<exec_queue_entry> * oexec_q = NULL;
+                ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(split_point+c_range_start);
 #if MERGE_STRATEGY == RR
                 quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, r % g_thread_cnt);
                 quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, (r+1) % g_thread_cnt);
@@ -2258,8 +2277,8 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
 
 //                M_ASSERT_V(nexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
 //                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
-//                assert(oexec_q->size() == 0);
-//                assert(nexec_q->size() == 0);
+                assert(oexec_q->size() == 0);
+                assert(nexec_q->size() == 0);
                 exec_queues_tmp->add(oexec_q);
                 exec_queues_tmp->add(nexec_q);
 
@@ -2271,20 +2290,15 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
         }
 
         // use new ranges to split current execq
-        for (uint64_t r =0; r < mrange->size(); ++r){
-            // TODO(tq): refactor this to respective benchmark implementation
-#if WORKLOAD == YCSB
-            ycsb_request *ycsb_req_tmp = (ycsb_request *) mrange->get_ptr(r)->req_buffer;
-            nidx = get_split(ycsb_req_tmp->key, exec_qs_ranges_tmp);
-#else
-            nidx = get_split(mrange->get(r).rid, exec_qs_ranges_tmp);
-#endif
-            // all entries must fall into one of the splits
-            M_ASSERT_V(nidx == idx || nidx == (idx+1), "nidx=%ld, idx = %ld\n", nidx, idx);
+        splitMRange(mrange,et_id);
 
-            exec_queues_tmp->get(nidx)->add(mrange->get(r));
-        }
-
+//            if(exec_queues_tmp->get(idx)->size() == 0){
+//                M_ASSERT_V(false,"PT_%ld: LEFT EQ is empty after split\n",_planner_id);
+//            }
+//
+//            if (exec_queues_tmp->get(idx+1)->size() == 0){
+//                M_ASSERT_V(false,"PT_%ld: RIGHT EQ is empty after split\n",_planner_id);
+//            }
         // swap data structures
         exec_queues_tmp_tmp = exec_queues;
         exec_qs_ranges_tmp_tmp = exec_qs_ranges;
@@ -2300,18 +2314,18 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
 //                _planner_id, exec_qs_ranges->size(), exec_qs_ranges_tmp->size());
 
         // release current mrange
-        quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_thread_cnt));
+//            quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
+        quecc_pool.exec_queue_release(mrange,_planner_id,_thd_id);
 //        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
 
         // use the new ranges to assign the new execution entry
         idx = get_split(key, exec_qs_ranges);
         mrange = exec_queues->get(idx);
-//#if DEBUG_QUECC
-//        print_eqs_ranges_after_swap();
-//#endif
     }
 #if PROFILE_EXEC_TIMING
-    INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-_prof_starttime);
+    if (_prof_starttime > 0){
+        INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-_prof_starttime);
+    }
 #endif
 
 #else
@@ -2514,15 +2528,15 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
         exec_q->set_pt_id(planner_id);
 #if DEBUG_QUECC
         exec_q_alloc_cnts[et_id][planner_id].fetch_add(1);
-//        SAMPLED_DEBUG_Q("Allocating exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
+//        DEBUG_Q("Allocating exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
 #endif
     }
     else{
-        M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
+//        M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
         exec_q->clear();
 #if DEBUG_QUECC
         exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
-//        SAMPLED_DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
+//        DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
 #endif
     }
 }

@@ -942,7 +942,7 @@ int main(int argc, char* argv[])
 	return 0;
 #endif
 }
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC && MODE == FIXED_MODE
 void cleanup_quecc_runtime() {
 #if BATCH_MAP_ORDER == BATCH_ET_PT
     for (uint64_t i=0; i < g_batch_map_length ; i++){

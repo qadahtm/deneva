@@ -1139,11 +1139,11 @@ SRC WorkerThread::wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id
 #if PROFILE_EXEC_TIMING
         if (idle_starttime == 0){
             idle_starttime = get_sys_clock();
-        }
-#endif
-//            SAMPLED_DEBUG_Q("ET_%ld: Got nothing from planning layer, wbatch_id = %ld,"
+//            DEBUG_Q("ET_%ld: Got nothing from planning layer, wbatch_id = %ld,"
 //                            "\n",
 //                    _thd_id,  wbatch_id);
+        }
+#endif
         return BATCH_WAIT;
     }
 #else
@@ -1501,7 +1501,6 @@ RC WorkerThread::run_normal_mode() {
 #endif
         // allows using the batch_map in circular manner
         batch_slot = wbatch_id % g_batch_map_length;
-//        batch_slot = work_queue.gbatch_id % g_batch_map_length;
 
 #if PIPELINED
 #if PROFILE_EXEC_TIMING

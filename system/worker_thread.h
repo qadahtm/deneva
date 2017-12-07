@@ -1066,18 +1066,6 @@ public:
         // reset map slot to 0 to allow planners to use the slot
         batch_partition * batch_part = get_batch_part(batch_slot, wplanner_id, et_id);
 
-        uint64_t desired = 0;
-        uint64_t expected = (uint64_t) batch_part;
-#if BATCH_MAP_ORDER == BATCH_ET_PT
-        while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
-            DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
-        }
-#else
-//        DEBUG_Q("ET_%ld: RESET batch map slot=%ld, PG=%ld, batch_id=%ld \n", _thd_id, batch_slot, wplanner_id, wbatch_id);
-        if(!work_queue.batch_map[batch_slot][wplanner_id][et_id].compare_exchange_strong(expected, desired)){
-            M_ASSERT_V(false, "ET_%ld: failing to RESET map slot \n", et_id);
-        }
-#endif
 #if PROFILE_EXEC_TIMING
         uint64_t quecc_prof_time;
 #endif
@@ -1108,6 +1096,19 @@ public:
         quecc_pool.batch_part_release(batch_part, wplanner_id, et_id);
 #if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
+#endif
+
+        uint64_t desired = 0;
+        uint64_t expected = (uint64_t) batch_part;
+#if BATCH_MAP_ORDER == BATCH_ET_PT
+        while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
+            DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
+        }
+#else
+//        DEBUG_Q("ET_%ld: RESET batch map slot=%ld, PG=%ld, batch_id=%ld \n", _thd_id, batch_slot, wplanner_id, wbatch_id);
+        if(!work_queue.batch_map[batch_slot][wplanner_id][et_id].compare_exchange_strong(expected, desired)){
+            M_ASSERT_V(false, "ET_%ld: failing to RESET map slot \n", et_id);
+        }
 #endif
     };
 
@@ -1396,24 +1397,23 @@ public:
             // check for any dependent transaction
 #if EXEC_BUILD_TXN_DEPS
             if (txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel) > 0){
-                DEBUG_Q("CT_%ld: txn_id %lu has %lu dependent txns that has not committed or aborted, batch_id=%lu\n",
-                        _thd_id, txn_ctxs[j].txn_id, txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel),wbatch_id);
+//                DEBUG_Q("CT_%ld: txn_id %lu has %lu dependent txns that has not committed or aborted, batch_id=%lu\n",
+//                        _thd_id, txn_ctxs[j].txn_id, txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel),wbatch_id);
                 return WAIT;
             }
             else{
                 if (txn_ctxs[j].should_abort){
-                    DEBUG_Q("CT_%ld: txn_id %lu should be aborted\n",
-                            _thd_id, txn_ctxs[j].txn_id);
+//                    DEBUG_Q("CT_%ld: txn_id %lu should be aborted\n",
+//                            _thd_id, txn_ctxs[j].txn_id);
                     return Abort;
                 }
                 else{
-                    DEBUG_Q("CT_%ld: txn_id %lu should be committed, batch_id=%lu\n",
-                            _thd_id, txn_ctxs[j].txn_id,wbatch_id);
+//                    DEBUG_Q("CT_%ld: txn_id %lu should be committed, batch_id=%lu\n",
+//                            _thd_id, txn_ctxs[j].txn_id,wbatch_id);
                     return Commit;
                 }
             }
 #endif
-            return Commit;
         }
         else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
             //     abort transaction, this abort decision is done by an ET during execution phase

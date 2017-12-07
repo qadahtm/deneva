@@ -19,6 +19,7 @@
 #include <boost/random.hpp>
 #include <boost/unordered_map.hpp>
 #include <row.h>
+#include "ycsb_query.h"
 
 #if CC_ALG == QUECC
 class Workload;
@@ -236,23 +237,67 @@ public:
     void setup();
     uint64_t _planner_id;
     uint32_t get_bucket(uint64_t key);
-    uint32_t get_split(uint64_t key, uint32_t range_cnt, uint64_t range_start, uint64_t range_end);
+
     inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
-        for (uint64_t i = 0; i < ranges->size(); i++){
+        for (uint32_t i = 0; i < ranges->size(); i++){
             if (key <= ranges->get(i)){
                 return i;
             }
         }
-#if DEBUG_QUECC
-        for (uint64_t i = 0; i < ranges->size(); i++){
-            DEBUG_Q("PL_%ld: ranges[%lu] = %lu\n",_planner_id,i,ranges->get(i));
-        }
-#endif
-        M_ASSERT_V(false, "PL_%ld: could not assign to range key = %lu\n", _planner_id, key);
-        return ranges->size()-1;
+        M_ASSERT_V(false, "could not assign to range key = %lu\n", key);
+        return (uint32_t) ranges->size()-1;
     }
 
+    uint64_t OPTIMIZE_OUT get_key_from_entry(exec_queue_entry * entry) {
+#if WORKLOAD == YCSB
+        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
+        return ycsb_req_tmp->key;
+#else
+        return etnry->rid;
+#endif
+    }
 
+    void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t et_id){
+        uint64_t tidx =0;
+        uint64_t nidx =0;
+        Array<exec_queue_entry> * texec_q = NULL;
+
+        for (uint64_t r =0; r < mrange->size(); ++r){
+            // TODO(tq): refactor this to respective benchmark implementation
+            uint64_t lid = get_key_from_entry(mrange->get_ptr(r));
+            tidx = get_split(lid, exec_qs_ranges);
+//            M_ASSERT_V(((Array<exec_queue_entry> volatile * )exec_queues->get(tidx)) == mrange, "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+            nidx = get_split(lid, ((Array<uint64_t> *)exec_qs_ranges_tmp));
+
+            texec_q =  exec_queues_tmp->get(nidx);
+//            M_ASSERT_V(texec_q == nexec_q || texec_q == oexec_q , "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+            // all entries must fall into one of the splits
+#if DEBUG_QUECC
+            if (!(nidx == tidx || nidx == (tidx+1))){
+//                DEBUG_Q("PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
+                for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
+                    DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
+                }
+
+//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+//                        _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+//            }
+
+                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+                    DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+                }
+//            for (uint64_t i =0; i < exec_queues->size(); ++i){
+//                DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                        _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//            }
+            }
+#endif
+            M_ASSERT_V(nidx == tidx || nidx == (tidx+1),"PL_%ld: nidx=%ld, tidx = %ld,lid=%ld\n",_planner_id, nidx, tidx, lid);
+
+            texec_q->add(mrange->get(r));
+        }
+    }
     void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
     void plan_client_msg(Message *msg, priority_group * planner_pg);
     SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);

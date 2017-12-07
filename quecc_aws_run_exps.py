@@ -454,9 +454,9 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = False;
+time_enable = True;
 dry_run = False;
-vm_shut = False;
+vm_shut = True;
 
 is_ycsb = True
 
@@ -518,8 +518,10 @@ num_trials = 2
 # cc_algs = ['NO_WAIT']
 # cc_algs = ['MVCC'] 
 # cc_algs = ['TIMESTAMP']  
-# cc_algs = ['QUECC']  
-cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
+cc_algs = ['QUECC']  
+# cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
+# cc_algs = ['NO_WAIT', 'SILO', 'QUECC'] 
+# cc_algs = ['OCC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'QUECC'] 
@@ -541,24 +543,27 @@ mtpps = [int(500000)] # MAX_TXN_PER_PART
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
 # batch_sized = [40320]
-batch_sized = [10368]
+# batch_sized = [10368]
 # batch_sized = [10080] # for ptvar lcm(2,4,5,6,8,10,12,15,16,18,20,24,32)
 # batch_sized = [13440,26880,40320,53760,107520]
 # batch_sized = [13440,26880,53760,107520]
 # batch_sized = [5184,10368,20736,41472,82944,165888]
 # batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
+batch_sized = [1024,2048,4096,8192,10368,20736,41472,82944]
 
-# pt_perc = [0.25,0.5,0.75,1]
-# pt_perc = [0.25,0.75]
+pt_perc = [0.25,0.5,0.75,1]
+# pt_perc = [0.25,0.5,0.75]
 # pt_perc = [0.25]
 # pt_perc = [0.5,1]
 # pt_perc = [0.5]
-pt_perc = [1]
+# pt_perc = [1]
 
 #ratio of commit threads from execution threads
 # ct_perc = [0.25,0.5,1]
 # ct_perc = [0.25,1]
+# ct_perc = [0.5,1]
 # ct_perc = [0.25]
+# ct_perc = [0.5]
 ct_perc = [1]
 
 # parts_accessed = [1,32]
@@ -576,11 +581,12 @@ parts_accessed = [1]
 ############### YCSB specific
 # zipftheta = [0.0,0.3,0.6,0.8,0.99]
 # zipftheta = [0.8] #redo
-zipftheta = [0.0,0.8,0.6] # defaults
+zipftheta = [0.0,0.8] # defaults
 # zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
 
 # write_perc = [0.05,0.2,0.5,0.8,0.95]
+# write_perc = [0.0,0.2,0.5,0.8,1.0]
 write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 # mpt_perc = [0.1,0.2,0.5,0.8,1.0]
@@ -593,10 +599,11 @@ mpt_perc = [0.0]
 # ycsb_op_per_txn = [16] #set to a single element if workload is not YCSB 
 ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB 
 # ycsb_op_per_txn = [32] #set to a single element if workload is not YCSB 
-recsizes = [0.2,1,5,10,20,40]
+# recsizes = [0.2,1,5,10,20,40]
 # recsizes = [1,5,10,20,40,80,160] # skip 1 since we already have results for it
 # recsizes = [10,20,40] # skip 1 since we already have results for it
-# recsizes = [1]
+# recsizes = [0.5, 2, 4, 8, 16]
+recsizes = [1]
 
 
 ############### TPCC specific
