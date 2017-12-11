@@ -387,20 +387,36 @@ int main(int argc, char* argv[])
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
     cpu_cnt++;
 #endif
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC && WT_SYNC_METHOD == SYNC_BLOCK
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+#if !NEXT_STAGE_ARRAY
         work_queue.plan_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
         *(work_queue.plan_next_stage[i]) = 0;
         work_queue.exec_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
         *(work_queue.exec_next_stage[i]) = 0;
         work_queue.commit_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
         *(work_queue.commit_next_stage[i]) = 0;
+#else
+//        work_queue.exec_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t)*g_thread_cnt);
+//        work_queue.commit_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t)*g_thread_cnt);
+#endif
         for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
             work_queue.plan_sblocks[i][j].done = 0;
+#if NEXT_STAGE_ARRAY
+            (work_queue.plan_next_stage[i][j]) = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+            *(work_queue.plan_next_stage[i][j]) = 0;
+#endif
         }
         for (UInt32 j = 0; j < g_thread_cnt; ++j) {
             work_queue.exec_sblocks[i][j].done = 0;
             work_queue.commit_sblocks[i][j].done = 0;
+#if NEXT_STAGE_ARRAY
+            (work_queue.exec_next_stage[i][j]) = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+            *(work_queue.exec_next_stage[i][j]) = 0;
+
+            (work_queue.commit_next_stage[i][j]) = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+            *(work_queue.commit_next_stage[i][j]) = 0;
+#endif
         }
     }
 #endif

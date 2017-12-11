@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 32
@@ -15,7 +15,7 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 16
+#define PLAN_THREAD_CNT 32
 #define PART_CNT 1
 
 
@@ -60,7 +60,7 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      true
+#define PROFILE_EXEC_TIMING      false
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -186,8 +186,8 @@
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
-//#define BATCH_SIZE 20736
-#define BATCH_SIZE 10368
+#define BATCH_SIZE 8192
+//#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
@@ -195,14 +195,14 @@
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 2//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 //#define BATCH_MAP_LENGTH 2 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED true
+#define PIPELINED false
 
 #define INIT_QUERY_MSGS false
 
@@ -249,8 +249,8 @@
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
-#define FIXED_COMMIT_THREAD_CNT true
-#define COMMIT_THREAD_CNT 8
+#define FIXED_COMMIT_THREAD_CNT false
+#define COMMIT_THREAD_CNT 4
 #define TXN_CNT_COMMIT_THRESHOLD (THREAD_CNT*PLAN_THREAD_CNT)*2
 
 
@@ -262,6 +262,8 @@
 #define CNT_FETCH_ADD_ACQ_REL    3
 #define SYNC_BLOCK    4
 #define SENSE_BARRIER  5
+
+#define NEXT_STAGE_ARRAY true
 
 #define ATOMIC_PG_STATUS true
 

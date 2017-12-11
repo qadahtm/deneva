@@ -87,6 +87,12 @@ void Thread::tsetup() {
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
 #endif
 
+//	// Force FIFO scheduling
+//	struct sched_param param;
+//	param.sched_priority = 1;
+//	int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+//	printf("ET_%lu: forcing FIFO scheduling rc = %d, EINVAL=%d,EPERM=%d,ESRCH=%d,ENOTSUP=%d\n",_thd_id,rc, EINVAL, EPERM,ESRCH, ENOTSUP);
+
 #if TIME_ENABLE
   run_starttime = get_sys_clock();
 #else

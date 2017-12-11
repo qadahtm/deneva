@@ -66,6 +66,7 @@ public:
 
 #if CC_ALG == QUECC
     int stage =0; //0=plan, 1=exec, 2,commit
+#if !PIPELINED
     SRC sync_on_planning_phase_end(uint64_t batch_slot){
 #if PROFILE_EXEC_TIMING
         uint64_t sync_idlestarttime = 0;
@@ -210,7 +211,13 @@ public:
 //                work_queue.plan_sblocks[batch_slot][i].next_stage = 1;
 //                atomic_thread_fence(memory_order_release);
 //            }
+#if NEXT_STAGE_ARRAY
+            for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
+                *(work_queue.plan_next_stage[batch_slot][j]) = 1;
+            }
+#else
             *(work_queue.plan_next_stage[batch_slot]) = 1;
+#endif
             atomic_thread_fence(memory_order_release);
 
 //            DEBUG_Q("WT_%ld: plan_stage - going to wait for WT_* to see next stage, batch_id = %ld\n", _thd_id,wbatch_id);
@@ -248,7 +255,13 @@ public:
 
 //            DEBUG_Q("WT_%ld: plan_stage - all WT_* are ready to move to next stage, batch_id = %ld\n", _thd_id,wbatch_id);
             // all other threads are ready to exit sync
+#if NEXT_STAGE_ARRAY
+            for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
+                *(work_queue.plan_next_stage[batch_slot][j]) = 0;
+            }
+#else
             *(work_queue.plan_next_stage[batch_slot]) = 0;
+#endif
             atomic_thread_fence(memory_order_release);
 
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
@@ -296,7 +309,11 @@ public:
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             atomic_thread_fence(memory_order_acquire);
+#if NEXT_STAGE_ARRAY
+            while(*(work_queue.plan_next_stage[batch_slot][_planner_id]) != 1){
+#else
             while(*(work_queue.plan_next_stage[batch_slot]) != 1){
+#endif
 #if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
@@ -323,7 +340,11 @@ public:
             atomic_thread_fence(memory_order_release);
 
             atomic_thread_fence(memory_order_acquire);
+#if NEXT_STAGE_ARRAY
+            while(*(work_queue.plan_next_stage[batch_slot][_planner_id]) != 0){
+#else
             while(*(work_queue.plan_next_stage[batch_slot]) != 0){
+#endif
 #if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
@@ -380,7 +401,7 @@ public:
 #endif
         return SUCCESS;
     }
-
+#endif
     SRC sync_on_execution_phase_end(uint64_t batch_slot){
 #if PROFILE_EXEC_TIMING
         uint64_t sync_idlestarttime =0;
@@ -521,7 +542,13 @@ public:
 //                work_queue.exec_sblocks[batch_slot][i].next_stage = 1;
 //                atomic_thread_fence(memory_order_release);
 //            }
+#if NEXT_STAGE_ARRAY
+            for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                *(work_queue.exec_next_stage[batch_slot][j]) = 1;
+            }
+#else
             *(work_queue.exec_next_stage[batch_slot]) = 1;
+#endif
             // need to wait for all threads to exit sync
             work_queue.exec_sblocks[batch_slot][_thd_id].done = 0;
             atomic_thread_fence(memory_order_release);
@@ -555,8 +582,13 @@ public:
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
 #endif
-
+#if NEXT_STAGE_ARRAY
+            for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+               * (work_queue.exec_next_stage[batch_slot][j]) = 0;
+            }
+#else
             *(work_queue.exec_next_stage[batch_slot]) = 0;
+#endif
             atomic_thread_fence(memory_order_release);
 
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
@@ -602,7 +634,11 @@ public:
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             atomic_thread_fence(memory_order_acquire);
+#if NEXT_STAGE_ARRAY
+            while (*work_queue.exec_next_stage[batch_slot][_thd_id] != 1){
+#else
             while (*work_queue.exec_next_stage[batch_slot] != 1){
+#endif
 #if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
@@ -628,7 +664,11 @@ public:
             atomic_thread_fence(memory_order_release);
 
             atomic_thread_fence(memory_order_acquire);
+#if NEXT_STAGE_ARRAY
+            while (*work_queue.exec_next_stage[batch_slot][_thd_id] != 0){
+#else
             while (*work_queue.exec_next_stage[batch_slot] != 0){
+#endif
 #if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
@@ -869,7 +909,13 @@ public:
 //            for (uint32_t i=0; i < g_thread_cnt; ++i){
 //                work_queue.commit_sblocks[batch_slot][i].next_stage = 1;
 //            }
+#if NEXT_STAGE_ARRAY
+            for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                *(work_queue.commit_next_stage[batch_slot][j]) = 1;
+            }
+#else
             *(work_queue.commit_next_stage[batch_slot]) = 1;
+#endif
             atomic_thread_fence(memory_order_release);
 
             // need to wait for all threads to exit sync
@@ -903,8 +949,13 @@ public:
                 INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
             }
 #endif
-
+#if NEXT_STAGE_ARRAY
+            for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                *(work_queue.commit_next_stage[batch_slot][j]) = 0;
+            }
+#else
             *(work_queue.commit_next_stage[batch_slot]) = 0;
+#endif
             atomic_thread_fence(memory_order_release);
 
 #elif WT_SYNC_METHOD == CAS_GLOBAL_SC
@@ -947,7 +998,11 @@ public:
             }
 #elif WT_SYNC_METHOD == SYNC_BLOCK
             atomic_thread_fence(memory_order_acquire);
+#if NEXT_STAGE_ARRAY
+            while (*work_queue.commit_next_stage[batch_slot][_thd_id] != 1){
+#else
             while (*work_queue.commit_next_stage[batch_slot] != 1){
+#endif
 #if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
@@ -971,7 +1026,11 @@ public:
             atomic_thread_fence(memory_order_release);
 
             atomic_thread_fence(memory_order_acquire);
+#if NEXT_STAGE_ARRAY
+            while (*work_queue.commit_next_stage[batch_slot][_thd_id] != 0){
+#else
             while (*work_queue.commit_next_stage[batch_slot] != 0){
+#endif
 #if PROFILE_EXEC_TIMING
                 if (sync_idlestarttime ==0){
                     sync_idlestarttime = get_sys_clock();
