@@ -311,14 +311,22 @@ inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
 }
 
 inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
+    // TQ: implement read-modify-write
+    uint8_t fval UNUSED =0;
+    char *data = row_local->get_data();
     if (acctype == RD || acctype == SCAN) {
-        int fid = 0;
-        char *data = row_local->get_data();
+
         //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is no used
-        uint64_t fval __attribute__ ((unused));
         // TQ: perform the actual read by
+#if YCSB_DO_OPERATION
+        for (int j = 0; j < row_local->tuple_size; ++j) {
+            fval += data[j];
+        }
+#else
         // However this only reads 8 bytes of the data
-        fval = *(uint64_t *) (&data[fid * 100]);
+        int fid = 0;
+        fval = *(uint8_t  *) (&data[fid * 100]);
+#endif
         //TODO(tq): we assume that isolation level is always set to serializable
 #if CC_ALG != QUECC && (ISOLATION_LEVEL == READ_COMMITTED || ISOLATION_LEVEL == READ_UNCOMMITTED)
         // Release lock after read
@@ -326,16 +334,19 @@ inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
 #endif
 
     } else {
-        //TODO(tq): remove on clean up
-//        if (acctype != WR){
-//            DEBUG_Q("Access type must be %d == %d\n", WR, acctype);
-//        }
         assert(acctype == WR);
-        int fid = 0;
-        char *data = row_local->get_data();
+#if YCSB_DO_OPERATION
+        for (int j = 0; j < row_local->tuple_size; ++j) {
+            fval += data[j];
+        }
+        // write value to the first byte
+        data[0] = fval;
+#else
         //TQ: here the we are zeroing the first 8 bytes
         // 100 below is the number of bytes for each field
+        int fid = 0;
         *(uint64_t *) (&data[fid * 100]) = 0;
+#endif
 #if YCSB_ABORT_MODE
         if(data[0] == 'a')
           return RCOK;

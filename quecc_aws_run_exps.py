@@ -18,7 +18,7 @@ from datetime import timedelta
 import multiprocessing
 from termcolor import colored, cprint
 
-def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, maxtpp, m_strat,rs,ct_p):
+def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, maxtpp, m_strat,rs,ct_p,bmap_len):
     
     nfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'nconfig.h'
     ofname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
@@ -31,11 +31,13 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
     else:
         pt_cnt = pt_p
 
-    bmap_len = 2
+    # bmap_len = 2
     if ncc_alg == 'QUECC':
         nwthd_cnt = wthd_cnt - pt_cnt 
         part_cnt = nwthd_cnt + pt_cnt
         piplined = 'true'
+        abort_queues = 'true'
+        abort_thread = 'false'
         if (nwthd_cnt == 0):
             nwthd_cnt = wthd_cnt     
             part_cnt = wthd_cnt  
@@ -46,6 +48,8 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         nwthd_cnt = wthd_cnt #ignore planner percentage now. 
         part_cnt = nwthd_cnt
         piplined = 'true'
+        abort_queues = 'false'
+        abort_thread = 'true'
 
     if ct_p <= 1:
         ct_cnt = int(ct_p*nwthd_cnt)
@@ -130,6 +134,16 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         if pc_m and is_ycsb:
             nline = '#define REQ_PER_QUERY {}\n'.format(oppt)
 
+
+
+        # pc_m =    re.search('#define MAX_TUPLE_SIZE\s+(\d+)',line.strip())
+        # if pc_m and is_ycsb:
+        #     nline = '#define MAX_TUPLE_SIZE {}\n'.format(int(rs*100))
+
+        # pc_m =    re.search('#define FIELD_PER_TUPLE\s+(\d+)',line.strip())
+        # if pc_m and is_ycsb:
+        #     nline = '#define FIELD_PER_TUPLE {}\n'.format(ycsb_field_per_tuple)
+
         m =    re.search('#define MODE\s+(NORMAL_MODE|FIXED_MODE)',line.strip())
         if m:
             if is_fixed_mode:
@@ -145,6 +159,15 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         m =    re.search('#define MERGE_STRATEGY\s+(RR|BALANCE_EQ_SIZE)',line.strip())
         if m:
             nline = '#define MERGE_STRATEGY {}\n'.format(m_strat)
+
+        m =    re.search('#define ABORT_THREAD\s+(true|false)',line.strip())
+        if m:
+            nline = '#define ABORT_THREAD {}\n'.format(abort_thread)
+
+        m =    re.search('#define ABORT_QUEUES\s+(true|false)',line.strip())
+        if m:
+            nline = '#define ABORT_QUEUES {}\n'.format(abort_queues)
+
 
         m =    re.search('#define PIPELINED\s+(true|false)',line.strip())
         if m:
@@ -388,7 +411,6 @@ def get_df_csv(outdir):
     df = pd.DataFrame(e_data)
     return df.to_csv()
 
-
 def set_ycsb_schema(rs):
     ycsb_schema = "//size, type, name\nTABLE=MAIN_TABLE\n"
 
@@ -453,9 +475,9 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = True;
-dry_run = True;
-vm_shut = False;
+time_enable = False;
+dry_run = False;
+vm_shut = True;
 
 is_ycsb = True
 
@@ -510,7 +532,7 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-# wthreads = [vm_cores]
+wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
 num_trials = 2
 # cc_algs = ['SILO']
@@ -550,20 +572,20 @@ batch_sized = [10368]
 # batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
 # batch_sized = [1024,2048,4096,8192,10368,20736,41472,82944]
 
-pt_perc = [0.25,0.5,0.75,1]
+# pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.25,0.5,0.75]
 # pt_perc = [0.25]
 # pt_perc = [0.5,1]
-# pt_perc = [0.5]
+pt_perc = [0.5]
 # pt_perc = [1]
 
 #ratio of commit threads from execution threads
 # ct_perc = [0.25,0.5,1]
 # ct_perc = [0.25,1]
-ct_perc = [0.5,1]
+# ct_perc = [0.5,1]
 # ct_perc = [0.25]
 # ct_perc = [0.5]
-# ct_perc = [1]
+ct_perc = [1]
 
 # parts_accessed = [1,32]
 # parts_accessed = [1,2,4,8,10]
@@ -604,6 +626,8 @@ ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB
 # recsizes = [0.5, 2, 4, 8, 16]
 recsizes = [1]
 
+bmap_lengths = [1,2,4,8,16,32]
+# bmap_lengths = [2]
 
 ############### TPCC specific
 payment_perc = [0.5]
@@ -676,70 +700,71 @@ if is_ycsb:
                         for wp in write_perc:
                             for m_stratv in merge_strats:
                                 for mprv in mpt_perc:
-                                    for ct in ct_perc:
-                                        for oppt in ycsb_op_per_txn:
-                                            for pa in parts_accessed:
-                                                assert(pa > 0) 
-                                                if pa < 1:
-                                                    pa = int(wthd*pa)
-                                                for ppts in strict:
-                                                    for bs in batch_sized:
-                                                        runexp = True
-                                                        exp_cnt = 0
-                                                        for pt in pt_perc:                                                                    
-                                                            #use this condition if QUECC is included only
-                                                            if ncc_alg != 'QUECC' and exp_cnt >= 1:
-                                                                runexp = False
+                                    for bml in bmap_lengths:
+                                        for ct in ct_perc:
+                                            for oppt in ycsb_op_per_txn:
+                                                for pa in parts_accessed:
+                                                    assert(pa > 0) 
+                                                    if pa < 1:
+                                                        pa = int(wthd*pa)
+                                                    for ppts in strict:
+                                                        for bs in batch_sized:
+                                                            runexp = True
+                                                            exp_cnt = 0
+                                                            for pt in pt_perc:                                                                    
+                                                                #use this condition if QUECC is included only
+                                                                if ncc_alg != 'QUECC' and exp_cnt >= 1:
+                                                                    runexp = False
 
-                                                            if runexp:
-                                                                exp_cnt = exp_cnt + 1        
-                                                                if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
-                                                                    pt = 1
-                                                                set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt,mprv,wp, maxtppv, m_stratv,rs,ct)
-                                                                # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
-                                                                if not dry_run:
-                                                                    build_project()
-                                                                for trial in list(range(num_trials)):
-                                                                    if rs <= 1:
-                                                                        rs_str = str(int(rs*100))
-                                                                    else:
-                                                                        rs_str = str(int(rs)*100)
-
-                                                                    if ct <= 1:
-                                                                        ct_cnt = str(int(ct*wthd))
-                                                                    else:
-                                                                        ct_cnt = str(int(ct))
-
-                                                                    if pt <= 1:
-                                                                        pt_cnt = str(int(pt*wthd))
-                                                                        et_cnt = str(wthd-int(pt*wthd));
-                                                                        pt_perc_str = str(int(pt*100))
-                                                                    else:
-                                                                        pt_cnt = str(pt)
-                                                                        et_cnt = str(wthd-pt);
-                                                                        pt_perc_str = str(0)
-                                                                    
-                                                                    if (wthd-int(pt*wthd)) == 0:
-                                                                        et_cnt = str(wthd);
-
-                                                                    if prefix != "":
-                                                                        if ppts:
-                                                                            nprefix = prefix + '_ct'+ ct_cnt + '_'+ rs_str + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                if runexp:
+                                                                    exp_cnt = exp_cnt + 1        
+                                                                    if not(ncc_alg == 'QUECC' or ncc_alg == 'LADS') and pt != 1:
+                                                                        pt = 1
+                                                                    set_config(ncc_alg, wthd, theta, pt, bs, pa, ppts, oppt,mprv,wp, maxtppv, m_stratv,rs,ct,bml)
+                                                                    # exec_cmd('head {}'.format(DENEVA_DIR_PREFIX+'config.h'), env)
+                                                                    if not dry_run:
+                                                                        build_project()
+                                                                    for trial in list(range(num_trials)):
+                                                                        if rs <= 1:
+                                                                            rs_str = str(int(rs*100))
                                                                         else:
-                                                                            nprefix = prefix + '_ct'+ ct_cnt + '_'+ rs_str + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
-                                                                    else:
-                                                                        if ppts:
-                                                                            nprefix = 'ct'+ ct_cnt + '_' + rs_str +'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                            rs_str = str(int(rs)*100)
+
+                                                                        if ct <= 1:
+                                                                            ct_cnt = str(int(ct*wthd))
                                                                         else:
-                                                                            nprefix = 'ct'+ ct_cnt + '_' + rs_str  + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
-                                                                    run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
-                                                                    # print('Dry run: {}, {}, {}, t{}, {}'
-                                                                    #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
-                                                                    seq_no = seq_no + 1
-                                                                cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
-                                                                cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
-                                                                # print("cp {} {}".format(cfgfname, cfg_copy))
-                                                                exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
+                                                                            ct_cnt = str(int(ct))
+
+                                                                        if pt <= 1:
+                                                                            pt_cnt = str(int(pt*wthd))
+                                                                            et_cnt = str(wthd-int(pt*wthd));
+                                                                            pt_perc_str = str(int(pt*100))
+                                                                        else:
+                                                                            pt_cnt = str(pt)
+                                                                            et_cnt = str(wthd-pt);
+                                                                            pt_perc_str = str(0)
+                                                                        
+                                                                        if (wthd-int(pt*wthd)) == 0:
+                                                                            et_cnt = str(wthd);
+
+                                                                        if prefix != "":
+                                                                            if ppts:
+                                                                                nprefix = prefix + '_ct'+ ct_cnt + '_'+ rs_str + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_' ;
+                                                                            else:
+                                                                                nprefix = prefix + '_ct'+ ct_cnt + '_'+ rs_str + '_pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';  
+                                                                        else:
+                                                                            if ppts:
+                                                                                nprefix = 'ct'+ ct_cnt + '_' + rs_str +'Brec_' + 'pa' + str(pa) + '_' + str(bs) + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptstrict_';
+                                                                            else:
+                                                                                nprefix = 'ct'+ ct_cnt + '_' + rs_str  + 'Brec_' + 'pa' + str(pa) + '_' + str(bs)  + '_pt' + pt_cnt + '_et' + et_cnt +'_'+ pt_perc_str +'_pptnonstrict_';
+                                                                        run_trial(trial, ncc_alg, env, seq_no, True, node_list, outdir, nprefix)                            
+                                                                        # print('Dry run: {}, {}, {}, t{}, {}'
+                                                                        #     .format(ncc_alg, str(wthd), str(theta), str(trial), nprefix))
+                                                                        seq_no = seq_no + 1
+                                                                    cfgfname = WORK_DIR+'/'+DENEVA_DIR_PREFIX+'config.h'
+                                                                    cfg_copy = '{}/{}{}_config.h'.format(outdir, nprefix, ncc_alg.replace('_',''))
+                                                                    # print("cp {} {}".format(cfgfname, cfg_copy))
+                                                                    exec_cmd("cp {} {}".format(cfgfname, cfg_copy), env)
 else: #TPC-C
     for ncc_alg in cc_algs:
         for wthd in wthreads:

@@ -1999,7 +1999,7 @@ RC WorkerThread::run_normal_mode() {
         ready_starttime = get_sys_clock();
 #endif
         msg->release();
-//        Message::release_message(msg);
+        Message::release_message(msg);
 #endif //#if !INIT_QUERY_MSGS
 #endif // #if CC_ALG != CALVIN
 #if PROFILE_EXEC_TIMING

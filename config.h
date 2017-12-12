@@ -6,10 +6,10 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 16
+#define CORE_CNT 32
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
@@ -64,7 +64,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT 10000//1000000 * 1
+#define MAX_TXN_IN_FLIGHT 100//1000000 * 1
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -124,7 +124,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG SILO
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -186,8 +186,8 @@
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
-#define BATCH_SIZE 8192
-//#define BATCH_SIZE 10368
+//#define BATCH_SIZE 8192
+#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
@@ -286,8 +286,8 @@
 
 
 #define SINGLE_NODE true
-#define ABORT_THREAD false
-#define ABORT_QUEUES true
+#define ABORT_THREAD true // if this is false, ABORT_QUEUES should be true to handle aborts
+#define ABORT_QUEUES false
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20
@@ -361,6 +361,7 @@
 #define PERC_MULTI_PART 0.0//MPR
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
+#define YCSB_DO_OPERATION true
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
 #define STRICT_PPT true

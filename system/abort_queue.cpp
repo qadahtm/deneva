@@ -37,14 +37,20 @@ uint64_t AbortQueue::enqueue(uint64_t thd_id, uint64_t txn_id, uint64_t abort_cn
   entry->txn_id = txn_id;
 #if PROFILE_EXEC_TIMING
   uint64_t mtx_time_start = get_sys_clock();
-//  pthread_mutex_lock(&mtx);
+#endif
+#if ABORT_THREAD
+  pthread_mutex_lock(&mtx);
+#endif
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,mtx[0],get_sys_clock() - mtx_time_start);
 #endif
   DEBUG("AQ Enqueue %ld %f -- %f\n",entry->txn_id,float(penalty - starttime)/BILLION,simulation->seconds_from_start(starttime));
   INC_STATS(thd_id,abort_queue_penalty,penalty - starttime);
   INC_STATS(thd_id,abort_queue_enqueue_cnt,1);
   queue.push(entry);
-//  pthread_mutex_unlock(&mtx);
+#if ABORT_THREAD
+  pthread_mutex_unlock(&mtx);
+#endif
 #if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,abort_queue_enqueue_time,get_sys_clock() - starttime);
 #endif
@@ -58,7 +64,11 @@ void AbortQueue::process(uint64_t thd_id) {
   abort_entry * entry;
 #if PROFILE_EXEC_TIMING
   uint64_t mtx_time_start = get_sys_clock();
-//  pthread_mutex_lock(&mtx);
+#endif
+#if ABORT_THREAD
+  pthread_mutex_lock(&mtx);
+#endif
+#if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,mtx[1],get_sys_clock() - mtx_time_start);
 #endif
   uint64_t starttime = get_sys_clock();
@@ -80,7 +90,9 @@ void AbortQueue::process(uint64_t thd_id) {
     }
 
   }
-//  pthread_mutex_unlock(&mtx);
+#if ABORT_THREAD
+  pthread_mutex_unlock(&mtx);
+#endif
 #if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,abort_queue_dequeue_time,get_sys_clock() - starttime);
 #endif
