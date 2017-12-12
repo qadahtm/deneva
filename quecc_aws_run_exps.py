@@ -31,11 +31,6 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
     else:
         pt_cnt = pt_p
 
-    if ct_p <= 1:
-        ct_cnt = int(ct_p*wthd_cnt)
-    else:
-        ct_cnt = ct_p
-
     bmap_len = 2
     if ncc_alg == 'QUECC':
         nwthd_cnt = wthd_cnt - pt_cnt 
@@ -52,6 +47,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         part_cnt = nwthd_cnt
         piplined = 'true'
 
+    if ct_p <= 1:
+        ct_cnt = int(ct_p*nwthd_cnt)
+    else:
+        ct_cnt = ct_p
 
     part_cnt = 1
     # if nwthd_cnt == 0:
@@ -455,8 +454,8 @@ print("Number of ips = {:d}".format(ip_cnt))
 env = dict(os.environ)
 
 time_enable = True;
-dry_run = False;
-vm_shut = True;
+dry_run = True;
+vm_shut = False;
 
 is_ycsb = True
 
@@ -511,7 +510,7 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-wthreads = [vm_cores]
+# wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
 num_trials = 2
 # cc_algs = ['SILO']
@@ -543,13 +542,13 @@ mtpps = [int(500000)] # MAX_TXN_PER_PART
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
 # batch_sized = [40320]
-# batch_sized = [10368]
+batch_sized = [10368]
 # batch_sized = [10080] # for ptvar lcm(2,4,5,6,8,10,12,15,16,18,20,24,32)
 # batch_sized = [13440,26880,40320,53760,107520]
 # batch_sized = [13440,26880,53760,107520]
 # batch_sized = [5184,10368,20736,41472,82944,165888]
 # batch_sized = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
-batch_sized = [1024,2048,4096,8192,10368,20736,41472,82944]
+# batch_sized = [1024,2048,4096,8192,10368,20736,41472,82944]
 
 pt_perc = [0.25,0.5,0.75,1]
 # pt_perc = [0.25,0.5,0.75]
@@ -561,10 +560,10 @@ pt_perc = [0.25,0.5,0.75,1]
 #ratio of commit threads from execution threads
 # ct_perc = [0.25,0.5,1]
 # ct_perc = [0.25,1]
-# ct_perc = [0.5,1]
+ct_perc = [0.5,1]
 # ct_perc = [0.25]
 # ct_perc = [0.5]
-ct_perc = [1]
+# ct_perc = [1]
 
 # parts_accessed = [1,32]
 # parts_accessed = [1,2,4,8,10]

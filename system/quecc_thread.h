@@ -91,7 +91,7 @@ struct transaction_context {
     Array<Access*> * accesses;
 #endif
 #endif
-};
+} __attribute__((aligned));
 
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
 typedef boost::unordered::unordered_map<uint64_t, std::vector<uint64_t> *> hash_table_t;
@@ -124,21 +124,22 @@ struct exec_queue_entry {
      // 8 bytes for access_type
     // 8 bytes for key
     // 1 byte for value
-    char req_buffer[17];
+    char req_buffer[34];
 //    ycsb_request req;
 #elif WORKLOAD == TPCC
-    tpcc_txn_frag_t type;
-    uint64_t rid;
+    tpcc_txn_frag_t type; // 4 bytes
+    uint64_t rid; // 8 bytes
+    char padding[24]; // 64-(8+8+8+4+8+4)
 #endif
-    row_t * row;
+    row_t * row; // 8 bytes
 #if ROW_ACCESS_IN_CTX
-    uint32_t req_idx;
+    uint32_t req_idx; // 4 bytes
 #endif
 
 #if !SERVER_GENERATE_QUERIES
     uint64_t return_node_id; //8
 #endif
-};
+} __attribute__((aligned));
 
 
 struct priority_group{
@@ -148,7 +149,7 @@ struct priority_group{
 #else
     transaction_context * txn_ctxs;
 #endif
-};
+} __attribute__((aligned));;
 
 struct batch_partition{
     atomic<uint64_t> status;
@@ -162,7 +163,7 @@ struct batch_partition{
 
     // Info. related to having multiple exec. queues
     Array<Array<exec_queue_entry> *> * exec_qs;
-};
+} __attribute__((aligned));;
 
 
 
