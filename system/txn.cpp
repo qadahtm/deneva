@@ -917,6 +917,7 @@ void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_
         entry->txn_ctx->prev_tid[entry->req_idx] = row->last_tid;
         row->last_tid = entry->txn_id;
         uint64_t ri = entry->req_idx*rec_size;
+//        DEBUG_Q("ET_%lu: ri=%lu, entry->req_idx=%lu, rec_size=%lu\n", _thd_id,ri,entry->req_idx,rec_size);
 #if PROFILE_EXEC_TIMING
         uint64_t proftime = get_sys_clock();
 #endif

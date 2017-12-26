@@ -402,6 +402,13 @@ int main(int argc, char* argv[])
 #endif
         for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
             work_queue.plan_sblocks[i][j].done = 0;
+#if SYNC_AFTER_PG
+            for (UInt32 k = 0; k < g_thread_cnt; ++k) {
+                work_queue.pg_sblocks[i][j][k].done = 0;
+                (work_queue.pg_next_stage[i][j][k]) = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
+                *(work_queue.pg_next_stage[i][j][k]) = 0;
+            }
+#endif
 #if NEXT_STAGE_ARRAY
             (work_queue.plan_next_stage[i][j]) = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
             *(work_queue.plan_next_stage[i][j]) = 0;

@@ -68,6 +68,7 @@ void QWorkQueue::init() {
   }
 #endif
 
+#if ROW_ACCESS_TRACKING
 #if ROLL_BACK
   uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
   for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
@@ -87,6 +88,7 @@ void QWorkQueue::init() {
     }
   }
 #endif
+#endif //#if ROW_ACCESS_TRACKING
 
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC || WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
   batch_plan_comp_cnts = (atomic<uint16_t> * ) mem_allocator.align_alloc(sizeof(atomic<uint16_t>)*BATCH_MAP_LENGTH);

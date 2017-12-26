@@ -82,6 +82,7 @@ void Stats_thd::init(uint64_t thd_id) {
   wt_hl_cleanup_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_sync_plan_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_sync_exec_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
+  wt_pg_sync_exec_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
   wt_hl_sync_commit_time = (double *) mem_allocator.align_alloc(sizeof(double) * g_thread_cnt);
 #endif // #if PROFILE_EXEC_TIMING
 
@@ -315,6 +316,7 @@ void Stats_thd::clear() {
 
     wt_hl_sync_plan_time[i] =0;
     wt_hl_sync_exec_time[i] =0;
+    wt_pg_sync_exec_time[i] =0;
     wt_hl_sync_commit_time[i] =0;
 #endif // #if PROFILE_EXEC_TIMING
   }
@@ -1260,6 +1262,11 @@ void Stats_thd::print(FILE * outf, bool prog) {
             ,wt_hl_sync_exec_time[i] /BILLION
     );
     fprintf(outf,
+            ",quecc_wt%ld_pg_sync_exec_time=%f"
+            ,i
+            ,wt_pg_sync_exec_time[i] /BILLION
+    );
+    fprintf(outf,
             ",quecc_wt%ld_hl_sync_commit_time=%f"
             ,i
             ,wt_hl_sync_commit_time[i] /BILLION
@@ -1814,6 +1821,7 @@ void Stats_thd::combine(Stats_thd * stats) {
 
     wt_hl_sync_plan_time[i] += stats->wt_hl_sync_plan_time[i];
     wt_hl_sync_exec_time[i] += stats->wt_hl_sync_exec_time[i];
+    wt_pg_sync_exec_time[i] += stats->wt_pg_sync_exec_time[i];
     wt_hl_sync_commit_time[i] += stats->wt_hl_sync_commit_time[i];
 #endif
   }

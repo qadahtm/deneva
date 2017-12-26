@@ -120,10 +120,16 @@ public:
     sync_block plan_sblocks[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
     sync_block exec_sblocks[BATCH_MAP_LENGTH][THREAD_CNT];
     sync_block commit_sblocks[BATCH_MAP_LENGTH][THREAD_CNT];
+#if SYNC_AFTER_PG
+    sync_block pg_sblocks[BATCH_MAP_LENGTH][PLAN_THREAD_CNT][THREAD_CNT];
+#endif
 #if NEXT_STAGE_ARRAY
     int64_t * plan_next_stage[BATCH_MAP_LENGTH][THREAD_CNT];
     int64_t * exec_next_stage[BATCH_MAP_LENGTH][THREAD_CNT];
     int64_t * commit_next_stage[BATCH_MAP_LENGTH][THREAD_CNT];
+#if SYNC_AFTER_PG
+    int64_t * pg_next_stage[BATCH_MAP_LENGTH][PLAN_THREAD_CNT][THREAD_CNT];
+#endif
 #else
     int64_t * plan_next_stage[BATCH_MAP_LENGTH];
     int64_t * exec_next_stage[BATCH_MAP_LENGTH];

@@ -1112,6 +1112,22 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
             return BREAK;
         }
 
+#if SYNC_AFTER_PG
+        // sync on PG done
+#if PROFILE_EXEC_TIMING
+        uint64_t hl_prof_starttime = get_sys_clock();
+#endif
+
+        if (pg_sync(batch_slot, wplanner_id) == BREAK){
+#if PROFILE_EXEC_TIMING
+            INC_STATS(_thd_id, wt_pg_sync_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+#endif
+            return BREAK;
+        }
+#if PROFILE_EXEC_TIMING
+        INC_STATS(_thd_id, wt_pg_sync_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+#endif
+#endif
 //        DEBUG_Q("ET_%ld: finished PG from planner %ld, batch_slot = %ld, batch_part = %lu\n",_thd_id, wplanner_id, batch_slot, (uint64_t) batch_part);
 
         // go to the next batch partition prepared by the next planner since the previous one has been committed

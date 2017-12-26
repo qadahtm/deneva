@@ -1942,6 +1942,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
     // we need to reset the mutable values of tctx
     entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
+#if ROW_ACCESS_TRACKING
 #if ROW_ACCESS_IN_CTX
 //    M_ASSERT_V(false, "undo buffer in txn context is ot currently supported for pipelined Quecc\n");
 #if WORKLOAD == YCSB
@@ -1967,6 +1968,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
     }
 #endif
 #endif
+#endif // #if ROW_ACCESS_TRACKING
 #if !SERVER_GENERATE_QUERIES
     assert(msg->return_node_id != g_node_id);
         entry->return_node_id = msg->return_node_id;
@@ -1998,7 +2000,8 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 #endif
 
         // Dirty code
-        ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;
+//        ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;
+        ycsb_request * req_buff = &entry->req;
         req_buff->acctype = ycsb_req->acctype;
         req_buff->key = ycsb_req->key;
         req_buff->value = ycsb_req->value;
@@ -2006,7 +2009,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 #if YCSB_INDEX_LOOKUP_PLAN
         ((YCSBTxnManager *)my_txn_man)->lookup_key(req_buff->key,entry);
 #endif
-
+        entry->req_idx = j;
         // add entry into range/bucket queue
         // entry is a sturct, need to double check if this works
         // this actually performs a full memcopy when adding entries
@@ -2392,7 +2395,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
         exec_queue_capacity = MIN_EXECQ_SIZE;
     }
     uint64_t tuple_size = wl->tables["MAIN_TABLE"]->get_schema()->get_tuple_size();
-#if ROW_ACCESS_IN_CTX
+#if ROW_ACCESS_IN_CTX && ROW_ACCESS_TRACKING
 // intialize for QueCC undo_buffer int contexts here
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
         for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {

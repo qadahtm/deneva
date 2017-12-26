@@ -402,6 +402,173 @@ public:
         return SUCCESS;
     }
 #endif
+
+#if SYNC_AFTER_PG
+    SRC pg_sync(uint64_t batch_slot, uint64_t planner_id){
+#if WT_SYNC_METHOD == SYNC_BLOCK
+#if !NEXT_STAGE_ARRAY
+        // not supported
+        assert(false);
+#endif
+
+//#if PROFILE_EXEC_TIMING
+//        uint64_t sync_idlestarttime = 0;
+//#endif
+        UInt32 done_cnt = 0;
+        // indicate that I am done with current PG
+        work_queue.pg_sblocks[batch_slot][planner_id][_thd_id].done = 1;
+
+#if SYNC_MASTER_RR
+        bool is_master = ((wbatch_id % g_thread_cnt) == _thd_id);
+#else
+        bool is_master = (_thd_id == 0);
+#endif
+        if (is_master){
+//            DEBUG_Q("WT_%ld: going to wait for other WTs for batch_slot = %ld, plan_comp_cnt = %d\n",
+//                    _thd_id, batch_slot, work_queue.batch_plan_comp_cnts[batch_slot].load());
+
+            // wait for all ets to finish
+            while (true){
+                done_cnt = 0;
+                atomic_thread_fence(memory_order_acquire);
+                for (uint32_t i=0; i < g_thread_cnt; ++i){
+                    done_cnt += work_queue.pg_sblocks[batch_slot][planner_id][i].done;
+                }
+                if (done_cnt == g_thread_cnt){
+                    break;
+                }
+//#if PROFILE_EXEC_TIMING
+//                if (sync_idlestarttime ==0){
+//                    sync_idlestarttime = get_sys_clock();
+////                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+//                }
+//#endif
+                //TQ: no need to preeempt this wait
+                if (simulation->is_done()){
+//#if PROFILE_EXEC_TIMING
+//                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//#endif
+                    return BREAK;
+                }
+            }
+//            DEBUG_Q("WT_%ld: plan_stage all WT_* are done, done_cnt = %d, batch_id = %ld\n", _thd_id, done_cnt,wbatch_id);
+
+//#if PROFILE_EXEC_TIMING
+//            if (sync_idlestarttime > 0){
+//                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+//            }
+//#endif
+            // allow other ETs to proceed
+
+            for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                *(work_queue.pg_next_stage[batch_slot][planner_id][j]) = 1;
+            }
+            atomic_thread_fence(memory_order_release);
+
+//            DEBUG_Q("WT_%ld: pg_exec_stage - going to wait for WT_* to see next stage, batch_id = %ld\n", _thd_id,wbatch_id);
+            // need to wait for all threads to exit sync
+            work_queue.pg_sblocks[batch_slot][planner_id][_thd_id].done = 0;
+            while (true){
+                done_cnt = 0;
+                atomic_thread_fence(memory_order_acquire);
+                for (uint32_t i=0; i < g_thread_cnt; ++i){
+                    done_cnt += work_queue.pg_sblocks[batch_slot][planner_id][i].done;
+                }
+                if (done_cnt == 0){
+                    break;
+                }
+//#if PROFILE_EXEC_TIMING
+//                if (sync_idlestarttime ==0){
+//                    sync_idlestarttime = get_sys_clock();
+////                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+//                }
+//#endif
+                //TQ: no need to preeempt this wait
+                if (simulation->is_done()){
+//#if PROFILE_EXEC_TIMING
+//                    INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//#endif
+                    return BREAK;
+                }
+            }
+//#if PROFILE_EXEC_TIMING
+//            if (sync_idlestarttime > 0){
+//                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+//            }
+//#endif
+
+//            DEBUG_Q("WT_%lu: pg_exec_stage - all WT_* are ready to move to next stage, batch_id = %lu, PG=%lu\n",
+//                    _thd_id,wbatch_id,planner_id);
+            // all other threads are ready to exit sync
+            for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+                *(work_queue.pg_next_stage[batch_slot][planner_id][j]) = 0;
+            }
+            atomic_thread_fence(memory_order_release);
+        }
+        else{
+            atomic_thread_fence(memory_order_acquire);
+            while(*(work_queue.pg_next_stage[batch_slot][planner_id][_thd_id]) != 1){
+//#if PROFILE_EXEC_TIMING
+//                if (sync_idlestarttime ==0){
+//                    sync_idlestarttime = get_sys_clock();
+////                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+//                }
+//#endif
+                if (simulation->is_done()){
+//#if PROFILE_EXEC_TIMING
+//                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//#endif
+                    return BREAK;
+                }
+                atomic_thread_fence(memory_order_acquire);
+            };
+//#if PROFILE_EXEC_TIMING
+//            if (sync_idlestarttime > 0){
+//                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+//            }
+//#endif
+//            DEBUG_Q("WT_%ld: pg_exec_stage WT_0 has SET next_stage, batch_id = %ld, PG=%ld\n", _thd_id,wbatch_id,planner_id);
+
+            work_queue.pg_sblocks[batch_slot][planner_id][_thd_id].done = 0;
+            atomic_thread_fence(memory_order_release);
+
+            atomic_thread_fence(memory_order_acquire);
+            while(*(work_queue.pg_next_stage[batch_slot][planner_id][_thd_id]) != 0){
+//#if PROFILE_EXEC_TIMING
+//                if (sync_idlestarttime ==0){
+//                    sync_idlestarttime = get_sys_clock();
+////                    DEBUG_Q("WT_%ld: plan_stage waiting for WT_0 to RESET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+//                }
+//#endif
+                if (simulation->is_done()){
+//#if PROFILE_EXEC_TIMING
+//                    INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//#endif
+                    return BREAK;
+                }
+                atomic_thread_fence(memory_order_acquire);
+            };
+//#if PROFILE_EXEC_TIMING
+//            if (sync_idlestarttime > 0){
+//                INC_STATS(_thd_id,plan_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+//            }
+//#endif
+//                INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
+//            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - idle_starttime);
+//            idle_starttime =0;
+        }
+        return SUCCESS;
+#else
+        // other syncing methods are not supported
+        assert(false);
+        return SUCCESS;
+#endif
+    }
+#endif //if SYNC_AFTER_PG
     SRC sync_on_execution_phase_end(uint64_t batch_slot){
 #if PROFILE_EXEC_TIMING
         uint64_t sync_idlestarttime =0;
@@ -1627,10 +1794,11 @@ public:
         return (uint32_t) ranges->size()-1;
     }
 
-    uint64_t OPTIMIZE_OUT get_key_from_entry(exec_queue_entry * entry) {
+    uint64_t get_key_from_entry(exec_queue_entry * entry) {
 #if WORKLOAD == YCSB
-        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
-        return ycsb_req_tmp->key;
+//        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
+//        return ycsb_req_tmp->key;
+        return entry->req.key;
 #else
         return etnry->rid;
 #endif
@@ -1877,6 +2045,7 @@ public:
         // we need to reset the mutable values of tctx
         entry->txn_id = planner_txn_id;
         entry->txn_ctx = tctx;
+#if ROW_ACCESS_TRACKING
 #if ROW_ACCESS_IN_CTX
         // initializ undo_buffer if needed
 #if WORKLOAD == YCSB
@@ -1905,6 +2074,7 @@ public:
         }
 #endif
 #endif
+#endif //#if ROW_ACCESS_TRACKING
 #if !SERVER_GENERATE_QUERIES
         assert(msg->return_node_id != g_node_id);
         entry->return_node_id = msg->return_node_id;
@@ -1943,7 +2113,8 @@ public:
 #endif
 
         // Dirty code
-        ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;
+//        ycsb_request * req_buff = (ycsb_request *) &entry->req_buffer;
+        ycsb_request * req_buff = &entry->req;
         req_buff->acctype = ycsb_req->acctype;
         req_buff->key = ycsb_req->key;
         req_buff->value = ycsb_req->value;
@@ -2519,20 +2690,20 @@ public:
 //            DEBUG_Q("PT_%ld: for batch %ld : setting map slot [%ld][%ld][%ld]\n", _planner_id, pbatch_id, batch_slot, _planner_id, i)
             if(!work_queue.batch_map[batch_slot][_planner_id][i].compare_exchange_strong(expected, desired)){
 
-#if DEBUG_QUECC
-                // print sync blocks
-                for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
-                    for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-                        DEBUG_Q("WT_%ld: set_batch_map, batch_id=%ld, plan_sync: done[%d]=%ld, plan_next_stage=%ld\n", _thd_id,wbatch_id,j,work_queue.plan_sblocks[i][j].done, *work_queue.plan_next_stage[i]);
-                    }
-                    for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-                        DEBUG_Q("WT_%ld: set_batch_map, batch_id=%ld, exec_sync: done[%d]=%ld, exec_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.exec_sblocks[i][j].done, *work_queue.exec_next_stage[i]);
-                    }
-                    for (UInt32 j = 0; j < g_thread_cnt; ++j) {
-                        DEBUG_Q("WT_%ld: set_batch_map, batch_id=%ld, commit_sync: done[%d]=%ld, commit_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.commit_sblocks[i][j].done, *work_queue.commit_next_stage[i]);
-                    }
-                }
-#endif
+//#if DEBUG_QUECC
+//                // print sync blocks
+//                for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
+//                    for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+//                        DEBUG_Q("WT_%ld: set_batch_map, batch_id=%ld, plan_sync: done[%d]=%ld, plan_next_stage=%ld\n", _thd_id,wbatch_id,j,work_queue.plan_sblocks[i][j].done, *work_queue.plan_next_stage[i]);
+//                    }
+//                    for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+//                        DEBUG_Q("WT_%ld: set_batch_map, batch_id=%ld, exec_sync: done[%d]=%ld, exec_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.exec_sblocks[i][j].done, *work_queue.exec_next_stage[i]);
+//                    }
+//                    for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+//                        DEBUG_Q("WT_%ld: set_batch_map, batch_id=%ld, commit_sync: done[%d]=%ld, commit_next_stage=%ld\n",_thd_id,wbatch_id,j,work_queue.commit_sblocks[i][j].done, *work_queue.commit_next_stage[i]);
+//                    }
+//                }
+//#endif
                 // this should not happen after spinning but can happen if simulation is done
                 M_ASSERT_V(false, "WT_%ld: For batch %ld : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
                            _thd_id, wbatch_id, batch_slot, _planner_id, work_queue.batch_map[batch_slot][_planner_id][i].load());

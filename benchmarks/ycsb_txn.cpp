@@ -443,7 +443,8 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     //TQ: dirty code: using a char buffer to store ycsb_request
 #if WORKLOAD == YCSB
 
-    ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
+//    ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
+    ycsb_request *req = &exec_qe->req;
 
 //    quecc_prof_time = get_sys_clock();
     // get pointer to record in row

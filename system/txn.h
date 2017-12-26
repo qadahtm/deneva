@@ -169,7 +169,7 @@ public:
     // For QueCC
     virtual RC      run_quecc_txn(exec_queue_entry * exec_qe) = 0;
 
-    inline void check_commit_ready(exec_queue_entry *entry) ALWAYS_INLINE {
+    void check_commit_ready(exec_queue_entry *entry) {
 //        uint8_t e8;
 //        uint8_t d8;
 //        M_ASSERT_V(entry->txn_id == entry->txn_ctx->txn_id,"txn_id mismatch entry txn_id = %ld, txn_context txn_id = %ld\n", entry->txn_id, entry->txn_ctx->txn_id);
@@ -192,7 +192,7 @@ public:
         if (d8 == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
 //            DEBUG_Q("Last entry in transaction comp_cnt = %lu, ctx txn_comp_cnt %lu\n", entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel), entry->txn_ctx->txn_comp_cnt.load());
             // this is the last entry to be executed, we should be ready to commit
-            stats._stats[_thd_id]->exec_txn_cnts[_thd_id] +=1;
+//            stats._stats[_thd_id]->exec_txn_cnts[_thd_id] +=1;
 //            if (entry->txn_ctx->completion_cnt.fetch_add(0, memory_order_acq_rel) == entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel)) {
                 e8 = TXN_STARTED;
                 d8 = TXN_READY_TO_COMMIT;

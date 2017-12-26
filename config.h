@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 32
+#define THREAD_CNT 16
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 32
@@ -60,7 +60,7 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      false
+#define PROFILE_EXEC_TIMING      true
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -124,7 +124,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG SILO
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -196,7 +196,7 @@
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
 //#define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
-#define BATCH_MAP_LENGTH 2 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 4 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -249,7 +249,7 @@
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
-#define FIXED_COMMIT_THREAD_CNT true
+#define FIXED_COMMIT_THREAD_CNT false
 #define COMMIT_THREAD_CNT 8
 #define TXN_CNT_COMMIT_THRESHOLD (THREAD_CNT*PLAN_THREAD_CNT)*2
 
@@ -263,6 +263,7 @@
 #define SYNC_BLOCK    4
 #define SENSE_BARRIER  5
 
+#define SYNC_AFTER_PG   true
 #define NEXT_STAGE_ARRAY true
 
 #define ATOMIC_PG_STATUS true
@@ -286,8 +287,8 @@
 
 
 #define SINGLE_NODE true
-#define ABORT_THREAD true // if this is false, ABORT_QUEUES should be true to handle aborts
-#define ABORT_QUEUES false
+#define ABORT_THREAD false // if this is false, ABORT_QUEUES should be true to handle aborts
+#define ABORT_QUEUES true
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20
@@ -349,7 +350,7 @@
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.99//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC

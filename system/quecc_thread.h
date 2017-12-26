@@ -49,6 +49,8 @@ struct transaction_context {
     std::vector<transaction_context*> * commit_deps;
     spinlock * depslock;
     bool should_abort;
+    // prev. transaction id assocated with each data item accessed by this transaction
+    uint64_t prev_tid[REQ_PER_QUERY];
 #endif
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
@@ -83,7 +85,6 @@ struct transaction_context {
     char * undo_buffer_data;
     row_t * orig_rows[REQ_PER_QUERY];
     access_t a_types[REQ_PER_QUERY];
-    uint64_t prev_tid[REQ_PER_QUERY];
 #else
     // 8bytes
     spinlock * access_lock = NULL;
@@ -124,8 +125,8 @@ struct exec_queue_entry {
      // 8 bytes for access_type
     // 8 bytes for key
     // 1 byte for value
-    char req_buffer[34];
-//    ycsb_request req;
+//    char req_buffer[17];
+    ycsb_request req;
 #elif WORKLOAD == TPCC
     tpcc_txn_frag_t type; // 4 bytes
     uint64_t rid; // 8 bytes
@@ -133,7 +134,7 @@ struct exec_queue_entry {
 #endif
     row_t * row; // 8 bytes
 #if ROW_ACCESS_IN_CTX
-    uint32_t req_idx; // 4 bytes
+    uint64_t req_idx; // 8 bytes
 #endif
 
 #if !SERVER_GENERATE_QUERIES
@@ -249,10 +250,11 @@ public:
         return (uint32_t) ranges->size()-1;
     }
 
-    uint64_t OPTIMIZE_OUT get_key_from_entry(exec_queue_entry * entry) {
+    uint64_t get_key_from_entry(exec_queue_entry * entry) {
 #if WORKLOAD == YCSB
-        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
-        return ycsb_req_tmp->key;
+//        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
+//        return ycsb_req_tmp->key;
+        return entry->req.key;
 #else
         return etnry->rid;
 #endif
