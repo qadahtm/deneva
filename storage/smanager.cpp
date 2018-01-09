@@ -15,16 +15,19 @@ void RIDMgr::init() {
     batch_max_rid.store(0);
 
 #if WORKLOAD == YCSB
-    rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*g_part_cnt);
     uint64_t range_size = UINT64_MAX/g_part_cnt;
-    for (uint64_t i =0; i < g_part_cnt; i++){
+    uint64_t range_part_cnt = g_thread_cnt; // for non-partitioned stores
+    rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*g_thread_cnt);
+    for (uint64_t i =0; i < range_part_cnt; i++){
         rid_ranges[i] = (atomic<uint64_t> *) mem_allocator.align_alloc(sizeof(atomic<uint64_t>));
         rid_ranges[i]->store(i*range_size);
     }
 #elif WORKLOAD == TPCC
-    rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*NUM_WH);
-    uint64_t range_size = UINT64_MAX/NUM_WH;
-    for (uint64_t i =0; i < NUM_WH; i++){
+//    uint64_t part_cnt = NUM_WH; // for partitioned stores
+    uint64_t range_part_cnt = g_thread_cnt; // for non-partitioned stores
+    rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*range_part_cnt);
+    uint64_t range_size = UINT64_MAX/range_part_cnt;
+    for (uint64_t i =0; i < range_part_cnt; i++){
         rid_ranges[i] = (atomic<uint64_t> *) mem_allocator.align_alloc(sizeof(atomic<uint64_t>));
         rid_ranges[i]->store(i*range_size);
     }
@@ -71,7 +74,11 @@ uint64_t RIDMgr::next_rid(uint64_t thd_id){
 // TODO(tq): generalize this.
 uint64_t RIDMgr::next_rid_fixed(uint64_t part_id){
     // a quick fixs if the passed part_id > than g_part_id
-    uint64_t tpart_id = part_id % g_part_cnt;
+#if PART_CNT == 1
+    uint64_t tpart_id = part_id; // for non-partitioned stores
+#else
+    uint64_t tpart_id = part_id % g_part_cnt; // for partitioned stores
+#endif
     return rid_ranges[tpart_id]->fetch_add(1);
 }
 

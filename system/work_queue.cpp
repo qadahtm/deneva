@@ -70,23 +70,19 @@ void QWorkQueue::init() {
 
 #if ROW_ACCESS_TRACKING
 #if ROLL_BACK
-  uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
-  for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
-    for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
-      priority_group * planner_pg = &batch_pg_map[b][j];
-      for (uint64_t i=0; i < planner_batch_size; ++i){
-#if ROW_ACCESS_IN_CTX
-#if WORKLOAD == YCSB
-        planner_pg->txn_ctxs[i].undo_buffer_inialized = false;
-#else
-#endif
-#else
-        planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
-        planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
-#endif
-      }
+#if !ROW_ACCESS_IN_CTX
+    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+    for (uint64_t b =0; b < BATCH_MAP_LENGTH; ++b){
+        for (uint64_t j= 0; j < g_plan_thread_cnt; ++j){
+          priority_group * planner_pg = &batch_pg_map[b][j];
+          for (uint64_t i=0; i < planner_batch_size; ++i){
+            planner_pg->txn_ctxs[i].accesses = new Array<Access*>();
+            planner_pg->txn_ctxs[i].accesses->init(MAX_ROW_PER_TXN);
+            }
+        }
     }
-  }
+#endif
+
 #endif
 #endif //#if ROW_ACCESS_TRACKING
 

@@ -201,7 +201,7 @@ public:
     items[i] = items[j];
     items[j] = tmp;
   }
-  inline T operator[](const uint64_t idx) {assert(idx < count); return items[idx];}
+  T operator[](const uint64_t idx) {assert(idx < count); return items[idx];}
   uint64_t get_count() {return count;}
     //TQ: added const modifier to allow using boost::heap container
   uint64_t size() const {return count;}

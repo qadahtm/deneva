@@ -53,7 +53,7 @@ void * initADGHelper(void * adg);
 WorkerThread * worker_thds;
 InputThread * input_thds;
 OutputThread * output_thds;
-#if ABORT_THREAD
+#if ABORT_THREAD && CC_ALG != QUECC
 AbortThread * abort_thds;
 #endif
 LogThread * log_thds;
@@ -330,7 +330,7 @@ int main(int argc, char* argv[])
 	uint64_t wthd_cnt = thd_cnt;
 	uint64_t rthd_cnt = g_rem_thread_cnt;
 	uint64_t sthd_cnt = g_send_thread_cnt;
-#if ABORT_THREAD
+#if ABORT_THREAD && CC_ALG != QUECC
     uint64_t all_thd_cnt = thd_cnt + rthd_cnt + sthd_cnt + g_abort_thread_cnt;
 #else
     uint64_t all_thd_cnt = thd_cnt + rthd_cnt + sthd_cnt;
@@ -699,7 +699,7 @@ int main(int argc, char* argv[])
     input_thds = new InputThread[rthd_cnt];
     output_thds = new OutputThread[sthd_cnt];
 #endif
-#if ABORT_THREAD
+#if ABORT_THREAD && CC_ALG != QUECC
     abort_thds = new AbortThread[1];
 #endif
 #if LOGGING

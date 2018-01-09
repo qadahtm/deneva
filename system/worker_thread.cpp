@@ -1226,6 +1226,8 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
             if (_thd_id < commit_thread_cnt && commit_et_id == _thd_id){
                 // I should be committing this transaction
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
+//                DEBUG_Q("ET_%ld: is trying to commit txn_id = %ld, batch_id = %ld, txn_per_pg=%lu\n",
+//                        _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg);
                 rc = commit_txn(planner_pg, j);
                 if (rc == Commit){
 //                    finalize_txn_commit(&planner_pg->txn_ctxs[j],rc);
@@ -1258,8 +1260,8 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
                         M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
                     }
 
-//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld\n",
-//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
+//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld, txn_per_pg=%lu\n",
+//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg);
                     commit_cnt++;
                 }
                 else if (rc == WAIT){
@@ -1433,7 +1435,12 @@ RC WorkerThread::run_normal_mode() {
     }
     exec_qs_ranges->add(g_synth_table_size); // last range is the table size
 #elif WORKLOAD == TPCC
-    for (uint64_t i =0; i<g_num_wh; ++i){
+    uint64_t bucket_cnt = g_num_wh;
+    if (g_num_wh < g_thread_cnt) {
+        bucket_cnt = g_thread_cnt;
+        bucket_size = UINT64_MAX/bucket_cnt;
+    }
+    for (uint64_t i =0; i<bucket_cnt-1; ++i){
 
         if (i == 0){
             exec_qs_ranges->add(bucket_size);
@@ -1454,12 +1461,10 @@ RC WorkerThread::run_normal_mode() {
 #endif
 
 #if WORKLOAD == TPCC
-
-    for (uint64_t i = 0; i < g_num_wh; i++) {
+    for (uint64_t i = 0; i < bucket_cnt; i++) {
         Array<exec_queue_entry> * exec_q;
-
         quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i % g_thread_cnt);
-        exec_queues->add(exec_q);
+            exec_queues->add(exec_q);
     }
 #else
     for (uint64_t i = 0; i < g_thread_cnt; i++) {

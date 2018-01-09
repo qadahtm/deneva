@@ -111,6 +111,7 @@ public:
 #if CC_ALG == QUECC
     // last transaction id who inserted/updated this row
     uint64_t last_tid;
+    uint64_t last_etid;
 #endif
 // Row Lockmanager is not needed for QueCC or LADS
 // TODO(tq): FIXME

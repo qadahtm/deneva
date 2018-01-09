@@ -1926,6 +1926,12 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
     tctx->should_abort = false;
     tctx->commit_dep_cnt.store(0,memory_order_acq_rel);
     tctx->commit_deps->clear();
+
+#if WORKLOAD == YCSB
+    memset(tctx->prev_tid,0, sizeof(uint64_t)*REQ_PER_QUERY);
+#else
+    memset(tctx->prev_tid,0, sizeof(uint64_t)*MAX_ROW_PER_TXN);
+#endif // #if WORKLOAD == YCSB
 #endif
 #if PROFILE_EXEC_TIMING
     tctx->starttime = get_sys_clock(); // record start time of transaction
@@ -1945,10 +1951,10 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 #if ROW_ACCESS_TRACKING
 #if ROW_ACCESS_IN_CTX
 //    M_ASSERT_V(false, "undo buffer in txn context is ot currently supported for pipelined Quecc\n");
-#if WORKLOAD == YCSB
+#if WORKLOAD == YCSB || WORKLOAD == TPCC
     M_ASSERT_V(tctx->undo_buffer_inialized, "Txn context is not initialized\n");
 #else
-    M_ASSERT_V(false, "undo buffer in txn ctx is not supported for TPCC or others\n");
+    M_ASSERT_V(false, "undo buffer in txn ctx is not supported for others\n");
 #endif
 #else
     // initialize access_lock if it is not intinialized
@@ -2032,8 +2038,9 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 
     switch (tpcc_msg->txn_type) {
         case TPCC_PAYMENT:
+#if PROFILE_EXEC_TIMING
             prof_starttime = get_sys_clock();
-
+#endif
             if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
                 assert(false);
             }
@@ -2385,23 +2392,36 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 //#if NUMA_ENABLED
 //    numa_set_preferred(0);
 //#endif
-#if WORKLOAD == YCSB
+#if WORKLOAD == YCSB || WORKLOAD == TPCC
+    uint64_t tuple_size = 0;
 #if EXPANDABLE_EQS
-    exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * REQ_PER_QUERY;
+    exec_queue_capacity = std::ceil((double)g_batch_size/g_thread_cnt) * MAX_ROW_PER_TXN; //* 4 works for TPCC
+//    exec_queue_capacity = planner_batch_size * 10; //* 4 works for TPCC
+//    exec_queue_capacity = g_batch_size; //* 4 works for TPCC
 #else
     exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
 #endif
     if (exec_queue_capacity < MIN_EXECQ_SIZE){
         exec_queue_capacity = MIN_EXECQ_SIZE;
     }
-    uint64_t tuple_size = wl->tables["MAIN_TABLE"]->get_schema()->get_tuple_size();
+#if WORKLOAD == YCSB
+    tuple_size = wl->tables["MAIN_TABLE"]->get_schema()->get_tuple_size();
+#elif WORKLOAD == TPCC
+    tuple_size = MAX_TUPLE_SIZE;
+#else
+    assert(false);
+#endif
 #if ROW_ACCESS_IN_CTX && ROW_ACCESS_TRACKING
 // intialize for QueCC undo_buffer int contexts here
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
         for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {
             for (uint64_t k = 0; k < planner_batch_size; ++k) {
                 work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_inialized = true;
+#if WORKLOAD == YCSB
                 work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_data = (char *) mem_allocator.alloc(tuple_size*REQ_PER_QUERY);
+#else
+                work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_data = (char *) mem_allocator.alloc(tuple_size*MAX_ROW_PER_TXN);
+#endif
             }
         }
     }

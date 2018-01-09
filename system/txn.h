@@ -190,7 +190,7 @@ public:
 //        uint32_t comp_cnt = __sync_fetch_and_add(&entry->txn_ctx->completion_cnt,1);
 //        if (comp_cnt == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel) - 1)) {
         if (d8 == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
-//            DEBUG_Q("Last entry in transaction comp_cnt = %lu, ctx txn_comp_cnt %lu\n", entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel), entry->txn_ctx->txn_comp_cnt.load());
+//            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu\n",entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel), entry->txn_ctx->txn_comp_cnt.load());
             // this is the last entry to be executed, we should be ready to commit
 //            stats._stats[_thd_id]->exec_txn_cnts[_thd_id] +=1;
 //            if (entry->txn_ctx->completion_cnt.fetch_add(0, memory_order_acq_rel) == entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel)) {

@@ -913,11 +913,22 @@ void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_
 #if ROW_ACCESS_IN_CTX
     if (type == WR) {
         uint64_t rec_size = row->get_tuple_size();
+#if WORKLOAD == YCSB
         // we store the prev_tid and set the last_tid to the current txn_id. This is used to roll back the transaction
         entry->txn_ctx->prev_tid[entry->req_idx] = row->last_tid;
         row->last_tid = entry->txn_id;
         uint64_t ri = entry->req_idx*rec_size;
-//        DEBUG_Q("ET_%lu: ri=%lu, entry->req_idx=%lu, rec_size=%lu\n", _thd_id,ri,entry->req_idx,rec_size);
+#else
+        M_ASSERT_V(rec_size <= MAX_TUPLE_SIZE, "resize is not valid: %lu\n",rec_size);
+//        DEBUG_Q("WT_%lu: last_tid=%lu, txn_id=%lu, rid=%lu, req_idx=%lu\n",_thd_id,row->last_tid, entry->txn_id, entry->rid,entry->req_idx);
+        // we store the prev_tid and set the last_tid to the current txn_id. This is used to roll back the transaction
+        entry->txn_ctx->prev_tid[entry->req_idx] = row->last_tid;
+        row->last_tid = entry->txn_id;
+        uint64_t ri = entry->req_idx*MAX_TUPLE_SIZE;
+#endif
+
+//        DEBUG_Q("ET_%lu: ri=%lu, entry->req_idx=%lu, rec_size=%lu, rid=%lu, entry_type=%d\n",
+//                _thd_id,ri,entry->req_idx,rec_size,entry->rid, entry->type);
 #if PROFILE_EXEC_TIMING
         uint64_t proftime = get_sys_clock();
 #endif

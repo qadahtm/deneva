@@ -1354,10 +1354,12 @@ public:
 #if EXEC_BUILD_TXN_DEPS
     bool add_txn_dep(transaction_context * context, uint64_t d_txn_id, priority_group * d_planner_pg){
         transaction_context * d_tctx = get_tctx_from_pg(d_txn_id, d_planner_pg);
-        if (d_tctx != NULL){
+        if (d_tctx != NULL && context->txn_id > d_txn_id){
             // found txn context for dependent d_txn_id
             // increment my dep counter in my context
-
+//            M_ASSERT_V(context->txn_id != 1,"WT_%lu: Dependency for the first tansaction in the batch!!! d_txn_id=%lu\n",_thd_id,d_txn_id)
+            M_ASSERT_V(context->txn_id > d_txn_id,"WT_%lu: dependency on a later transaction!!! txn_id=%lu depends on d_txn_id=%lu\n",
+                       _thd_id,context->txn_id,d_txn_id)
             int64_t e=0;
             do {
                 e = context->commit_dep_cnt.load(memory_order_acq_rel);
@@ -1377,7 +1379,16 @@ public:
     void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc)
     {
 #if EXEC_BUILD_TXN_DEPS
-        if (rc == RCOK){
+        bool check_dep = true;
+#if WORKLOAD == TPCC
+        if (entry->type == TPCC_PAYMENT_INSERT_H
+            || entry->type == TPCC_NEWORDER_INSERT_NO
+            || entry->type == TPCC_NEWORDER_INSERT_O
+            || entry->type == TPCC_NEWORDER_INSERT_OL) {
+            check_dep = false;
+        }
+#endif
+        if (rc == RCOK && check_dep){
             uint64_t last_tid = entry->row->last_tid;
             if (last_tid == 0){
                 //  if this is a read, and record has not been update before, so no dependency
@@ -1391,6 +1402,15 @@ public:
                 // if this is a write, we are the first to write to this record, so no dependency
                 return;
             }
+
+            /// DEBUGGING
+//            if (last_tid >= entry->txn_id){
+//                DEBUG_Q("ET_%ld: going to add invalid dependency : entry_txnid=%ld, row_last_tid=%ld, entry->row_last_tid=%ld, entry->req_idx=%lu, PG=%ld, batch_id=%ld, on key=%ld\n",
+//                        _thd_id,entry->txn_id,last_tid, entry->row->last_tid,entry->req_idx, wplanner_id,wbatch_id,get_key_from_entry(entry));
+//                assert(false);
+//            }
+//            DEBUG_Q("WT_%ld: txn_id=%lu, last_tid=%lu\n", _thd_id, entry->txn_id, last_tid);
+
             int64_t cplan_id = (int64_t)wplanner_id;
             for (int64_t j = cplan_id; j >= 0; --j) {
                 batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
@@ -1413,11 +1433,14 @@ public:
         volatile uint64_t batch_part_eq_cnt = 0;
         exec_queue_entry * exec_qe_ptr UNUSED = NULL;
         uint64_t w_exec_q_index = 0;
+#if ENABLE_EQ_SWITCH
         volatile bool eq_switch = false;
+
 #if PROFILE_EXEC_TIMING
         uint64_t quecc_prof_time =0;
         uint64_t quecc_txn_wait_starttime =0;
 #endif
+#endif // #if ENABLE_EQ_SWITCH
         RC rc = RCOK;
 
 //        DEBUG_Q("ET_%ld: going to work on PG %ld, batch_id = %ld\n",_thd_id, wplanner_id, wbatch_id);
@@ -1561,9 +1584,11 @@ public:
             eq_switch = false;
 
 #else
-            M_ASSERT_V(false, "Not supported anymore\n");
+//            M_ASSERT_V(false, "Not supported anymore\n");
             for (uint64_t i = 0; i < exec_q->size(); ++i) {
 //                exec_queue_entry exec_qe __attribute__ ((unused)) = exec_q->get(i);
+                exec_qe_ptr = exec_q->get_ptr(i);
+
                 // Asserts are commented out
 //                assert(exec_qe.txn_ctx->batch_id == wbatch_id);
 //                M_ASSERT_V(exec_qe.txn_id == exec_qe.txn_ctx->txn_id,
@@ -1581,7 +1606,7 @@ public:
 
                 // Use txnManager to execute transaction fragment
 #if QUECC_DB_ACCESS
-                rc = my_txn_man->run_quecc_txn(&exec_qe);
+                rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
                 if (!simulation->is_done()){
                     assert(rc == RCOK);
                 }
@@ -1592,7 +1617,7 @@ public:
 
             }
             // recycle exec_q
-            quecc_mem_free_startts = get_sys_clock();
+            uint64_t quecc_mem_free_startts = get_sys_clock();
             quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
             INC_STATS(_thd_id, exec_mem_free_time[_thd_id], get_sys_clock() - quecc_mem_free_startts);
 
@@ -1704,7 +1729,9 @@ public:
 #if ROW_ACCESS_IN_CTX
         // we don't need to free any memory to release accesses as it will be recycled for the next batch
         // roll back writes
-        for (int i = 0; i < REQ_PER_QUERY; ++i) {
+        uint64_t row_cnt = context->txn_comp_cnt.load(memory_order_acq_rel);
+        M_ASSERT_V(row_cnt <= MAX_ROW_PER_TXN, "WT_%lu: row_cnt = %lu", _thd_id, row_cnt);
+        for (uint64_t i = 0; i < row_cnt; ++i) {
             if (context->a_types[i] == WR){
                 if (rc == Abort){
                     if (context->orig_rows[i]->last_tid == context->txn_id){
@@ -1773,8 +1800,8 @@ public:
         }
         else{
             d_tctx = &planner_pg->txn_ctxs[d_txn_ctx_idx];
-//            DEBUG_Q("ET_%ld: d_txn_ctx_idx=%ld, txn_id=%ld, batch_starting_txn_id=%ld\n",
-//                    _thd_id,d_txn_ctx_idx,txnid,planner_pg->batch_starting_txn_id);
+//            DEBUG_Q("ET_%ld: d_txn_ctx_idx=%ld, txn_id=%ld, batch_starting_txn_id=%ld, d_txn_id=%lu\n",
+//                    _thd_id,d_txn_ctx_idx,txnid,planner_pg->batch_starting_txn_id, d_tctx->txn_id);
             return d_tctx;
         }
     }
@@ -1800,7 +1827,7 @@ public:
 //        return ycsb_req_tmp->key;
         return entry->req.key;
 #else
-        return etnry->rid;
+        return entry->rid;
 #endif
     }
 
@@ -1912,6 +1939,28 @@ public:
             ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->clear();
             M_ASSERT_V(exec_queues->size() == exec_qs_ranges->size(), "PL_%ld: Size mismatch : EQS(%lu) Ranges (%lu)\n",
                        _planner_id, exec_queues->size(), exec_qs_ranges->size());
+            // if we have reached max number of ranges
+            // drop ranges and EQs with zero entries
+            if (exec_qs_ranges->is_full()){
+                for (uint64_t j = 0; j < exec_qs_ranges->size(); ++j) {
+//                    DEBUG_Q("WT_%lu: range[%lu] %lu, has %lu eq entries\n",_thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
+                    if (exec_queues->get(j)->size() > 0){
+                        ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
+                        ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
+                    }
+                }
+                exec_queues_tmp_tmp = exec_queues;
+                exec_qs_ranges_tmp_tmp = exec_qs_ranges;
+
+                exec_queues = ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp);
+                exec_qs_ranges = ((Array<uint64_t> *)exec_qs_ranges_tmp);
+
+                exec_queues_tmp = exec_queues_tmp_tmp;
+                exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
+
+                ((Array<uint64_t> *)exec_qs_ranges_tmp)->clear();
+                ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->clear();
+            }
             // update ranges
             // add two new and empty exec_queues
             for (uint64_t r=0; r < exec_qs_ranges->size(); ++r){
@@ -2028,6 +2077,11 @@ public:
         tctx->should_abort = false;
         tctx->commit_dep_cnt.store(0,memory_order_acq_rel);
         tctx->commit_deps->clear();
+#if WORKLOAD == YCSB
+//        memset(tctx->prev_tid,0, sizeof(uint64_t)*REQ_PER_QUERY);
+#else
+        memset(tctx->prev_tid,0, sizeof(uint64_t)*MAX_ROW_PER_TXN);
+#endif // #if WORKLOAD == YCSB
 #endif
 #if PROFILE_EXEC_TIMING
         tctx->starttime = get_sys_clock(); // record start time of transaction
@@ -2048,10 +2102,10 @@ public:
 #if ROW_ACCESS_TRACKING
 #if ROW_ACCESS_IN_CTX
         // initializ undo_buffer if needed
-#if WORKLOAD == YCSB
+#if WORKLOAD == YCSB || WORKLOAD == TPCC
         M_ASSERT_V(tctx->undo_buffer_inialized, "Txn context is not initialized\n");
 #else
-        M_ASSERT_V(false, "undo buffer in txn ctx is not supported for TPCC or others\n");
+        M_ASSERT_V(false, "undo buffer in txn ctx is not supported for  others\n");
 #endif
 #else
         // initialize access_lock if it is not intinialized
@@ -2169,7 +2223,6 @@ public:
                 checkMRange(mrange, rid, et_id);
                 tpcc_txn_man->plan_payment_update_d(tpcc_msg->h_amount, r_local,entry);
                 mrange->add(*entry);
-
                 // plan read/update customer record
                 tpcc_txn_man->payment_lookup_c(tpcc_msg->c_id, tpcc_msg->c_w_id, tpcc_msg->c_d_id, tpcc_msg->c_last,
                                                tpcc_msg->by_last_name, r_local);
@@ -2192,6 +2245,15 @@ public:
                 if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
                     assert(false);
                 }
+#if PLAN_NO_DIST_UPDATE_FIRST
+                //plan update on district table
+                tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
+                rid = r_local->get_row_id();
+                checkMRange(mrange, rid, et_id);
+                tpcc_txn_man->plan_neworder_update_d(r_local,entry);
+                mrange->add(*entry);
+#endif
+
                 tpcc_txn_man->neworder_lookup_w(tpcc_msg->w_id,r_local);
                 rid = r_local->get_row_id();
                 // check range for warehouse and split if needed
@@ -2206,14 +2268,14 @@ public:
                 tpcc_txn_man->plan_neworder_read_c(r_local, entry);
                 mrange->add(*entry);
 
-
+#if !PLAN_NO_DIST_UPDATE_FIRST
                 //plan update on district table
                 tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
                 rid = r_local->get_row_id();
                 checkMRange(mrange, rid, et_id);
                 tpcc_txn_man->plan_neworder_update_d(r_local,entry);
                 mrange->add(*entry);
-
+#endif
                 // plan insert into orders
                 tpcc_txn_man->plan_neworder_insert_o(tpcc_msg->w_id, tpcc_msg->d_id,tpcc_msg->c_id,tpcc_msg->remote,tpcc_msg->ol_cnt,tpcc_msg->o_entry_d,entry);
                 rid = entry->rid;

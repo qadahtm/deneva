@@ -50,7 +50,11 @@ struct transaction_context {
     spinlock * depslock;
     bool should_abort;
     // prev. transaction id assocated with each data item accessed by this transaction
+#if WORKLOAD == YCSB
     uint64_t prev_tid[REQ_PER_QUERY];
+#else
+    uint64_t prev_tid[MAX_ROW_PER_TXN];
+#endif
 #endif
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
@@ -83,8 +87,13 @@ struct transaction_context {
 #if ROW_ACCESS_IN_CTX
     bool undo_buffer_inialized;
     char * undo_buffer_data;
+#if WORKLOAD == YCSB
     row_t * orig_rows[REQ_PER_QUERY];
     access_t a_types[REQ_PER_QUERY];
+#else
+    row_t * orig_rows[MAX_ROW_PER_TXN];
+    access_t a_types[MAX_ROW_PER_TXN];;
+#endif
 #else
     // 8bytes
     spinlock * access_lock = NULL;
@@ -133,9 +142,9 @@ struct exec_queue_entry {
     char padding[24]; // 64-(8+8+8+4+8+4)
 #endif
     row_t * row; // 8 bytes
-#if ROW_ACCESS_IN_CTX
+//#if ROW_ACCESS_IN_CTX
     uint64_t req_idx; // 8 bytes
-#endif
+//#endif
 
 #if !SERVER_GENERATE_QUERIES
     uint64_t return_node_id; //8
@@ -256,7 +265,7 @@ public:
 //        return ycsb_req_tmp->key;
         return entry->req.key;
 #else
-        return etnry->rid;
+        return entry->rid;
 #endif
     }
 

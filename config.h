@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 16
+#define THREAD_CNT 10
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 32
@@ -15,7 +15,7 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 16
+#define PLAN_THREAD_CNT 10
 #define PART_CNT 1
 
 
@@ -52,7 +52,7 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD YCSB
+#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -60,7 +60,7 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      true
+#define PROFILE_EXEC_TIMING      false
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -187,22 +187,24 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-#define BATCH_SIZE 10368
-//#define BATCH_SIZE 10080
+//#define BATCH_SIZE 10368
+#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
 //#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-//#define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
-#define BATCH_MAP_LENGTH 4 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+//#define BATCH_MAP_LENGTH 4 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define PIPELINED true
+#define DISTRIBUTE_DIST_RECS true
+#define PLAN_NO_DIST_UPDATE_FIRST false
+#define PIPELINED false
 
 #define INIT_QUERY_MSGS false
 
@@ -240,7 +242,6 @@
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
 #define EXECQ_CAP_FACTOR 10
-//#define EXECQ_CAP_FACTOR 10
 #define EXPANDABLE_EQS true
 #define MIN_EXECQ_SIZE 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
@@ -285,10 +286,9 @@
 #define IMMEDIATE           2
 #define COMMIT_BEHAVIOR     AFTER_BATCH_COMP
 
-
 #define SINGLE_NODE true
-#define ABORT_THREAD false // if this is false, ABORT_QUEUES should be true to handle aborts
-#define ABORT_QUEUES true
+#define ABORT_THREAD true // if this is false, ABORT_QUEUES should be true to handle aborts
+#define ABORT_QUEUES false
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20
@@ -350,7 +350,7 @@
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.99//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -406,7 +406,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 1.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

@@ -38,7 +38,7 @@ uint64_t AbortQueue::enqueue(uint64_t thd_id, uint64_t txn_id, uint64_t abort_cn
 #if PROFILE_EXEC_TIMING
   uint64_t mtx_time_start = get_sys_clock();
 #endif
-#if ABORT_THREAD
+#if ABORT_THREAD && CC_ALG != QUECC
   pthread_mutex_lock(&mtx);
 #endif
 #if PROFILE_EXEC_TIMING
@@ -48,7 +48,7 @@ uint64_t AbortQueue::enqueue(uint64_t thd_id, uint64_t txn_id, uint64_t abort_cn
   INC_STATS(thd_id,abort_queue_penalty,penalty - starttime);
   INC_STATS(thd_id,abort_queue_enqueue_cnt,1);
   queue.push(entry);
-#if ABORT_THREAD
+#if ABORT_THREAD && CC_ALG != QUECC
   pthread_mutex_unlock(&mtx);
 #endif
 #if PROFILE_EXEC_TIMING

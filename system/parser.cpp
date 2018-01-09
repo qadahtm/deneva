@@ -178,7 +178,7 @@ void parser(int argc, char * argv[]) {
 			assert(false);
     }
 	}
-#if ABORT_THREAD
+#if ABORT_THREAD && CC_ALG != QUECC
   g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_abort_thread_cnt;
 #else
   g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt;

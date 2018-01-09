@@ -235,15 +235,6 @@ Client_query_queue::initQueriesParallel() {
 #else
                 BaseQuery * query = gen->create_query(_wl,g_node_id);
 #endif
-//            uint64_t qslot;
-#if WORKLOAD == YCSB
-//            YCSBQuery * ycsb_query = (YCSBQuery*)query;
-//            qslot = ((YCSBWorkload *) _wl)->key_to_part(ycsb_query->requests[0]->key);
-//            qslot = tid;
-//            assert(qslot == thread_id);
-#else
-                qslot = thread_id;
-#endif
 #if INIT_QUERY_MSGS
                 Message * msg = Message::create_message(query,CL_QRY);
             queries_msgs[qslot][query_id] = msg;

@@ -181,19 +181,24 @@ RC YCSBTxnManager::run_txn() {
     txn_stats.process_time_short += curr_time - starttime;
     txn_stats.wait_starttime = get_sys_clock();
 
+#if !SINGLE_NODE
+    if(IS_LOCAL(get_txn_id())) {
+    if(is_done() && rc == RCOK)
+      rc = start_commit();
+    else if(rc == Abort)
+      rc = start_abort();
+  }
+#else
 #if CC_ALG == SILO
     if (is_done() && rc == RCOK){
         rc = validate_silo();
     }
 #else
-    if (IS_LOCAL(get_txn_id())) {
-        if (is_done() && rc == RCOK)
-            rc = start_commit();
-        else if (rc == Abort)
-            rc = start_abort();
-    } else if (rc == Abort) {
-        rc = abort();
-    }
+    if(is_done() && rc == RCOK)
+        rc = start_commit();
+    else if(rc == Abort)
+        rc = start_abort();
+#endif // #if CC_ALG == SILO
 #endif
     return rc;
 

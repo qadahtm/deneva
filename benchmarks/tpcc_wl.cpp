@@ -222,7 +222,7 @@ void TPCCWorkload::init_tab_item(int id) {
         printf("[init] loading item table\n");
     for (UInt32 i = id + 1; i <= g_max_items; i += g_init_parallelism) {
         row_t *row;
-        uint64_t row_id = rid_man.next_rid((uint64_t)id);
+        uint64_t row_id = rid_man.next_rid((uint64_t)id % g_thread_cnt);
 #if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
@@ -292,8 +292,11 @@ void TPCCWorkload::init_tab_wh() {
 void TPCCWorkload::init_tab_dist(uint64_t wid) {
     for (uint64_t did = 1; did <= g_dist_per_wh; did++) {
         row_t *row;
-//        uint64_t row_id = rid_man.next_rid(wid);
+#if DISTRIBUTE_DIST_RECS
+        uint64_t row_id = rid_man.next_rid(did % g_thread_cnt); // this allows assigning one district per thread
+#else
         uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+#endif
         DEBUG_Q("gen dist. RID=%lu\n",row_id);
         t_district->get_new_row(row, 0, row_id);
         row->set_primary_key(did);
@@ -331,7 +334,8 @@ void TPCCWorkload::init_tab_stock(int id, uint64_t wid) {
     for (UInt32 sid = id + 1; sid <= g_max_items; sid += g_init_parallelism) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t)id);
-        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+//        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+        uint64_t row_id = rid_man.next_rid(id % g_thread_cnt);
 #if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
@@ -380,7 +384,8 @@ void TPCCWorkload::init_tab_cust(int id, uint64_t did, uint64_t wid) {
     for (UInt32 cid = id + 1; cid <= g_cust_per_dist; cid += g_init_parallelism) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t)id);
-        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+//        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+        uint64_t row_id = rid_man.next_rid(id % g_thread_cnt);
 #if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
@@ -484,13 +489,8 @@ void TPCCWorkload::init_tab_order(int id, uint64_t did, uint64_t wid) {
     for (UInt32 oid = id + 1; oid <= g_cust_per_dist; oid += g_init_parallelism) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t) id);
-        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
-#if DEBUG_WLOAD
-        double x = (double)(rand() % 10000) / 10000;
-        if (x < SAMPLING_FACTOR){
-            DEBUG_Q("gen order. RID=%lu, wid = %ld\n",row_id, wid);
-        }
-#endif
+//        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+        uint64_t row_id = rid_man.next_rid(id % g_thread_cnt);
         t_order->get_new_row(row, 0, row_id);
         row->set_primary_key(oid);
         uint64_t o_ol_cnt = 1;
