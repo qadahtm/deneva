@@ -475,8 +475,8 @@ print("Number of ips = {:d}".format(ip_cnt))
 env = dict(os.environ)
 
 time_enable = False;
-dry_run = False;
-vm_shut = True;
+dry_run = True;
+vm_shut = False;
 
 is_ycsb = False # if false workload is TPCC
 
@@ -531,15 +531,15 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-# wthreads = [vm_cores]
+wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
 num_trials = 2
 # cc_algs = ['SILO']
 # cc_algs = ['NO_WAIT']
 # cc_algs = ['MVCC'] 
 # cc_algs = ['TIMESTAMP']  
-cc_algs = ['QUECC']  
-# cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
+# cc_algs = ['QUECC']  
+cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
 # cc_algs = ['NO_WAIT', 'SILO'] 
 # cc_algs = ['OCC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
@@ -563,7 +563,8 @@ mtpps = [int(500000)] # MAX_TXN_PER_PART
 # batch_sized = [10368,20736,41472,82944]
 # batch_sized = [41472]
 # batch_sized = [40320]
-batch_sized = [8192,10368]
+# batch_sized = [8192,10368]
+batch_sized = [10368]
 # batch_sized = [10080] # for ptvar lcm(2,4,5,6,8,10,12,15,16,18,20,24,32)
 # batch_sized = [13440,26880,40320,53760,107520]
 # batch_sized = [13440,26880,53760,107520]
@@ -630,8 +631,8 @@ bmap_lengths = [1]
 
 ############### TPCC specific
 # payment_perc = [0.5]
-# payment_perc = [0.0,0.2,0.5,0.8,1.0]
-payment_perc = [0.0,0.5,1.0]
+payment_perc = [0.0,0.2,0.5,0.8,1.0]
+# payment_perc = [0.0,0.5,1.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 
 procs = []
