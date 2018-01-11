@@ -1303,7 +1303,8 @@ public:
 #if PROFILE_EXEC_TIMING
             INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
 #endif
-            return;
+//            DEBUG_Q("ET_%ld: PG %ld is empty to th next PG\n",_thd_id, wplanner_id);
+            goto bc_end;
         }
 #if PROFILE_EXEC_TIMING
         quecc_prof_time = get_sys_clock();
@@ -1314,10 +1315,9 @@ public:
             quecc_pool.exec_qs_release(batch_part->exec_qs, wplanner_id);
 //            quecc_pool.exec_qs_status_release(batch_part->exec_qs_status, wplanner_id, _thd_id);
         }
-
-//        DEBUG_Q("ET_%ld: For batch %ld , batch partition processing complete at map slot [%ld][%ld][%ld] \n",
+bc_end:
+//        DEBUG_Q("ET_%ld: For batch %ld , batch partition cleanup complete at map slot [%ld][%ld][%ld] \n",
 //                _thd_id, wbatch_id, batch_slot, _thd_id, wplanner_id);
-
         // free/release batch_part
         quecc_pool.batch_part_release(batch_part, wplanner_id, et_id);
 #if PROFILE_EXEC_TIMING
@@ -1944,7 +1944,7 @@ public:
             if (exec_qs_ranges->is_full()){
                 for (uint64_t j = 0; j < exec_qs_ranges->size(); ++j) {
 //                    DEBUG_Q("WT_%lu: range[%lu] %lu, has %lu eq entries\n",_thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
-                    if (exec_queues->get(j)->size() > 0){
+                    if (j == idx-1 || exec_queues->get(j)->size() > 0 || j == exec_qs_ranges->size()-1){
                         ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
                         ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
                     }
@@ -1960,6 +1960,21 @@ public:
 
                 ((Array<uint64_t> *)exec_qs_ranges_tmp)->clear();
                 ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->clear();
+
+                // recompute idx
+                idx = get_split(key, exec_qs_ranges);
+                if (idx == 0){
+                    c_range_start = 0;
+                }
+                else{
+                    c_range_start = exec_qs_ranges->get(idx-1);
+                }
+                c_range_end = exec_qs_ranges->get(idx);
+
+                split_point = (c_range_end-c_range_start)/2;
+                M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
+                           _planner_id, c_range_end-c_range_start, mrange->size());
+
             }
             // update ranges
             // add two new and empty exec_queues

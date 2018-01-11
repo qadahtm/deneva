@@ -1039,24 +1039,6 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
 
 //    uint64_t wplanner_id = 0;
     wplanner_id = 0;
-//#if DEBUG_QUECC
-//    uint64_t total_eq_entries = 0;
-//    for (uint64_t i=0; i < g_plan_thread_cnt; ++i){
-//        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][i][_thd_id].load();
-////        assert(batch_part->single_q);
-//        if (batch_part->single_q){
-//            total_eq_entries+= batch_part->exec_q->size();
-//        }
-//        else{
-//            for (uint64_t j = 0; j < batch_part->exec_qs->size(); ++j) {
-//                total_eq_entries += batch_part->exec_qs->get(j)->size();
-//            }
-//        }
-//
-////        DEBUG_Q("ET_%ld: exec_batch - total eq entries from PL_%ld = %ld\n", _thd_id,i, batch_part->exec_q->size());
-//    }
-//    DEBUG_Q("ET_%ld: exec_batch_id = %ld - total eq entries = %ld\n", _thd_id, wbatch_id,total_eq_entries);
-//#endif
 
     while (true){
 
@@ -1077,7 +1059,29 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
             continue;
         }
 
+#if DEBUG_QUECC
+        uint64_t total_eq_entries = 0;
+//        for (uint64_t i=0; i < g_plan_thread_cnt; ++i){
+//            batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][i][_thd_id].load();
+//        assert(batch_part->single_q);
+            if (batch_part->empty){
+                DEBUG_Q("ET_%ld: batch_part is empty for batch_id = %lu\n", _thd_id, wbatch_id);
+            }
+            else{
+                if (batch_part->single_q){
+                    total_eq_entries+= batch_part->exec_q->size();
+                }
+                else{
+                    for (uint64_t j = 0; j < batch_part->exec_qs->size(); ++j) {
+                        total_eq_entries += batch_part->exec_qs->get(j)->size();
+                    }
+                }
+            }
 
+//        DEBUG_Q("ET_%ld: exec_batch - total eq entries from PL_%ld = %ld\n", _thd_id,i, batch_part->exec_q->size());
+//        }
+        DEBUG_Q("ET_%ld: exec_batch_id = %ld - total eq entries = %ld\n", _thd_id, wbatch_id,total_eq_entries);
+#endif
 
 //        #if BATCH_MAP_ORDER == BATCH_ET_PT
 //        batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();

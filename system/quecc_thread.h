@@ -242,186 +242,6 @@ struct sync_block{
 void txn_ctxs_get_or_create(transaction_context * &txn_ctxs, uint64_t length, uint64_t planner_id);
 void txn_ctxs_release(transaction_context * &txn_ctxs, uint64_t planner_id);
 
-class PlannerThread : public Thread {
-public:
-    RC run();
-    void setup();
-    uint64_t _planner_id;
-    uint32_t get_bucket(uint64_t key);
-
-    inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
-        for (uint32_t i = 0; i < ranges->size(); i++){
-            if (key <= ranges->get(i)){
-                return i;
-            }
-        }
-        M_ASSERT_V(false, "could not assign to range key = %lu\n", key);
-        return (uint32_t) ranges->size()-1;
-    }
-
-    uint64_t get_key_from_entry(exec_queue_entry * entry) {
-#if WORKLOAD == YCSB
-//        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
-//        return ycsb_req_tmp->key;
-        return entry->req.key;
-#else
-        return entry->rid;
-#endif
-    }
-
-    void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t et_id){
-        uint64_t tidx =0;
-        uint64_t nidx =0;
-        Array<exec_queue_entry> * texec_q = NULL;
-
-        for (uint64_t r =0; r < mrange->size(); ++r){
-            // TODO(tq): refactor this to respective benchmark implementation
-            uint64_t lid = get_key_from_entry(mrange->get_ptr(r));
-            tidx = get_split(lid, exec_qs_ranges);
-//            M_ASSERT_V(((Array<exec_queue_entry> volatile * )exec_queues->get(tidx)) == mrange, "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
-            nidx = get_split(lid, ((Array<uint64_t> *)exec_qs_ranges_tmp));
-
-            texec_q =  exec_queues_tmp->get(nidx);
-//            M_ASSERT_V(texec_q == nexec_q || texec_q == oexec_q , "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
-            // all entries must fall into one of the splits
-#if DEBUG_QUECC
-            if (!(nidx == tidx || nidx == (tidx+1))){
-//                DEBUG_Q("PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
-                for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
-                    DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
-                }
-
-//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-//                DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
-//                        _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
-//            }
-
-                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-                    DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-                }
-//            for (uint64_t i =0; i < exec_queues->size(); ++i){
-//                DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
-//                        _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
-//            }
-            }
-#endif
-            M_ASSERT_V(nidx == tidx || nidx == (tidx+1),"PL_%ld: nidx=%ld, tidx = %ld,lid=%ld\n",_planner_id, nidx, tidx, lid);
-
-            texec_q->add(mrange->get(r));
-        }
-    }
-    void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
-    void plan_client_msg(Message *msg, priority_group * planner_pg);
-    SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
-#if DEBUG_QUECC
-    void print_threads_status() const {// print phase status
-//        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
-//            DEBUG_Q("PT_%ld: planner_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, plan_active[ii]->fetch_add(0), batch_id);
-//        }
-//
-//        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
-//            DEBUG_Q("PT_%ld: exec_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, exec_active[ii]->fetch_add(0), batch_id);
-//            DEBUG_Q("PT_%ld: commit_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, commit_active[ii]->fetch_add(0), batch_id);
-//        }
-    }
-#endif
-#if WORKLOAD == YCSB
-    // create a bucket for each worker thread
-    uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
-#elif WORKLOAD == TPCC
-    // 9223372036854775807 = 2^63
-    // FIXME(tq): Use a parameter to determine the maximum database size
-//    uint64_t bucket_size = (9223372036854775807) / g_thread_cnt;
-    uint64_t bucket_size = UINT64_MAX/NUM_WH;
-#else
-    uint64_t bucket_size = 0;
-#endif
-
-    RC run_fixed_mode();
-    RC run_fixed_mode2();
-    RC run_normal_mode();
-private:
-    // txn related
-    uint64_t planner_txn_id = 0;
-    uint64_t txn_prefix_base = 0x0010000000000000;
-    uint64_t txn_prefix_planner_base = 0;
-    TxnManager * my_txn_man;
-
-    // Batch related
-    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
-    uint64_t batch_id = 0;
-    uint64_t batch_cnt = 0;
-    bool force_batch_delivery = false;
-    uint64_t batch_starting_txn_id;
-
-    exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.align_alloc(sizeof(exec_queue_entry));
-    uint64_t et_id = 0;
-    boost::random::mt19937 plan_rng;
-    boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
-
-    // measurements
-#if PROFILE_EXEC_TIMING
-    uint64_t idle_starttime = 0;
-    uint64_t batch_start_time = 0;
-    uint64_t prof_starttime = 0;
-    uint64_t txn_prof_starttime = 0;
-    uint64_t plan_starttime = 0;
-#endif
-    // CAS related
-    uint64_t expected = 0;
-    uint64_t desired = 0;
-    uint8_t expected8 = 0;
-    uint8_t desired8 = 0;
-    uint64_t slot_num = 0;
-
-    // create and and pre-allocate execution queues
-    // For each mrange which will be assigned to an execution thread
-    // there will be an array pointer.
-    // When the batch is complete we will CAS the exec_q array to allow
-    // execution threads to be
-    Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
-    Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
-
-#if SPLIT_MERGE_ENABLED
-
-#if SPLIT_STRATEGY == LAZY_SPLIT
-    split_max_heap_t pq_test;
-    split_min_heap_t range_sorted;
-    exec_queue_limit = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
-    boost::lockfree::spsc_queue<split_entry *> * split_entry_free_list =
-            new boost::lockfree::spsc_queue<split_entry *>(FREE_LIST_INITIAL_SIZE*10);
-    split_entry ** nsp_entries = (split_entry **) mem_allocator.alloc(sizeof(split_entry*)*2);
-    volatile bool ranges_stored = false;
-     Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
-            sizeof(Array<exec_queue_entry> *) * 2);
-
-#elif SPLIT_STRATEGY == EAGER_SPLIT
-    Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
-    Array<uint64_t> * exec_qs_ranges_tmp_tmp = new Array<uint64_t>();
-    Array<Array<exec_queue_entry> *> * exec_queues_tmp;
-    Array<Array<exec_queue_entry> *> * exec_queues_tmp_tmp;
-#endif
-#if MERGE_STRATEGY == BALANCE_EQ_SIZE
-    assign_ptr_min_heap_t assignment;
-#elif MERGE_STRATEGY == RR
-#endif
-    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
-    boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
-            new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
-
-#endif
-
-    void print_eqs_ranges_after_swap() const;
-    void print_eqs_ranges_before_swap() const;
-};
-
-#if CT_ENABLED
-class CommitThread : public Thread {
-public:
-    RC run();
-    void setup();
-};
-#endif //CT_ENABLED
 
 class QueCCPool {
 public:
@@ -536,6 +356,417 @@ private:
     atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT];
 #endif
 };
+
+
+class PlannerThread : public Thread {
+public:
+    RC run();
+    void setup();
+    uint64_t _planner_id;
+    uint32_t get_bucket(uint64_t key);
+
+    uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
+        for (uint32_t i = 0; i < ranges->size(); i++){
+            if (key <= ranges->get(i)){
+                return i;
+            }
+        }
+        for (uint32_t i = 0; i < ranges->size(); i++){
+            printf("could not assign to range key = %lu, range[%d]=%lu\n", key,i,ranges->get(i));
+        }
+        fflush(stdout);
+        M_ASSERT_V(false, "could not assign to range key = %lu\n", key);
+        return (uint32_t) ranges->size()-1;
+    }
+
+    uint64_t get_key_from_entry(exec_queue_entry * entry) {
+#if WORKLOAD == YCSB
+//        ycsb_request *ycsb_req_tmp = (ycsb_request *) entry->req_buffer;
+//        return ycsb_req_tmp->key;
+        return entry->req.key;
+#else
+        return entry->rid;
+#endif
+    }
+
+    void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t et_id){
+        uint64_t tidx =0;
+        uint64_t nidx =0;
+        Array<exec_queue_entry> * texec_q = NULL;
+
+        for (uint64_t r =0; r < mrange->size(); ++r){
+            // TODO(tq): refactor this to respective benchmark implementation
+            uint64_t lid = get_key_from_entry(mrange->get_ptr(r));
+            tidx = get_split(lid, exec_qs_ranges);
+//            M_ASSERT_V(((Array<exec_queue_entry> volatile * )exec_queues->get(tidx)) == mrange, "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+            nidx = get_split(lid, ((Array<uint64_t> *)exec_qs_ranges_tmp));
+
+            texec_q =  exec_queues_tmp->get(nidx);
+//            M_ASSERT_V(texec_q == nexec_q || texec_q == oexec_q , "PL_%ld: mismatch mrange and tidx_eq\n",_planner_id);
+            // all entries must fall into one of the splits
+#if DEBUG_QUECC
+            if (!(nidx == tidx || nidx == (tidx+1))){
+//                DEBUG_Q("PL_%ld: nidx=%ld, tidx = %ld,lid=%ld,key=%ld\n",_planner_id, nidx, idx, lid,key);
+                for (uint64_t i =0; i < ((Array<uint64_t> *)exec_qs_ranges_tmp)->size(); ++i){
+                    DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, ((Array<uint64_t> *)exec_qs_ranges_tmp)->get(i));
+                }
+
+//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+//                        _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+//            }
+
+                for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+                    DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+                }
+//            for (uint64_t i =0; i < exec_queues->size(); ++i){
+//                DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                        _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//            }
+            }
+#endif
+            M_ASSERT_V(nidx == tidx || nidx == (tidx+1),"PL_%ld: nidx=%ld, tidx = %ld,lid=%ld\n",_planner_id, nidx, tidx, lid);
+
+            texec_q->add(mrange->get(r));
+        }
+    }
+
+    void checkAndSplitRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id,
+                     Array<uint64_t> * &exec_qs_ranges,
+                     Array<Array<exec_queue_entry> *> * &exec_queues,
+                     Array<uint64_t> * &exec_qs_ranges_tmp,
+                     Array<Array<exec_queue_entry> *> * &exec_queues_tmp){
+
+        Array<uint64_t> * exec_qs_ranges_tmp_tmp;
+        Array<Array<exec_queue_entry> *> * exec_queues_tmp_tmp;
+#if SPLIT_MERGE_ENABLED && SPLIT_STRATEGY == EAGER_SPLIT
+
+        int max_tries = 64; //TODO(tq): make this configurable
+        int trial =0;
+#if PROFILE_EXEC_TIMING
+        uint64_t _prof_starttime =0;
+#endif
+
+        volatile uint64_t c_range_start;
+        volatile uint64_t c_range_end;
+        volatile uint64_t idx = get_split(key, exec_qs_ranges);
+        volatile uint64_t split_point;
+        Array<exec_queue_entry> * nexec_q = NULL;
+        Array<exec_queue_entry> * oexec_q = NULL;
+
+        mrange = exec_queues->get(idx);
+        while (mrange->is_full()){
+#if PROFILE_EXEC_TIMING
+            if (_prof_starttime == 0){
+                _prof_starttime  = get_sys_clock();
+            }
+#endif
+            trial++;
+            if (trial == max_tries){
+                M_ASSERT_V(false, "Execeded max split tries\n");
+            }
+
+            // we need to split
+
+//        M_ASSERT_V(idx == pidx, "idx mismatch after removal of empty queues; idx=%ld , pidx=%ld\n", idx, pidx);
+//        idx = get_split(key, exec_qs_ranges);
+//        mrange = exec_queues->get(idx);
+
+            if (idx == 0){
+                c_range_start = 0;
+            }
+            else{
+                c_range_start = exec_qs_ranges->get(idx-1);
+            }
+            c_range_end = exec_qs_ranges->get(idx);
+
+//        DEBUG_Q("Planner_%ld : Eagerly we need to split mrange ptr = %lu, key = %lu, current size = %ld,"
+//                        " batch_id = %ld, c_range_start = %lu, c_range_end = %lu, split_point = %lu, trial=%d"
+//                        "\n",
+//                _planner_id, (uint64_t) mrange, key, mrange->size(), wbatch_id, c_range_start, c_range_end, split_point, trial);
+#if EXPANDABLE_EQS
+            // if we cannot split, we must expand this, otherwise, we fail
+            if ((c_range_end-c_range_start) <= 1){
+                // expand current EQ
+                if (mrange->expand()){
+                    assert(!mrange->is_full());
+                    return;
+                }
+            }
+#endif
+
+            split_point = (c_range_end-c_range_start)/2;
+            M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
+                       _planner_id, c_range_end-c_range_start, mrange->size());
+
+            // compute new ranges
+            ((Array<uint64_t> *)exec_qs_ranges_tmp)->clear();
+            ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->clear();
+            M_ASSERT_V(exec_queues->size() == exec_qs_ranges->size(), "PL_%ld: Size mismatch : EQS(%lu) Ranges (%lu)\n",
+                       _planner_id, exec_queues->size(), exec_qs_ranges->size());
+            // if we have reached max number of ranges
+            // drop ranges and EQs with zero entries
+            if (exec_qs_ranges->is_full()){
+                uint64_t add_cnt = 0;
+                DEBUG_Q("WT_%lu: exec_qs_ranges is full with size = %lu\n",_thd_id, exec_qs_ranges->size());
+                for (uint64_t j = 0; j < exec_qs_ranges->size(); ++j) {
+                    DEBUG_Q("WT_%lu: range[%lu] %lu, has %lu eq entries\n",_thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
+                    if (j == idx-1 || j==idx || exec_queues->get(j)->size() > 0 || j == exec_qs_ranges->size()-1){
+                        ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
+                        ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
+                        add_cnt++;
+                    }
+                    else{
+                        if (add_cnt < g_thread_cnt && (exec_qs_ranges->size()-j) < (g_thread_cnt)){
+                            ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
+                            ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
+                            add_cnt++;
+                        }
+                        else{
+                            Array<exec_queue_entry> * tmp = exec_queues->get(j);
+                            quecc_pool.exec_queue_release(tmp,0,0);
+                        }
+                    }
+                }
+
+                exec_queues_tmp_tmp = exec_queues;
+                exec_qs_ranges_tmp_tmp = exec_qs_ranges;
+
+                exec_queues = ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp);
+                exec_qs_ranges = ((Array<uint64_t> *)exec_qs_ranges_tmp);
+
+                exec_queues_tmp = exec_queues_tmp_tmp;
+                exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
+
+                ((Array<uint64_t> *)exec_qs_ranges_tmp)->clear();
+                ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->clear();
+
+
+                assert(exec_qs_ranges->size() >= g_thread_cnt);
+                // recompute idx
+                idx = get_split(key, exec_qs_ranges);
+                if (idx == 0){
+                    c_range_start = 0;
+                }
+                else{
+                    c_range_start = exec_qs_ranges->get(idx-1);
+                }
+                c_range_end = exec_qs_ranges->get(idx);
+
+                split_point = (c_range_end-c_range_start)/2;
+                M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
+                           _planner_id, c_range_end-c_range_start, mrange->size());
+            }
+            // update ranges
+            // add two new and empty exec_queues
+            for (uint64_t r=0; r < exec_qs_ranges->size(); ++r){
+                if (r == idx){
+                    // insert split
+                    M_ASSERT_V(exec_qs_ranges->get(r) != split_point+c_range_start,
+                               "PL_%ld: old range = %lu, new range = %lu",
+                               _planner_id,exec_qs_ranges->get(r), split_point+c_range_start);
+                    ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(split_point+c_range_start);
+#if MERGE_STRATEGY == RR
+                    quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, r % g_thread_cnt);
+                    quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, (r+1) % g_thread_cnt);
+#else
+                    quecc_pool.exec_queue_get_or_create(oexec_q, _planner_id, et_id);
+                    quecc_pool.exec_queue_get_or_create(nexec_q, _planner_id, et_id);
+#endif
+
+//                M_ASSERT_V(oexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
+//                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
+
+//                M_ASSERT_V(nexec_q != mrange, "PL_%ld: oexec_q=%lu, nexec_q=%lu, mrange=%lu, trial=%d\n",
+//                           _planner_id, (uint64_t) oexec_q, (uint64_t) nexec_q, (uint64_t) mrange, trial);
+//                assert(oexec_q->size() == 0);
+//                assert(nexec_q->size() == 0);
+                    ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->add(oexec_q);
+                    ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->add(nexec_q);
+
+                }
+                else{
+                    ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp)->add(exec_queues->get(r));
+                }
+                ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(r));
+            }
+
+            assert(exec_qs_ranges_tmp->size() == exec_qs_ranges->size()+1);
+
+            // use new ranges to split current execq
+            splitMRange(mrange,et_id);
+
+//            if(exec_queues_tmp->get(idx)->size() == 0){
+//                M_ASSERT_V(false,"PT_%ld: LEFT EQ is empty after split\n",_planner_id);
+//            }
+//
+//            if (exec_queues_tmp->get(idx+1)->size() == 0){
+//                M_ASSERT_V(false,"PT_%ld: RIGHT EQ is empty after split\n",_planner_id);
+//            }
+            // swap data structures
+            exec_queues_tmp_tmp = exec_queues;
+            exec_qs_ranges_tmp_tmp = exec_qs_ranges;
+
+            exec_queues = ((Array<Array<exec_queue_entry> *> * )exec_queues_tmp);
+            exec_qs_ranges = ((Array<uint64_t> *)exec_qs_ranges_tmp);
+
+            exec_queues_tmp = exec_queues_tmp_tmp;
+            exec_qs_ranges_tmp = exec_qs_ranges_tmp_tmp;
+
+//        DEBUG_Q("Planner_%ld : After swapping New ranges size = %ld, old ranges size = %ld"
+//                        "\n",
+//                _planner_id, exec_qs_ranges->size(), exec_qs_ranges_tmp->size());
+
+            // release current mrange
+//            quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
+            quecc_pool.exec_queue_release(mrange,_planner_id,_thd_id);
+//        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
+
+            // use the new ranges to assign the new execution entry
+            idx = get_split(key, exec_qs_ranges);
+            mrange = exec_queues->get(idx);
+
+//#if DEBUG_QUECC
+//            for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+//                DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+//            }
+//
+//            for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//                DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+//                        _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+//            }
+//
+//            for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//                DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+//            }
+//            for (uint64_t i =0; i < exec_queues->size(); ++i){
+//                DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                        _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//            }
+//#endif
+
+        }
+#if PROFILE_EXEC_TIMING
+        if (_prof_starttime > 0){
+            INC_STATS(_thd_id, plan_split_time[_planner_id], get_sys_clock()-_prof_starttime);
+        }
+#endif
+
+#else
+        M_ASSERT(false, "LAZY_SPLIT not supported in TPCC")
+#endif
+    }
+
+    void checkMRange(Array<exec_queue_entry> *&mrange, uint64_t key, uint64_t et_id);
+    void plan_client_msg(Message *msg, priority_group * planner_pg);
+    SRC do_batch_delivery(bool force_batch_delivery, priority_group * &planner_pg, transaction_context * &txn_ctxs);
+#if DEBUG_QUECC
+    void print_threads_status() const {// print phase status
+//        for (UInt32 ii=0; ii < g_plan_thread_cnt; ++ii){
+//            DEBUG_Q("PT_%ld: planner_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, plan_active[ii]->fetch_add(0), batch_id);
+//        }
+//
+//        for (UInt32 ii=0; ii < g_thread_cnt; ++ii){
+//            DEBUG_Q("PT_%ld: exec_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, exec_active[ii]->fetch_add(0), batch_id);
+//            DEBUG_Q("PT_%ld: commit_%d active : %ld, pbatch_id=%ld\n", _planner_id, ii, commit_active[ii]->fetch_add(0), batch_id);
+//        }
+    }
+#endif
+#if WORKLOAD == YCSB
+    // create a bucket for each worker thread
+    uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
+#elif WORKLOAD == TPCC
+    // 9223372036854775807 = 2^63
+    // FIXME(tq): Use a parameter to determine the maximum database size
+//    uint64_t bucket_size = (9223372036854775807) / g_thread_cnt;
+    uint64_t bucket_size = UINT64_MAX/NUM_WH;
+#else
+    uint64_t bucket_size = 0;
+#endif
+
+    RC run_fixed_mode();
+    RC run_fixed_mode2();
+    RC run_normal_mode();
+private:
+    // txn related
+    uint64_t planner_txn_id = 0;
+    uint64_t txn_prefix_base = 0x0010000000000000;
+    uint64_t txn_prefix_planner_base = 0;
+    TxnManager * my_txn_man;
+
+    // Batch related
+    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+    uint64_t batch_id = 0;
+    uint64_t batch_cnt = 0;
+    bool force_batch_delivery = false;
+    uint64_t batch_starting_txn_id;
+
+    exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.align_alloc(sizeof(exec_queue_entry));
+    uint64_t et_id = 0;
+    boost::random::mt19937 plan_rng;
+    boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
+
+    // measurements
+#if PROFILE_EXEC_TIMING
+    uint64_t idle_starttime = 0;
+    uint64_t batch_start_time = 0;
+    uint64_t prof_starttime = 0;
+    uint64_t txn_prof_starttime = 0;
+    uint64_t plan_starttime = 0;
+#endif
+    // CAS related
+    uint64_t expected = 0;
+    uint64_t desired = 0;
+    uint8_t expected8 = 0;
+    uint8_t desired8 = 0;
+    uint64_t slot_num = 0;
+
+    // create and and pre-allocate execution queues
+    // For each mrange which will be assigned to an execution thread
+    // there will be an array pointer.
+    // When the batch is complete we will CAS the exec_q array to allow
+    // execution threads to be
+    Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
+    Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
+
+#if SPLIT_MERGE_ENABLED
+
+#if SPLIT_STRATEGY == LAZY_SPLIT
+    split_max_heap_t pq_test;
+    split_min_heap_t range_sorted;
+    exec_queue_limit = (planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
+    boost::lockfree::spsc_queue<split_entry *> * split_entry_free_list =
+            new boost::lockfree::spsc_queue<split_entry *>(FREE_LIST_INITIAL_SIZE*10);
+    split_entry ** nsp_entries = (split_entry **) mem_allocator.alloc(sizeof(split_entry*)*2);
+    volatile bool ranges_stored = false;
+     Array<exec_queue_entry> **nexec_qs = (Array<exec_queue_entry> **) mem_allocator.alloc(
+            sizeof(Array<exec_queue_entry> *) * 2);
+
+#elif SPLIT_STRATEGY == EAGER_SPLIT
+    Array<uint64_t> * exec_qs_ranges_tmp = new Array<uint64_t>();
+    Array<Array<exec_queue_entry> *> * exec_queues_tmp;
+#endif
+#if MERGE_STRATEGY == BALANCE_EQ_SIZE
+    assign_ptr_min_heap_t assignment;
+#elif MERGE_STRATEGY == RR
+#endif
+    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
+    boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
+            new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
+
+#endif
+
+    void print_eqs_ranges_after_swap() const;
+    void print_eqs_ranges_before_swap() const;
+};
+
+#if CT_ENABLED
+class CommitThread : public Thread {
+public:
+    RC run();
+    void setup();
+};
+#endif //CT_ENABLED
 
 #endif // if CC_ALG == QUECC
 
