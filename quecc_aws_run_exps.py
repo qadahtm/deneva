@@ -51,12 +51,13 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         abort_queues = 'false'
         abort_thread = 'true'
 
-    if ct_p <= 1:
+    if ct_p < 1:
         ct_cnt = int(ct_p*nwthd_cnt)
     else:
         ct_cnt = ct_p
 
-    part_cnt = 1
+    # part_cnt = 1 // use for single partition exps
+
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
@@ -114,6 +115,10 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         m =    re.search('#define MAX_TXN_PER_PART\s+(\d+)',line.strip())
         if m:
             nline = '#define MAX_TXN_PER_PART {}\n'.format(maxtpp)
+
+        m =    re.search('#define EXECQ_CAP_FACTOR\s+(\d+)',line.strip())
+        if m:
+            nline = '#define EXECQ_CAP_FACTOR {}\n'.format(eq_cap_factor)
 
         etsync_m =    re.search('#define BATCH_SIZE\s+(\d+)',line.strip())
         if etsync_m:
@@ -486,6 +491,11 @@ is_fixed_mode = False
 
 vm_cores = multiprocessing.cpu_count();
 exp_set = 1 
+
+# eq_cap_factor = 20; # for TPCC 0% payment
+# eq_cap_factor = 10; # for TPCC 50% payment
+eq_cap_factor = 1; # for TPCC 100% payment
+
 # num_trials = 2;
 # WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC, CALVIN, MAAT, QUECC, DUMMY_CC,HSTORE,SILO
 # cc_algs = ['NO_WAIT', 'WAIT_DIE', 'TIMESTAMP', 'MVCC','QUECC']
@@ -531,15 +541,15 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-wthreads = [vm_cores]
+# wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
 num_trials = 2
 # cc_algs = ['SILO']
-# cc_algs = ['NO_WAIT']
+cc_algs = ['NO_WAIT']
 # cc_algs = ['MVCC'] 
 # cc_algs = ['TIMESTAMP']  
 # cc_algs = ['QUECC']  
-cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
+# cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
 # cc_algs = ['NO_WAIT', 'SILO'] 
 # cc_algs = ['OCC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
@@ -576,7 +586,7 @@ batch_sized = [10368]
 # pt_perc = [0.25,0.5,0.75]
 # pt_perc = [0.25]
 # pt_perc = [0.5,1]
-# pt_perc = [0.5]
+# pt_perc = [0.5,0.25]
 pt_perc = [1]
 
 #ratio of commit threads from execution threads
@@ -627,11 +637,13 @@ ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB
 recsizes = [1]
 
 # bmap_lengths = [1,2,4,8,16,32]
-bmap_lengths = [1]
+bmap_lengths = [2]
 
 ############### TPCC specific
+# payment_perc = [0.0]
 # payment_perc = [0.5]
-payment_perc = [0.0,0.2,0.5,0.8,1.0]
+payment_perc = [1.0]
+# payment_perc = [0.0,0.2,0.5,0.8,1.0]
 # payment_perc = [0.0,0.5,1.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 

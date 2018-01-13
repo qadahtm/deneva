@@ -2090,6 +2090,16 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
             if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
                 assert(false);
             }
+
+#if PLAN_NO_DIST_UPDATE_FIRST
+            //plan update on district table
+            tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
+            rid = r_local->get_row_id();
+            et_id = eq_idx_rand->operator()(plan_rng);
+            checkMRange(mrange, rid, et_id);
+            tpcc_txn_man->plan_neworder_update_d(r_local,entry);
+            mrange->add(*entry);
+#endif
             tpcc_txn_man->neworder_lookup_w(tpcc_msg->w_id,r_local);
             rid = r_local->get_row_id();
             et_id = eq_idx_rand->operator()(plan_rng);
@@ -2106,7 +2116,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
             tpcc_txn_man->plan_neworder_read_c(r_local, entry);
             mrange->add(*entry);
 
-
+#if !PLAN_NO_DIST_UPDATE_FIRST
             //plan update on district table
             tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
             rid = r_local->get_row_id();
@@ -2114,7 +2124,9 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
             checkMRange(mrange, rid, et_id);
             tpcc_txn_man->plan_neworder_update_d(r_local,entry);
             mrange->add(*entry);
+#endif
 
+#if !PLAN_NO_DIST_DEPS_LAST
             // plan insert into orders
             tpcc_txn_man->plan_neworder_insert_o(tpcc_msg->w_id, tpcc_msg->d_id,tpcc_msg->c_id,tpcc_msg->remote,tpcc_msg->ol_cnt,tpcc_msg->o_entry_d,entry);
             rid = entry->rid;
@@ -2128,7 +2140,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
             et_id = eq_idx_rand->operator()(plan_rng);
             checkMRange(mrange, rid, et_id);
             mrange->add(*entry);
-
+#endif
             for (uint64_t i =0; i < tpcc_msg->ol_cnt; ++i){
 
                 uint64_t ol_number = i;
@@ -2151,14 +2163,45 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
                 checkMRange(mrange, rid, et_id);
                 tpcc_txn_man->plan_neworder_update_s(ol_quantity, tpcc_msg->remote, r_local,entry);
                 mrange->add(*entry);
+#if !PLAN_NO_DIST_DEPS_LAST
+                // plan insert into order_line
+                tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, tpcc_msg->d_id, r_local, entry);
+                rid = entry->rid;
+                et_id = eq_idx_rand->operator()(plan_rng);
+                checkMRange(mrange, rid, et_id);
+                mrange->add(*entry);
+#endif
+            }
+
+#if PLAN_NO_DIST_DEPS_LAST
+            for (uint64_t i =0; i < tpcc_msg->ol_cnt; ++i){
+                uint64_t ol_number = i;
+                uint64_t ol_i_id = tpcc_msg->items[ol_number]->ol_i_id;
+                uint64_t ol_supply_w_id = tpcc_msg->items[ol_number]->ol_supply_w_id;
+                uint64_t ol_quantity = tpcc_msg->items[ol_number]->ol_quantity;
 
                 // plan insert into order_line
-                tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, r_local, entry);
+                tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, tpcc_msg->d_id, r_local, entry);
                 rid = entry->rid;
                 et_id = eq_idx_rand->operator()(plan_rng);
                 checkMRange(mrange, rid, et_id);
                 mrange->add(*entry);
             }
+
+            // plan insert into orders
+            tpcc_txn_man->plan_neworder_insert_o(tpcc_msg->w_id, tpcc_msg->d_id,tpcc_msg->c_id,tpcc_msg->remote,tpcc_msg->ol_cnt,tpcc_msg->o_entry_d,entry);
+            rid = entry->rid;
+            et_id = eq_idx_rand->operator()(plan_rng);
+            checkMRange(mrange, rid, et_id);
+            mrange->add(*entry);
+
+            // plan insert into new order
+            tpcc_txn_man->plan_neworder_insert_no(tpcc_msg->w_id,tpcc_msg->d_id, tpcc_msg->c_id, entry);
+            rid = entry->rid;
+            et_id = eq_idx_rand->operator()(plan_rng);
+            checkMRange(mrange, rid, et_id);
+            mrange->add(*entry);
+#endif
 
             break;
         default:
@@ -2238,15 +2281,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * EXECQ_CAP_FACTOR;
 #elif WORKLOAD == TPCC
 #if EXPANDABLE_EQS
-#if PIPELINED
-//    exec_queue_capacity = std::ceil((double)g_batch_size/(g_thread_cnt+g_thread_cnt)) * EXECQ_CAP_FACTOR;
-//    exec_queue_capacity = planner_batch_size * EXECQ_CAP_FACTOR;
-    exec_queue_capacity = g_batch_size * EXECQ_CAP_FACTOR; //* 4 works for TPCC
-#else
-    exec_queue_capacity = std::ceil((double)g_batch_size/g_thread_cnt) * EXECQ_CAP_FACTOR; //* 4 works for TPCC
-#endif
-//    exec_queue_capacity = planner_batch_size * 10; //* 4 works for TPCC
-//    exec_queue_capacity = g_batch_size; //* 4 works for TPCC
+    exec_queue_capacity = planner_batch_size * EXECQ_CAP_FACTOR;
 #else
     exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * REQ_PER_QUERY * EXECQ_CAP_FACTOR;
 #endif
@@ -2311,7 +2346,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 #endif
     M_ASSERT_V(exec_queue_capacity > 0, "EQ size is zero??\n")
 //#if DEBUG_QUECC
-    printf("\nEQ Max size = %ld\n",exec_queue_capacity);
+    printf("\nEQ Max size, exec_queue_capacity = %ld\n",exec_queue_capacity);
     fflush(stdout);
 //    assert(false);
 //#endif
@@ -2391,7 +2426,7 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
 //#else
         exec_q = (Array<exec_queue_entry> *) mem_allocator.alloc(sizeof(Array<exec_queue_entry>));
 #if EXPANDABLE_EQS
-        exec_q->init_expandable(exec_queue_capacity, EXECQ_CAP_FACTOR);
+        exec_q->init_expandable(exec_queue_capacity, EXECQ_EXPAND_FACTOR);
 #else
         exec_q->init(exec_queue_capacity);
 #endif

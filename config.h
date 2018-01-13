@@ -6,7 +6,7 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 1
-#define THREAD_CNT 20
+#define THREAD_CNT 32
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 32
@@ -15,8 +15,8 @@
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 20
-#define PART_CNT 1
+#define PLAN_THREAD_CNT 32
+#define PART_CNT THREAD_CNT
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -43,9 +43,9 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-//#define CPU_FREQ          2.0 // FOR GS32
+#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-#define CPU_FREQ            2.4//2.6 // FOR D15v3
+//#define CPU_FREQ            2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -58,9 +58,9 @@
 #define STATS_ENABLE        true
 #define PROG_STATS          false
 #define TIME_ENABLE         true //STATS_ENABLE
-#define ASSERT_ENABLED      true
+#define ASSERT_ENABLED      false
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      true
+#define PROFILE_EXEC_TIMING      false
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -204,6 +204,7 @@
 
 #define DISTRIBUTE_DIST_RECS true
 #define PLAN_NO_DIST_UPDATE_FIRST false
+#define PLAN_NO_DIST_DEPS_LAST false
 #define PIPELINED false
 
 #define INIT_QUERY_MSGS false
@@ -241,7 +242,8 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 0.8
+#define EXECQ_CAP_FACTOR 10
+#define EXECQ_EXPAND_FACTOR 1
 #define EXPANDABLE_EQS true
 #define MIN_EXECQ_SIZE 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
@@ -250,8 +252,8 @@
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
-#define FIXED_COMMIT_THREAD_CNT false
-#define COMMIT_THREAD_CNT 8
+#define FIXED_COMMIT_THREAD_CNT true
+#define COMMIT_THREAD_CNT 1
 #define TXN_CNT_COMMIT_THRESHOLD (THREAD_CNT*PLAN_THREAD_CNT)*2
 
 
@@ -323,8 +325,8 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-//#define MAX_TXN_PER_PART    (500000/PART_CNT)
-#define MAX_TXN_PER_PART    500000
+#define MAX_TXN_PER_PART    (500000/PART_CNT)
+//#define MAX_TXN_PER_PART    500000
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -406,7 +408,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 0.5 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

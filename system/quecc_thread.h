@@ -510,19 +510,24 @@ public:
                 uint64_t add_cnt = 0;
                 DEBUG_Q("WT_%lu: exec_qs_ranges is full with size = %lu\n",_thd_id, exec_qs_ranges->size());
                 for (uint64_t j = 0; j < exec_qs_ranges->size(); ++j) {
-                    DEBUG_Q("WT_%lu: range[%lu] %lu, has %lu eq entries\n",_thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
                     if (j == idx-1 || j==idx || exec_queues->get(j)->size() > 0 || j == exec_qs_ranges->size()-1){
+                        DEBUG_Q("WT_%lu: keeping range[%lu] %lu, has %lu eq entries\n",
+                                _thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
                         ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
                         ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
                         add_cnt++;
                     }
                     else{
                         if (add_cnt < g_thread_cnt && (exec_qs_ranges->size()-j) < (g_thread_cnt)){
+                            DEBUG_Q("WT_%lu: keeping an empty range[%lu] %lu, has %lu eq entries\n",
+                                    _thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
                             ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
                             ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
                             add_cnt++;
                         }
                         else{
+                            DEBUG_Q("WT_%lu: freeing range[%lu] %lu, has %lu eq entries\n",
+                                    _thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
                             Array<exec_queue_entry> * tmp = exec_queues->get(j);
                             quecc_pool.exec_queue_release(tmp,0,0);
                         }
@@ -552,6 +557,17 @@ public:
                     c_range_start = exec_qs_ranges->get(idx-1);
                 }
                 c_range_end = exec_qs_ranges->get(idx);
+
+#if EXPANDABLE_EQS
+                // if we cannot split, we must expand this, otherwise, we fail
+                if ((c_range_end-c_range_start) <= 1){
+                    // expand current EQ
+                    if (mrange->expand()){
+                        assert(!mrange->is_full());
+                        return;
+                    }
+                }
+#endif
 
                 split_point = (c_range_end-c_range_start)/2;
                 M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",

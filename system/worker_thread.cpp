@@ -1080,7 +1080,7 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
 
 //        DEBUG_Q("ET_%ld: exec_batch - total eq entries from PL_%ld = %ld\n", _thd_id,i, batch_part->exec_q->size());
 //        }
-        DEBUG_Q("ET_%ld: exec_batch_id = %ld - total eq entries = %ld\n", _thd_id, wbatch_id,total_eq_entries);
+        DEBUG_Q("ET_%ld: exec_batch_id = %ld, PG=%lu - total eq entries = %ld\n", _thd_id, wbatch_id, wplanner_id,total_eq_entries);
 #endif
 
 //        #if BATCH_MAP_ORDER == BATCH_ET_PT
@@ -1576,7 +1576,7 @@ RC WorkerThread::run_normal_mode() {
 
             // indicate that I am done with all commit phase
 //            DEBUG_Q("ET_%ld: is done with commit task for batch_slot = %ld\n", _thd_id, batch_slot);
-
+#if !PIPELINED
 #if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
@@ -1593,6 +1593,7 @@ RC WorkerThread::run_normal_mode() {
                 hl_prof_starttime = get_sys_clock();
             }
 #endif
+#endif // #if !PIPELINED
             src = sync_on_commit_phase_end(batch_slot);
 #if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
@@ -1602,6 +1603,25 @@ RC WorkerThread::run_normal_mode() {
             if (src == BREAK){
                 goto end_et;
             }
+#if PIPELINED
+            #if PROFILE_EXEC_TIMING
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
+#endif
+            batch_cleanup(batch_slot);
+#if PROFILE_EXEC_TIMING
+            if (batch_proc_starttime > 0){
+                INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+            }
+#endif
+#if PROFILE_EXEC_TIMING
+            if (batch_proc_starttime > 0){
+                hl_prof_starttime = get_sys_clock();
+            }
+#endif
+#endif // #if PIPELINED
+
 #else
 #if COMMIT_BEHAVIOR == AFTER_BATCH_COMP
             work_queue.batch_map_comp_cnts[batch_slot].fetch_add(1);

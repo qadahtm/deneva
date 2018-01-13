@@ -1554,14 +1554,15 @@ bc_end:
 
             if (rc == WAIT){
 #if PROFILE_EXEC_TIMING
-                quecc_txn_wait_starttime = get_sys_clock();
+                if (quecc_txn_wait_starttime == 0){
+                    quecc_txn_wait_starttime = get_sys_clock();
+                }
 #endif
-//                DEBUG_Q("ET_%ld: waiting on batch_id= %ld, EQs_cnt= %d, for planner = %ld,"
+//                DEBUG_Q("ET_%ld: waiting on batch_id= %ld, EQ_idx= %lu, for planner = %ld,"
 //                                    " completed %ld out of %ld"
-//                                    " exec_idle_time = %f,  waiting for txn_id = %ld\n",
-//                                _thd_id,wbatch_id, eq_cnt, wplanner_id,
-//                                eq_comp_cnts[w_exec_q_index], exec_q->size(),
-//                                et_idle_time/BILLION, exec_qe.txn_id
+//                                    ", waiting for txn_id = %ld\n",
+//                                _thd_id,wbatch_id,w_exec_q_index, wplanner_id,
+//                                eq_comp_cnts[w_exec_q_index], exec_q->size(), exec_qe_ptr->txn_id
 //                );
 
                 eq_switch = true;
@@ -1572,7 +1573,6 @@ bc_end:
 #endif
             if (!batch_part->single_q && eq_switch){
 //                uint64_t p_w_exec_q_index = w_exec_q_index;
-
                 move_to_next_eq(batch_part, eq_comp_cnts, exec_q, w_exec_q_index);
 //                if (p_w_exec_q_index != w_exec_q_index){
 //                    DEBUG_Q("ET_%ld: switching EQ[%ld] to EQ[%ld]\n", _thd_id, p_w_exec_q_index, w_exec_q_index);
@@ -1628,6 +1628,11 @@ bc_end:
                 break;
             }
             if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                if (quecc_txn_wait_starttime > 0){
+                    INC_STATS(_thd_id,exec_txn_wait_time[_thd_id],get_sys_clock() - quecc_txn_wait_starttime);
+                }
+#endif
                 return BREAK;
 //                M_ASSERT_V(false, "simulation is done before finishing my batch partition\n")
             }
@@ -1944,9 +1949,33 @@ bc_end:
             if (exec_qs_ranges->is_full()){
                 for (uint64_t j = 0; j < exec_qs_ranges->size(); ++j) {
 //                    DEBUG_Q("WT_%lu: range[%lu] %lu, has %lu eq entries\n",_thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
-                    if (j == idx-1 || exec_queues->get(j)->size() > 0 || j == exec_qs_ranges->size()-1){
+//                    if (j == idx-1 || exec_queues->get(j)->size() > 0 || j == exec_qs_ranges->size()-1){
+//                        ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
+//                        ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
+//                    }
+                    uint64_t add_cnt = 0;
+                    DEBUG_Q("WT_%lu: exec_qs_ranges is full with size = %lu\n",_thd_id, exec_qs_ranges->size());
+                    if (j == idx-1 || j==idx || exec_queues->get(j)->size() > 0 || j == exec_qs_ranges->size()-1){
+                        DEBUG_Q("WT_%lu: keeping range[%lu] %lu, has %lu eq entries\n",
+                                _thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
                         ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
                         ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
+                        add_cnt++;
+                    }
+                    else{
+                        if (add_cnt < g_thread_cnt && (exec_qs_ranges->size()-j) < (g_thread_cnt)){
+                            DEBUG_Q("WT_%lu: keeping an empty range[%lu] %lu, has %lu eq entries\n",
+                                    _thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
+                            ((Array<Array<exec_queue_entry> *> *)exec_queues_tmp)->add(exec_queues->get(j));
+                            ((Array<uint64_t> *)exec_qs_ranges_tmp)->add(exec_qs_ranges->get(j));
+                            add_cnt++;
+                        }
+                        else{
+                            DEBUG_Q("WT_%lu: freeing range[%lu] %lu, has %lu eq entries\n",
+                                    _thd_id, j,exec_qs_ranges->get(j),exec_queues->get(j)->size());
+                            Array<exec_queue_entry> * tmp = exec_queues->get(j);
+                            quecc_pool.exec_queue_release(tmp,0,0);
+                        }
                     }
                 }
                 exec_queues_tmp_tmp = exec_queues;
@@ -1970,6 +1999,17 @@ bc_end:
                     c_range_start = exec_qs_ranges->get(idx-1);
                 }
                 c_range_end = exec_qs_ranges->get(idx);
+
+#if EXPANDABLE_EQS
+                // if we cannot split, we must expand this, otherwise, we fail
+                if ((c_range_end-c_range_start) <= 1){
+                    // expand current EQ
+                    if (mrange->expand()){
+                        assert(!mrange->is_full());
+                        return;
+                    }
+                }
+#endif
 
                 split_point = (c_range_end-c_range_start)/2;
                 M_ASSERT_V(split_point, "PL_%ld: We are at a single record, and we cannot split anymore!, range_size = %ld, eq_size = %ld\n",
@@ -2325,7 +2365,7 @@ bc_end:
                     mrange->add(*entry);
 
                     // plan insert into order_line
-                    tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, r_local, entry);
+                    tpcc_txn_man->plan_neworder_insert_ol(ol_i_id,ol_supply_w_id,ol_quantity, ol_number, tpcc_msg->d_id, r_local, entry);
                     rid = entry->rid;
                     checkMRange(mrange, rid, et_id);
                     mrange->add(*entry);

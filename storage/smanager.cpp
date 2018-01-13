@@ -79,7 +79,14 @@ uint64_t RIDMgr::next_rid_fixed(uint64_t part_id){
 #else
     uint64_t tpart_id = part_id % g_part_cnt; // for partitioned stores
 #endif
-    return rid_ranges[tpart_id]->fetch_add(1);
+    uint64_t arid = 0;
+    uint64_t brid = 0;
+    do{
+        brid = rid_ranges[tpart_id]->load(memory_order_acq_rel);
+        arid = brid +1;
+    } while(!rid_ranges[tpart_id]->compare_exchange_strong(brid,arid,memory_order_acq_rel));
+//    return rid_ranges[tpart_id]->fetch_add(1);
+    return arid;
 }
 
 void RIDMgr::reserve_rid_range(uint64_t thd_id) {
