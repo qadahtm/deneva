@@ -16,15 +16,23 @@ void RIDMgr::init() {
 
 #if WORKLOAD == YCSB
     uint64_t range_size = UINT64_MAX/g_part_cnt;
+#if PART_CNT == 1
     uint64_t range_part_cnt = g_thread_cnt; // for non-partitioned stores
-    rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*g_thread_cnt);
+#else
+    uint64_t range_part_cnt = g_part_cnt; // for partitioned stores
+#endif
+    rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*range_part_cnt);
     for (uint64_t i =0; i < range_part_cnt; i++){
         rid_ranges[i] = (atomic<uint64_t> *) mem_allocator.align_alloc(sizeof(atomic<uint64_t>));
         rid_ranges[i]->store(i*range_size);
     }
 #elif WORKLOAD == TPCC
 //    uint64_t part_cnt = NUM_WH; // for partitioned stores
+#if PART_CNT == 1
     uint64_t range_part_cnt = g_thread_cnt; // for non-partitioned stores
+#else
+    uint64_t range_part_cnt = g_num_wh; // for partitioned stores
+#endif
     rid_ranges = (atomic<uint64_t> **) mem_allocator.alloc(sizeof(atomic<uint64_t> *)*range_part_cnt);
     uint64_t range_size = UINT64_MAX/range_part_cnt;
     for (uint64_t i =0; i < range_part_cnt; i++){

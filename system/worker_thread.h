@@ -1433,6 +1433,28 @@ bc_end:
         volatile uint64_t batch_part_eq_cnt = 0;
         exec_queue_entry * exec_qe_ptr UNUSED = NULL;
         uint64_t w_exec_q_index = 0;
+
+#if DEBUG_QUECC & !PIPELINED
+        uint64_t total_eq_entries = 0;
+        uint64_t eqs_assigned = 0;
+        if (batch_part->empty){
+            DEBUG_Q("ET_%ld: batch_part is empty for batch_id = %lu\n", _thd_id, wbatch_id);
+        }
+        else{
+            if (batch_part->single_q){
+                total_eq_entries+= batch_part->exec_q->size();
+                eqs_assigned = 1;
+            }
+            else{
+                for (uint64_t j = 0; j < batch_part->exec_qs->size(); ++j) {
+                    total_eq_entries += batch_part->exec_qs->get(j)->size();
+                }
+                eqs_assigned = batch_part->exec_qs->size();
+            }
+        }
+        DEBUG_Q("ET_%ld: exec_batch_id = %ld, PG=%lu, eqs_cnt=%lu, total eq entries = %ld\n",
+         _thd_id, wbatch_id, wplanner_id, eqs_assigned, total_eq_entries);
+#endif
 #if ENABLE_EQ_SWITCH
         volatile bool eq_switch = false;
 

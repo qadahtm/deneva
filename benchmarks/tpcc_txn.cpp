@@ -34,7 +34,7 @@ void TPCCTxnManager::init(uint64_t thd_id, Workload * h_wl) {
 	TxnManager::init(thd_id, h_wl);
 	_wl = (TPCCWorkload *) h_wl;
   reset();
-	TxnManager::reset();
+//	TxnManager::reset();
 }
 
 void TPCCTxnManager::reset() {
@@ -68,14 +68,22 @@ RC TPCCTxnManager::run_txn() {
   return rc;
 #endif
 
-  if(IS_LOCAL(txn->txn_id) && (state == TPCC_PAYMENT0 || state == TPCC_NEWORDER0)) {
-    DEBUG("Running txn %ld\n",txn->txn_id);
-#if DISTR_DEBUG
-    query->print();
-#endif
-    query->partitions_touched.add_unique(GET_PART_ID(0,g_node_id));
-  }
 
+#if SINGLE_NODE
+    if (state == TPCC_PAYMENT0 || state == TPCC_NEWORDER0) {
+        DEBUG("Running txn %ld\n", txn->txn_id);
+        TPCCQuery* tpcc_query = (TPCCQuery*) query;
+        query->partitions_touched.add_unique(wh_to_part(tpcc_query->w_id));
+    }
+#else
+    if(IS_LOCAL(txn->txn_id) && (state == TPCC_PAYMENT0 || state == TPCC_NEWORDER0)) {
+    DEBUG("Running txn %ld\n",txn->txn_id);
+    #if DISTR_DEBUG
+    query->print();
+    #endif
+    query->partitions_touched.add_unique(GET_PART_ID(0,g_node_id));
+    }
+#endif
 
   while(rc == RCOK && !is_done()) {
     rc = run_txn_state();
@@ -301,12 +309,21 @@ void TPCCTxnManager::next_tpcc_state() {
       state = TPCC_NEWORDER5;
       break;
     case TPCC_NEWORDER5:
+#if SINGLE_NODE
+        if (!is_done()) {
+            state = TPCC_NEWORDER6;
+        }
+        else {
+            state = TPCC_FIN;
+        }
+#else
       if(!IS_LOCAL(txn->txn_id) || !is_done()) {
         state = TPCC_NEWORDER6;
       }
       else {
         state = TPCC_FIN;
       }
+#endif
       break;
     case TPCC_NEWORDER6: // loop pt 1
       state = TPCC_NEWORDER7;
@@ -319,12 +336,22 @@ void TPCCTxnManager::next_tpcc_state() {
       break;
     case TPCC_NEWORDER9:
       ++next_item_id;
+#if SINGLE_NODE
+          if (!is_done()) {
+              state = TPCC_NEWORDER6;
+          }
+          else{
+              state = TPCC_FIN;
+          }
+#else
       if(!IS_LOCAL(txn->txn_id) || !is_done()) {
         state = TPCC_NEWORDER6;
       }
       else {
         state = TPCC_FIN;
+
       }
+#endif
       break;
     case TPCC_FIN:
       break;
@@ -420,61 +447,65 @@ RC TPCCTxnManager::run_txn_state() {
     uint64_t ol_amount = tpcc_query->ol_amount;
     uint64_t o_id = tpcc_query->o_id;
 
-//#if !SINGLE_NODE
+#if !SINGLE_NODE
     uint64_t part_id_w = wh_to_part(w_id);
     uint64_t part_id_c_w = wh_to_part(c_w_id);
     uint64_t part_id_ol_supply_w = wh_to_part(ol_supply_w_id);
     bool w_loc = GET_NODE_ID(part_id_w) == g_node_id;
     bool c_w_loc = GET_NODE_ID(part_id_c_w) == g_node_id;
     bool ol_supply_w_loc = GET_NODE_ID(part_id_ol_supply_w) == g_node_id;
-//#endif
+#endif
 	RC rc = RCOK;
 
 	switch (state) {
 		case TPCC_PAYMENT0 :
-//#if SINGLE_NODE
-//            rc = run_payment_0(w_id, d_id, d_w_id, h_amount, row);
-//#else
+#if SINGLE_NODE
+            rc = run_payment_0(w_id, d_id, d_w_id, h_amount, row);
+#else
             if(w_loc)
                     rc = run_payment_0(w_id, d_id, d_w_id, h_amount, row);
             else {
               rc = send_remote_request();
             }
-//#endif
+#endif
             break;
 		case TPCC_PAYMENT1 :
             rc = run_payment_1(w_id, d_id, d_w_id, h_amount, row);
             break;
 		case TPCC_PAYMENT2 :
             rc = run_payment_2(w_id, d_id, d_w_id, h_amount, row);
+#if SINGLE_NODE
+            query->partitions_touched.add_unique(wh_to_part(d_w_id));
+#endif
             break;
 		case TPCC_PAYMENT3 :
             rc = run_payment_3(w_id, d_id, d_w_id, h_amount, row);
             break;
 		case TPCC_PAYMENT4 :
-//#if SINGLE_NODE
-//            rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
-//#else
+#if SINGLE_NODE
+            rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
+            query->partitions_touched.add_unique(wh_to_part(c_w_id));
+#else
             if(c_w_loc)
                 rc = run_payment_4( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
             else {
                 rc = send_remote_request();
             }
-//#endif
+#endif
             break;
 		case TPCC_PAYMENT5 :
             rc = run_payment_5( w_id,  d_id, c_id, c_w_id,  c_d_id, c_last, h_amount, by_last_name, row);
             break;
 		case TPCC_NEWORDER0 :
-//#if SINGLE_NODE
-//            rc = new_order_0( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
-//#else
+#if SINGLE_NODE
+            rc = new_order_0( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
+#else
             if(w_loc)
                 rc = new_order_0( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
             else {
                 rc = send_remote_request();
             }
-//#endif
+#endif
 			break;
 		case TPCC_NEWORDER1 :
             rc = new_order_1( w_id, d_id, c_id, remote, ol_cnt, o_entry_d, &tpcc_query->o_id, row);
@@ -498,16 +529,17 @@ RC TPCCTxnManager::run_txn_state() {
 			rc = new_order_7(ol_i_id, row);
 			break;
 		case TPCC_NEWORDER8 :
-//#if SINGLE_NODE
-//        rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
-//#else
+#if SINGLE_NODE
+        rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
+            query->partitions_touched.add_unique(wh_to_part(ol_supply_w_id));
+#else
               if(ol_supply_w_loc) {
                   rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
 		      }
 		      else {
                   rc = send_remote_request();
 		      }
-//#endif
+#endif
               break;
 		case TPCC_NEWORDER9 :
             rc = new_order_9( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, ol_amount, o_id, row);

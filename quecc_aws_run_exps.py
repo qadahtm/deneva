@@ -56,6 +56,13 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
     else:
         ct_cnt = ct_p
 
+    if ct_p == 0:
+        ct_cnt = nwthd_cnt
+
+    if pa == 0:
+        pa = int(part_cnt)
+
+    maxtpp = int(maxtpp/part_cnt)
     # part_cnt = 1 // use for single partition exps
 
     # if nwthd_cnt == 0:
@@ -110,7 +117,12 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
 
         pt_m = re.search('#define PLAN_THREAD_CNT\s+(\d+|THREAD_CNT)', line.strip())
         if (pt_m):
-            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt))      
+            nline = '#define PLAN_THREAD_CNT {}\n'.format(str(pt_cnt)) 
+
+        pt_m = re.search('#define NUM_WH\s+(\d+|THREAD_CNT)', line.strip())
+        if (pt_m):
+            nline = '#define NUM_WH {}\n'.format(str(wthd_cnt))   
+            print("NUM_WH={}".format(str(wthd_cnt)))
             
         m =    re.search('#define MAX_TXN_PER_PART\s+(\d+)',line.strip())
         if m:
@@ -480,10 +492,10 @@ print("Number of ips = {:d}".format(ip_cnt))
 env = dict(os.environ)
 
 time_enable = False;
-dry_run = True;
+dry_run = False;
 vm_shut = False;
 
-is_ycsb = False # if false workload is TPCC
+is_ycsb = True # if false workload is TPCC
 
 is_azure = True
 
@@ -541,15 +553,16 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-# wthreads = [vm_cores]
+wthreads = [vm_cores]
 # wthreads = [4] # redo experiments
 num_trials = 2
 # cc_algs = ['SILO']
-cc_algs = ['NO_WAIT']
+# cc_algs = ['NO_WAIT']
 # cc_algs = ['MVCC'] 
 # cc_algs = ['TIMESTAMP']  
 # cc_algs = ['QUECC']  
-# cc_algs = ['MVCC','OCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
+cc_algs = ['HSTORE']
+# cc_algs = ['MVCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
 # cc_algs = ['NO_WAIT', 'SILO'] 
 # cc_algs = ['OCC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
@@ -586,7 +599,7 @@ batch_sized = [10368]
 # pt_perc = [0.25,0.5,0.75]
 # pt_perc = [0.25]
 # pt_perc = [0.5,1]
-# pt_perc = [0.5,0.25]
+# pt_perc = [0.5,0.25,1]
 pt_perc = [1]
 
 #ratio of commit threads from execution threads
@@ -595,7 +608,8 @@ pt_perc = [1]
 # ct_perc = [0.5,1]
 # ct_perc = [0.25]
 # ct_perc = [0.5]
-ct_perc = [1]
+# ct_perc = [1]
+ct_perc = [0] # zero means access all ETs will be CTs
 
 # parts_accessed = [1,32]
 # parts_accessed = [1,2,4,8,10]
@@ -606,12 +620,13 @@ ct_perc = [1]
 # parts_accessed = [1] # for OPT=16
 # parts_accessed = [1,8,16,24,32] # for pptvar
 # parts_accessed = [10]
-parts_accessed = [1]
+# parts_accessed = [1]
+parts_accessed = [0] # zero means access all available partitions
 
 
 ############### YCSB specific
 # zipftheta = [0.0,0.3,0.6,0.8,0.99]
-zipftheta = [0.8] #redo
+zipftheta = [0.0] #redo
 # zipftheta = [0.0,0.8] # defaults
 # zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
@@ -620,9 +635,9 @@ zipftheta = [0.8] #redo
 # write_perc = [0.0,0.2,0.5,0.8,1.0]
 write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
-# mpt_perc = [0.1,0.2,0.5,0.8,1.0]
+mpt_perc = [0.0,0.1,0.2,0.5,0.8,1.0]
 # mpt_perc = [1.0]
-mpt_perc = [0.0]
+# mpt_perc = [0.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 # mpt_perc = [1.0] #100% multi partition transactions
 # ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
@@ -717,9 +732,10 @@ if is_ycsb:
                                         for ct in ct_perc:
                                             for oppt in ycsb_op_per_txn:
                                                 for pa in parts_accessed:
-                                                    assert(pa > 0) 
+                                                    # assert(pa > 0) 
                                                     if pa < 1:
-                                                        pa = int(wthd*pa)
+                                                        pa = int(wthd*pa)                                                                                                        
+
                                                     for ppts in strict:
                                                         for bs in batch_sized:
                                                             runexp = True
@@ -788,7 +804,7 @@ else: #TPC-C
                             for mprv in mpt_perc:
                                 for bml in bmap_lengths:
                                     for pa in parts_accessed:
-                                        assert(pa > 0) 
+                                        # assert(pa > 0) 
                                         if pa < 1:
                                             pa = int(wthd*pa)
                                         for ppts in strict:

@@ -334,7 +334,7 @@ void Transaction::release_inserts(uint64_t thd_id) {
 }
 
 void Transaction::release(uint64_t thd_id) {
-    DEBUG("Transaction release\n");
+    DEBUG_Q("Transaction release\n");
     release_accesses(thd_id);
     DEBUG_M("Transaction::release array accesses free\n")
     accesses.release();
@@ -364,8 +364,8 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
 #if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[16], get_sys_clock() - prof_starttime);
 #endif
-    query->init();
-//    reset();
+//    query->init();
+    reset();
     sem_init(&rsp_mutex, 0, 1);
     return_id = UINT64_MAX;
 
@@ -571,6 +571,14 @@ RC TxnManager::start_abort() {
 RC TxnManager::start_commit() {
     RC rc = RCOK;
     DEBUG("%ld start_commit RO?%d\n", get_txn_id(), query->readonly());
+#if SINGLE_NODE
+    // TQ: being a multi-parition does not matter for most of the CC approaches since partitions are logical within a single node
+        rc = validate();
+        if (rc == RCOK)
+            rc = commit();
+        else
+            start_abort();
+#else
     if (is_multi_part()) {
         if (!query->readonly() || CC_ALG == OCC || CC_ALG == MAAT) {
             // send prepare messages
@@ -588,6 +596,7 @@ RC TxnManager::start_commit() {
         else
             start_abort();
     }
+#endif
 
     return rc;
 }

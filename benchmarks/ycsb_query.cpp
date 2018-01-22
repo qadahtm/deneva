@@ -432,9 +432,9 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
         table_size = g_synth_table_size / g_part_cnt;
         row_id = zipf(table_size - 1, g_zipf_theta);
         assert(row_id < table_size);
-        primary_key = row_id;
-//        primary_key = row_id + (partition_id * table_size);
-//        assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
+//        primary_key = row_id;
+        primary_key = row_id + (partition_id * table_size);
+        assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
 #else
         if ((FIRST_PART_LOCAL && rid == 0) || part_limit == 1) {
 //        if (FIRST_PART_LOCAL && rid == 0) {
@@ -519,7 +519,18 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
     for (auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
         query->partitions.add(*it);
     }
-
+//    DEBUG_WL("YCSBQuery: %d %d %d %d %d %d %d %d %d %d\n"
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[0]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[1]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[2]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[3]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[4]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[5]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[6]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[7]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[8]->key)
+//            ,((YCSBWorkload *) h_wl)->key_to_part(query->requests[9]->key)
+//    );
     query->print();
     return query;
 

@@ -2277,9 +2277,9 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 //    numa_set_preferred(0);
 //#endif
     uint64_t tuple_size = 0;
-#if WORKLOAD == YCSB
-    exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * EXECQ_CAP_FACTOR;
-#elif WORKLOAD == TPCC
+#if WORKLOAD == YCSB || WORKLOAD == TPCC
+//    exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * EXECQ_CAP_FACTOR;
+//#elif WORKLOAD == TPCC
 #if EXPANDABLE_EQS
     exec_queue_capacity = planner_batch_size * EXECQ_CAP_FACTOR;
 #else
@@ -2339,8 +2339,8 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     }
 
 
-#elif WORKLOAD == TPCC
-    exec_queue_capacity = (planner_batch_size)*(EXECQ_CAP_FACTOR);
+//#elif WORKLOAD == TPCC
+//    exec_queue_capacity = (planner_batch_size)*(EXECQ_CAP_FACTOR);
 #else
     assert(false);
 #endif

@@ -986,7 +986,7 @@ SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
         else{
             next_part = (_planner_id + (g_thread_cnt * query_cnt)) % g_part_cnt;
         }
-    //        SAMPLED_DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
+//        DEBUG_Q("PT_%ld: going to get a query with home partition = %ld\n", _planner_id, next_part);
         query_cnt++;
 #if PROFILE_EXEC_TIMING
         pbprof_starttime = get_sys_clock();
@@ -1977,6 +1977,7 @@ RC WorkerThread::run_normal_mode() {
 
         //uint64_t starttime = get_sys_clock();
         if(msg->rtype != CL_QRY || CC_ALG == CALVIN) {
+            // restarting working on an active transaction
           txn_man = get_transaction_manager(msg);
 #if !SINGLE_NODE
           if (CC_ALG != CALVIN && IS_LOCAL(txn_man->get_txn_id())) {

@@ -436,9 +436,12 @@ public:
 
     RC plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id,
                                      bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry){
-//        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
-//        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+#if PART_CNT == 1
         uint64_t row_id = rid_man.next_rid(d_id % g_thread_cnt); // collocate with dist rec
+#else
+        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+#endif
+//        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
         entry->rid = row_id;
         entry->txn_ctx->w_id = w_id;
         entry->txn_ctx->d_id = d_id;
@@ -486,10 +489,12 @@ public:
     };
 
     RC plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
-//        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 //        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+#if PART_CNT == 1
         uint64_t row_id = rid_man.next_rid(d_id % g_thread_cnt); // collocate with dist rec
-
+#else
+        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+#endif
         entry->txn_ctx->w_id = w_id;
         entry->txn_ctx->d_id = d_id;
         entry->rid = row_id;
@@ -621,10 +626,12 @@ public:
     RC plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, uint64_t d_id,
                                       row_t *& r_ol_local, exec_queue_entry * entry){
 
-//        uint64_t row_id = rid_man.next_rid(wh_to_part(ol_supply_w_id));
 //        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+#if PART_CNT == 1
         uint64_t row_id = rid_man.next_rid(d_id % g_thread_cnt); // collocate with dist rec
-
+#else
+        uint64_t row_id = rid_man.next_rid(wh_to_part(ol_supply_w_id));
+#endif
         entry->rid = row_id;
         entry->txn_ctx->ol_supply_w_id = ol_supply_w_id;
         entry->txn_ctx->ol_i_id = ol_i_id;

@@ -19,6 +19,7 @@
 
 #include "global.h"
 #include "helper.h"
+#include <atomic>
 
 class TxnManager;
 class BaseQuery;
@@ -71,7 +72,11 @@ private:
 //  TxnMap pool;
   uint64_t pool_size;
   pool_node ** pool;
-
+#if DEBUG_QUECC
+    std::atomic<uint64_t> get_cnt;
+    std::atomic<uint64_t> rel_cnt;
+    std::atomic<uint64_t> active_cnt;
+#endif
 };
 
 #endif

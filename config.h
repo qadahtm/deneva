@@ -16,7 +16,7 @@
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
 #define PLAN_THREAD_CNT 32
-#define PART_CNT THREAD_CNT
+#define PART_CNT 32
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -52,15 +52,15 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD TPCC
+#define WORKLOAD YCSB
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
 #define PROG_STATS          false
 #define TIME_ENABLE         true //STATS_ENABLE
-#define ASSERT_ENABLED      false
+#define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      false
+#define PROFILE_EXEC_TIMING      true
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
@@ -89,7 +89,7 @@
 #define MEM_PAD           true
 
 // [PART_ALLOC] 
-#define PART_ALLOC          false
+#define PART_ALLOC          true
 #define MEM_SIZE          (1UL << 30) 
 #define NO_FREE           false
 
@@ -124,7 +124,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG HSTORE
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -202,7 +202,13 @@
 #define BATCH_PT_ET     2
 #define BATCH_COMP_TIMEOUT 1 * 5 * MILLION // 5ms
 
-#define DISTRIBUTE_DIST_RECS true
+#define CLBUF_RANDOM false
+
+//TQ: since RIDs used for EQs are logical, we can collocate/distribute records
+//TPC-C benchmark tuning
+#define DISTRIBUTE_DIST_RECS false // put true for single part exps
+#define COLOC_STOCK_WH true // put false for single part exps
+#define COLOC_CUST_WH true // put false for single part exps
 #define PLAN_NO_DIST_UPDATE_FIRST false
 #define PLAN_NO_DIST_DEPS_LAST false
 #define PIPELINED false
@@ -242,7 +248,7 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 10
+#define EXECQ_CAP_FACTOR 20
 #define EXECQ_EXPAND_FACTOR 1
 #define EXPANDABLE_EQS true
 #define MIN_EXECQ_SIZE 10
@@ -252,7 +258,7 @@
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
-#define FIXED_COMMIT_THREAD_CNT true
+#define FIXED_COMMIT_THREAD_CNT false
 #define COMMIT_THREAD_CNT 1
 #define TXN_CNT_COMMIT_THRESHOLD (THREAD_CNT*PLAN_THREAD_CNT)*2
 
@@ -266,7 +272,7 @@
 #define SYNC_BLOCK    4
 #define SENSE_BARRIER  5
 
-#define SYNC_AFTER_PG   true
+#define SYNC_AFTER_PG   false
 #define NEXT_STAGE_ARRAY true
 
 #define ATOMIC_PG_STATUS true
@@ -352,7 +358,7 @@
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 #define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.99//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -361,7 +367,7 @@
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
 #define PART_PER_TXN PART_CNT
-#define PERC_MULTI_PART 0.0//MPR
+#define PERC_MULTI_PART MPR // Use MPR config parameter
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 #define YCSB_DO_OPERATION true
@@ -374,7 +380,7 @@
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
 // small tpcc schemas shrink the table size.
-#define TPCC_SMALL          false
+#define TPCC_SMALL          true
 #define MAX_ITEMS_SMALL 10000
 #define CUST_PER_DIST_SMALL 2000
 #define MAX_ITEMS_NORM 100000
@@ -385,9 +391,9 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH PART_CNT
+#define NUM_WH THREAD_CNT
 // % of transactions that access multiple partitions
-#define MPR 0.0 // used for TPCC and YCSB
+#define MPR 1.0 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -408,7 +414,7 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.5 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16

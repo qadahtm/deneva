@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
     fflush(stdout);
     rid_man.init();
     printf("Done\n");
-
+    stats.printProcInfo();
     Workload * m_wl;
 #if WORKLOAD == YCSB
     m_wl = new YCSBWorkload;
@@ -138,6 +138,7 @@ int main(int argc, char* argv[])
     assert(false);
 #endif
 	m_wl->init();
+    stats.printProcInfo();
 	printf("Workload initialized!\n");
   fflush(stdout);
 

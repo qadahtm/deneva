@@ -334,8 +334,13 @@ void TPCCWorkload::init_tab_stock(int id, uint64_t wid) {
     for (UInt32 sid = id + 1; sid <= g_max_items; sid += g_init_parallelism) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t)id);
-//        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+
+#if COLOC_STOCK_WH
+        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+#else
         uint64_t row_id = rid_man.next_rid(id % g_thread_cnt);
+#endif
+
 #if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){
@@ -384,8 +389,12 @@ void TPCCWorkload::init_tab_cust(int id, uint64_t did, uint64_t wid) {
     for (UInt32 cid = id + 1; cid <= g_cust_per_dist; cid += g_init_parallelism) {
         row_t *row;
 //        uint64_t row_id = rid_man.next_rid((uint64_t)id);
-//        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+
+#if COLOC_CUST_WH
+        uint64_t row_id = rid_man.next_rid(wh_to_part(wid));
+#else
         uint64_t row_id = rid_man.next_rid(id % g_thread_cnt);
+#endif
 #if DEBUG_WLOAD
         double x = (double)(rand() % 10000) / 10000;
         if (x < SAMPLING_FACTOR){

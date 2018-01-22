@@ -259,9 +259,12 @@ void YCSBTxnManager::copy_remote_requests(YCSBQueryMessage *msg) {
 RC YCSBTxnManager::run_txn_state() {
     YCSBQuery *ycsb_query = (YCSBQuery *) query;
     ycsb_request *req = ycsb_query->requests[next_record_id];
+#if !SINGLE_NODE
     uint64_t part_id = _wl->key_to_part(req->key);
     bool loc = GET_NODE_ID(part_id) == g_node_id;
-
+#else
+    bool loc = true;
+#endif
     RC rc = RCOK;
 
     switch (state) {

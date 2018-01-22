@@ -79,6 +79,8 @@ void TxnTable::update_min_ts(uint64_t thd_id, uint64_t txn_id,uint64_t batch_id,
 
 TxnManager * TxnTable::get_transaction_manager(uint64_t thd_id, uint64_t txn_id,uint64_t batch_id){
   DEBUG("TxnTable::get_txn_manager %ld / %ld\n",txn_id,pool_size);
+//    DEBUG_Q("WT_%lu: TxnTable::get_txn_manager %ld / %ld, get_cnt=%lu, release_cnt=%lu, active_cnt=%lu\n",
+//            thd_id,txn_id,pool_size,get_cnt.fetch_add(1),rel_cnt.load(),active_cnt.fetch_add(1));
   uint64_t pool_id = txn_id % pool_size;
 #if PROFILE_EXEC_TIMING
   uint64_t starttime = get_sys_clock();
@@ -194,6 +196,10 @@ void TxnTable::release_transaction_manager(uint64_t thd_id, uint64_t txn_id, uin
 #endif
   // set modify bit for this pool: txn_id % pool_size
   while(!ATOM_CAS(pool[pool_id]->modify,false,true)) { };
+#if DEBUG_QUECC
+    rel_cnt.fetch_add(1);
+    active_cnt.fetch_add(-1);
+#endif
 #if PROFILE_EXEC_TIMING
   INC_STATS(thd_id,mtx[8],get_sys_clock()-mtx_starttime);
 #endif
