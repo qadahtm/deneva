@@ -63,7 +63,7 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         pa = int(part_cnt)
 
     maxtpp = int(maxtpp/part_cnt)
-    # part_cnt = 1 // use for single partition exps
+    part_cnt = 1 # use for single partition exps
 
     # if nwthd_cnt == 0:
         # need to account for the Abort thread
@@ -491,7 +491,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = False;
+time_enable = True;
 dry_run = False;
 vm_shut = False;
 
@@ -561,12 +561,13 @@ num_trials = 2
 # cc_algs = ['MVCC'] 
 # cc_algs = ['TIMESTAMP']  
 # cc_algs = ['QUECC']  
-cc_algs = ['HSTORE']
+# cc_algs = ['HSTORE']
 # cc_algs = ['MVCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
 # cc_algs = ['NO_WAIT', 'SILO'] 
 # cc_algs = ['OCC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
+cc_algs = ['NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others but OCC
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'QUECC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'WAIT_DIE'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC','QUECC'] # + QueCC
@@ -635,9 +636,9 @@ zipftheta = [0.0] #redo
 # write_perc = [0.0,0.2,0.5,0.8,1.0]
 write_perc = [0.5]
 # mpt_perc = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
-mpt_perc = [0.0,0.1,0.2,0.5,0.8,1.0]
+# mpt_perc = [0.0,0.01,0.05,0.1,0.2,0.5,0.8,1.0]
 # mpt_perc = [1.0]
-# mpt_perc = [0.0]
+mpt_perc = [0.0]
 # mpt_perc = [0.1] #10% multi partition transactions
 # mpt_perc = [1.0] #100% multi partition transactions
 # ycsb_op_per_txn = [1,10,16,20,32] #set to a single element if workload is not YCSB
@@ -652,7 +653,7 @@ ycsb_op_per_txn = [10] #set to a single element if workload is not YCSB
 recsizes = [1]
 
 # bmap_lengths = [1,2,4,8,16,32]
-bmap_lengths = [2]
+bmap_lengths = [1]
 
 ############### TPCC specific
 # payment_perc = [0.0]

@@ -2320,25 +2320,17 @@ RC WorkerThread::process_rtxn(Message *msg) {
         return rc;
 
 #if CC_ALG == HSTORE
-    if (txn_man->query->partitions.size() > 1){
-        assert(txn_man->query->partitions_touched.size() == 0);
-        rc = part_lock_man.lock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
-        if (rc == RCOK){
-            // Execute transaction
-            rc = txn_man->run_hstore_txn();
-            part_lock_man.unlock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
+    rc = part_lock_man.lock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
+    if (rc == RCOK){
+        // Execute transaction
+        rc = txn_man->run_hstore_txn();
+        part_lock_man.unlock(txn_man, &txn_man->query->partitions, txn_man->query->partitions.size());
 //        DEBUG_Q("WT_%ld: executed multipart txn_id = %ld with RCOK = %d, is new order? %d\n",
 //                _thd_id, txn_id, (rc == RCOK), ((TPCCQuery *)txn_man->query)->txn_type == TPCC_NEW_ORDER);
-        }
     }
     else{
-        // There is at least one partitions and partition id must equal thread id
-        M_ASSERT_V(txn_man->query->partitions[0] == _thd_id,
-                   "THD_%ld: mismatch partition id = %ld, thd_id = %ld", _thd_id,
-                   txn_man->query->partitions[0], _thd_id);
-        rc = txn_man->run_hstore_txn();
-//        DEBUG_Q("WT_%ld: executed single part txn_id = %ld with RCOK = %d, is new order? %d\n",
-//                _thd_id, txn_id, (rc == RCOK), ((TPCCQuery *)txn_man->query)->txn_type == TPCC_NEW_ORDER );
+        assert(rc == Abort);
+        txn_man->start_abort();
     }
 #else
     // Execute transaction

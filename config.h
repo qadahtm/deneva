@@ -124,7 +124,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG HSTORE
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -258,8 +258,8 @@
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
-#define FIXED_COMMIT_THREAD_CNT false
-#define COMMIT_THREAD_CNT 1
+#define FIXED_COMMIT_THREAD_CNT true
+#define COMMIT_THREAD_CNT 8
 #define TXN_CNT_COMMIT_THRESHOLD (THREAD_CNT*PLAN_THREAD_CNT)*2
 
 
@@ -331,8 +331,8 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    (500000/PART_CNT)
-//#define MAX_TXN_PER_PART    500000
+//#define MAX_TXN_PER_PART    (500000/PART_CNT)
+#define MAX_TXN_PER_PART    15625
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -393,7 +393,7 @@
 #define WH_UPDATE         true
 #define NUM_WH THREAD_CNT
 // % of transactions that access multiple partitions
-#define MPR 1.0 // used for TPCC and YCSB
+#define MPR 0.0 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
