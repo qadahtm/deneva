@@ -178,7 +178,7 @@ void parser(int argc, char * argv[]) {
 			assert(false);
     }
 	}
-#if ABORT_THREAD && CC_ALG != QUECC
+#if ABORT_THREAD && !(CC_ALG == QUECC || CC_ALG == LADS)
   g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_abort_thread_cnt;
 #else
   g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt;
@@ -192,7 +192,7 @@ void parser(int argc, char * argv[]) {
   g_abort_thread_cnt = 0;
 #endif
 
-#if CC_ALG == QUECC || CC_ALG == LADS
+#if CC_ALG == QUECC
 #if PIPELINED
     g_total_thread_cnt += g_plan_thread_cnt; // planner threads
 #endif
@@ -202,6 +202,10 @@ void parser(int argc, char * argv[]) {
 #if CT_ENABLED
     g_total_thread_cnt += 1; // add commit thread
 #endif
+#endif
+
+#if CC_ALG == LADS
+    g_total_thread_cnt += g_thread_cnt; // account for constructor threads
 #endif
 
 #if CC_ALG == DUMMY_CC

@@ -18,7 +18,7 @@
 #define _WORKLOAD_H_
 
 #include "global.h"
-
+#include "quecc_thread.h"
 class row_t;
 class table_t;
 class IndexHash;
@@ -31,6 +31,7 @@ class Thread;
 class index_base;
 class Timestamp;
 class Mvcc;
+class Message;
 
 class Workload
 {
@@ -54,6 +55,10 @@ public:
 	//uint64_t cur_txn_id;
   uint64_t done_cnt;
   uint64_t txn_cnt;
+
+#if CC_ALG == LADS || LADS_IN_QUECC
+	virtual RC resolve_txn_dependencies(Message* msg, transaction_context * tctx, uint64_t cid) =0;
+#endif
 
 	void index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id = -1);
 protected:

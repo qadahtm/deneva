@@ -131,7 +131,7 @@ private:
 #endif
 	RC run_hstore_txn();
 #if CC_ALG == LADS
-	RC execute_lads_action(gdgcc::Action * action, int eid);
+	RC execute_lads_action(gdgcc::Action * action, uint64_t eid);
 	RC resolve_txn_dependencies(Message* msg);
 #endif
 	uint64_t parts_processed_count;

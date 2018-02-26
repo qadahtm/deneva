@@ -16,7 +16,7 @@ using namespace gdgcc;
 
 class Thread;
 
-#if CC_ALG == LADS
+#if CC_ALG == LADS || LADS_IN_QUECC
 namespace gdgcc {
 /**************** Start of Action.cpp ************************/
 /*
@@ -193,7 +193,8 @@ implementation of ActiveTupleList
         // this->_activeTupleMap = new unordered_map<uint32_t, bool>();
         // _activeTupleMap->reserve(configinfo->unordered_map_bucket_cnt);
 
-        this->_spinlock = new Spinlock();
+//        this->_spinlock = new Spinlock();
+        this->_spinlock = new spinlock();
 //        DEBUG_Q("System creates ActiveTupleList.");
     }
 
@@ -264,11 +265,13 @@ implementation of ActionQueue
     ActionQueue::ActionQueue() {
         this->_head = nullptr;
         this->_curpos = nullptr;
+        this->size = 0;
     }
 
     void ActionQueue::init() {
         this->_head = nullptr;
         this->_curpos = nullptr;
+        this->size = 0;
     }
 
     Action *ActionQueue::getHead() {
@@ -281,7 +284,7 @@ implementation of ActionQueue
             _head = action;
         }
         else{
-            action->next = this->_head->next;
+            action->next = this->_head;
             this->_head = action;
         }
 
@@ -313,11 +316,9 @@ implementation of ActionQueue
                 _curpos->next = action;
                 _curpos = action;
             }
-//            else{
-//
-//            }
 
         }
+        size++;
 
 //        if(this->_head == nullptr && this->_curpos == nullptr) {
 //            this->_head = action;
@@ -337,10 +338,14 @@ implementation of ActionQueue
         lock->lock();
         if (this->_head == nullptr){
             lock->unlock();
+            this->_curpos = nullptr; // reset _curpos to null here
             return nullptr;
         }
         Action *ret = this->_head;
         this->_head = this->_head->next;
+        if (this->_head == nullptr){
+            this->_curpos = nullptr;
+        }
         lock->unlock();
         return ret;
     }
@@ -360,7 +365,8 @@ implementation of Action
         this->_key = 0;
 
         this->_indegree = 0;
-        this->_indegree_lock = new Spinlock();
+//        this->_indegree_lock = new Spinlock();
+        this->_indegree_lock = new spinlock();
 
         //TODO: need to replace "NEW" with more efficient malloc function
         //this->_funcName = static_cast<char*>(gdgccMallocWrapper(configinfo->Conf_charLength * sizeof(char), envinfo));
@@ -415,11 +421,11 @@ implementation of Action
 #endif
     }
 
-    uint32_t Action::getTxnId() {
+    uint64_t Action::getTxnId() {
         return this->_txnId;
     }
 
-    void Action::setTxnId(uint32_t txnid) {
+    void Action::setTxnId(uint64_t txnid) {
         this->_txnId = txnid;
     }
 
@@ -771,7 +777,7 @@ implementation of Action
  * Instead, it will wait until all the constructors finish the construction.
  * Then all constructors enter the execution phase at the same time.
  * */
-    void SyncWorker::constructor_wait(int cid)
+    void SyncWorker::constructor_wait(int cid, uint64_t batch_id)
     {
         std::unique_lock<std::mutex> lck(*construction_mutex);
         bool e = false;
@@ -781,14 +787,14 @@ implementation of Action
 
         //critical section that maintains states in contructor
 //        construction_lock_mutex->lock();
-        construction_slock->lock();
+//        construction_slock->lock();
         assert(const_phase.load() == true);
 
-        c_finish_cnt.fetch_add(1);
+        uint32_t c_fin_cnt = c_finish_cnt.fetch_add(1);
         DEBUG_Q("CT_%d: incremented c_finish_cnt = %d\n", cid, c_finish_cnt.load());
         //if all constructors finished their works, notify_all executors to work
         if( c_finish_cnt.load() == configinfo->worker_thread_cnt) {
-            DEBUG_Q("CT_%d: All Constts are done, c_finish_cnt = %d\n", cid, c_finish_cnt.load());
+            DEBUG_Q("CT_%d: All Consts are done, c_finish_cnt = %d, batch_id=%lu\n", cid, c_finish_cnt.load(), batch_id);
             e_cnt = configinfo->worker_thread_cnt;
             d_cnt = 0;
             if (!c_finish_cnt.compare_exchange_strong(e_cnt,d_cnt)){
@@ -812,7 +818,7 @@ implementation of Action
             DEBUG_Q("CT_%d: Notifying all executors!\n", cid);
             execution_cv->notify_all();
         }
-        else if (c_finish_cnt == 1){
+        else if (c_fin_cnt == 0){
             // first constructor to finish
             e = true;
             d = false;
@@ -821,7 +827,8 @@ implementation of Action
             }
         }
 //        construction_lock_mutex->unlock();
-        construction_slock->unlock();
+//        construction_slock->unlock();
+
         //wait executor to wake it up
         DEBUG_Q("CT_%d: Constructor done my part, going to sleep, const_wakeup = %d\n",
                 cid, const_wakeup.load());
@@ -850,7 +857,7 @@ implementation of Action
     }
 
 
-    void SyncWorker::executor_wait(int eid, int dgraph_cnt, ActionDependencyGraph**  dgraphs)
+    void SyncWorker::executor_wait(int eid, int dgraph_cnt, ActionDependencyGraph **dgraphs, uint64_t batch_id)
     {
         std::unique_lock<std::mutex> lck(*execution_mutex);
         bool e = false;
@@ -860,10 +867,10 @@ implementation of Action
         //critical section that maintains states in executor
 //        execution_lock_mutex->lock();
 
-        execution_slock->lock();
+//        execution_slock->lock();
         assert(const_phase.load() == false);
 
-        e_finish_cnt.fetch_add(1);
+        uint32_t e_fin_cnt = e_finish_cnt.fetch_add(1);
         DEBUG_Q("ET_%d: incremented e_finish_cnt = %d\n", eid, e_finish_cnt.load());
         //if all executors finish their work, notify all constructors to work
         if(e_finish_cnt.load() == configinfo->worker_thread_cnt) {
@@ -874,11 +881,12 @@ implementation of Action
                 M_ASSERT_V(false, "ET_%d: not expected e_finish_cnt = %d\n", eid, e_finish_cnt.load());
             }
 
-            for(int i=0; i<dgraph_cnt; i++) {
-                // last ET to finish will increment and clear
-                INC_STATS(eid, txn_cnt, g_batch_size); // should we increment by batch size here
-                dgraphs[i]->clear();
-            }
+//            DEBUG_Q("ET_%d: clearing all dependency grpahs, batch_id=%lu\n", eid, batch_id);
+//            for(int i=0; i<dgraph_cnt; i++) {
+//                // last ET to finish will increment and clear
+//                dgraphs[i]->clear();
+//            }
+            INC_STATS(eid, txn_cnt, g_batch_size); // should we increment by batch size here
             e = false;
             d = true;
             if (!const_phase.compare_exchange_strong(e,d)){
@@ -896,7 +904,7 @@ implementation of Action
             DEBUG_Q("ET_%d: Notifying all constructors!\n", eid);
             construction_cv->notify_all();
         }
-        else if (e_finish_cnt.load() == 1){
+        else if (e_fin_cnt == 0){
             // first one to finish from executors
             // set exec_wakeup to false to prepare for sleeping
             e = true;
@@ -907,7 +915,7 @@ implementation of Action
         }
 
 //        execution_lock_mutex->unlock();
-        execution_slock->unlock();
+//        execution_slock->unlock();
 
 
         //wait contructor to wait it up
@@ -916,10 +924,10 @@ implementation of Action
 //        M_ASSERT_V(exec_wakeup.load() == false, "ET_%d: exec_wakeup = %d is expected to be false\n", eid, exec_wakeup.load())
 //        execution_cv->wait(lck, []()-> bool {return sync_worker->exec_wakeup.load();});
         execution_cv->wait(lck);
-        while(!exec_wakeup.load()){
-            DEBUG_Q("ET_%d: woke up in while loop, going back to sleep, const_phase = %d\n", eid, exec_wakeup.load());
-            execution_cv->wait(lck);
-        }
+//        while(!exec_wakeup.load()){
+//            DEBUG_Q("ET_%d: woke up in while loop, going back to sleep, const_phase = %d\n", eid, exec_wakeup.load());
+//            execution_cv->wait(lck);
+//        }
 //        while(!exec_wakeup.load()){
 //            SAMPLED_DEBUG_Q("ET_%d: spinng as I am not allowed to wake up\n", eid);
 //        } // spin here if we should not wake up
@@ -973,6 +981,7 @@ implementation of Action
         this->syncworker = nullptr;
         this->action_allocator = nullptr;
         this->workload   = nullptr;
+        this->batch_id = 0;
     }
 
 
@@ -988,6 +997,7 @@ implementation of Action
         this->batchsize     = configinfo->Conf_DGCC_Batch_size;
         this->action_allocator = action_allocator;
         this->workload      = wload;
+        this->batch_id = 0;
     }
 
     Constructor::~Constructor()
@@ -1132,7 +1142,7 @@ implementation of Action
             force_batch_delivery = (batch_cnt == const_batch_size);
 
             if (force_batch_delivery){
-                DEBUG_Q("ConstT_%d: Batch is ready\n", cid);
+                DEBUG_Q("ConstT_%d: Batch_id %lu is ready\n", cid, batch_id);
                 // wait for executor to process the batch
 //                    DEBUG_Q("ConstT_%d: going to wait\n", cid);
                 // threads will not actually wait
@@ -1153,27 +1163,29 @@ implementation of Action
 //                    }
 //                }
 
-//                DEBUG_Q("ConstT_%d: All ETs are done starting next batch\n", cid);
 
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
                 }
 
-                syncworker->constructor_wait(cid);
+                syncworker->constructor_wait(cid, batch_id);
 
                 if(idle_starttime > 0) {
                     INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - idle_starttime);
                     idle_starttime = 0;
                 }
 
+                DEBUG_Q("ConstT_%d: All ETs are done starting next batch\n", cid);
+
                 // starting a new batch
                 batch_cnt = 0;
+                batch_id++;
             }
 
             // process message
             M_ASSERT_V(WORKLOAD == YCSB, "Only YCSB workload is supported by LADS for now\n");
 #if WORKLOAD == YCSB
-            ((YCSBWorkload *)_wl)->resolve_txn_dependencies(msg, cid);
+            _wl->resolve_txn_dependencies(msg,NULL, cid);
 #else
             assert(false);
 #endif
@@ -1225,6 +1237,7 @@ implementation of Action
         this->partid        = 0;
         this->syncworker    = nullptr;
         this->workload      = nullptr;
+        this->batch_id =0;
     }
 
     Executor::Executor(ConfigInfo* configinfo, int id, Workload* wload)
@@ -1235,6 +1248,7 @@ implementation of Action
         this->partid        = eid;
         this->syncworker    = sync_worker; //need to be initialized mannually
         this->workload      = wload;
+        this->batch_id =0;
     }
 
     Executor::~Executor()
@@ -1291,7 +1305,7 @@ implementation of Action
                 wset = cur_graph->getExecutableSetByPartId(eid);
                 wsize = cur_graph->getExecutableSetCntByPartId(eid);
 
-                DEBUG_Q("ET_%d: processing executuable set with partition %ld in dgraph %d\n", eid, (uint64_t) wset, i );
+//                DEBUG_Q("ET_%d: processing executuable set with partition %ld in dgraph %d\n", eid, (uint64_t) wset, i );
                 do_work(wset, wsize);
             }
 
@@ -1366,10 +1380,11 @@ implementation of Action
 //            if (sync_worker->batch_ready.load()){
                 DEBUG_Q("ET_%d: processing batch\n", eid);
                 run_one_queue();
-                DEBUG_Q("ET_%d: DONE!! processing batch\n", eid);
+                DEBUG_Q("ET_%d: DONE!! processing batch %lu\n", eid, batch_id);
 
-                DEBUG_Q("ET_%d: going to wait -- for next batch\n", eid);
-                syncworker->executor_wait(eid, g_plan_thread_cnt, dgraphs);
+                batch_id++;
+                DEBUG_Q("ET_%d: going to wait -- for next batch %lu\n", eid, batch_id);
+            syncworker->executor_wait(eid, g_plan_thread_cnt, dgraphs, 0);
 //            }
 //            else{
 //                M_ASSERT_V(false, "ET_%d: expected batch ready to be true, batch ready = %d\n", eid, sync_worker->batch_ready.load())

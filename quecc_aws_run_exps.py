@@ -30,8 +30,15 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         pt_cnt = int(pt_p*wthd_cnt)
     else:
         pt_cnt = pt_p
+    lads_in_quecc = False
+    a_ncc_algs = ncc_alg
 
+    if ncc_alg == 'LADS':        
+        lads_in_quecc = True
     # bmap_len = 2
+    if lads_in_quecc:
+        ncc_alg = 'QUECC'
+
     if ncc_alg == 'QUECC':
         nwthd_cnt = wthd_cnt - pt_cnt 
         part_cnt = nwthd_cnt + pt_cnt
@@ -69,9 +76,9 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         # need to account for the Abort thread
         # nwthd_cnt = wthd_cnt -1
     if is_ycsb:
-        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}, MAXTPP={}, MERGE_STRAT={}, REC_SIZE={}, BATCH_MAP_LENGTH={}, CT_PERC={}, CT_CNT={}'.format(ncc_alg, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp, maxtpp, m_strat, int(rs*100),bmap_len,ct_p, ct_cnt)    
+        msg_out = 'set config(YCSB): CC_ALG={}, THREAD_CNT={}, ZIPF_THETA={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, REQ_PER_QUERY={}, MPR={}, WRITE_PERC={}, MAXTPP={}, MERGE_STRAT={}, REC_SIZE={}, BATCH_MAP_LENGTH={}, CT_PERC={}, CT_CNT={}'.format(a_ncc_algs, wthd_cnt, theta, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,oppt, mprv, wp, maxtpp, m_strat, int(rs*100),bmap_len,ct_p, ct_cnt)    
     else:
-        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, PAYMENT_PERC={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}, MAXTPP={}, MERGE_STRAT={}, BATCH_MAP_LENGTH={}, CT_PERC={}, CT_CNT={}'.format(ncc_alg, wthd_cnt, wp, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv, maxtpp, m_strat,bmap_len,ct_p, ct_cnt)
+        msg_out = 'set config(TPC-C): CC_ALG={}, THREAD_CNT={}, PAYMENT_PERC={}, PT_CNT={}, ET_CNT={}, BATCH_SIZE={}, PART_CNT={}, PPT={}, STRICT_PPT={}, MPR={}, MAXTPP={}, MERGE_STRAT={}, BATCH_MAP_LENGTH={}, CT_PERC={}, CT_CNT={}'.format(a_ncc_algs, wthd_cnt, wp, pt_cnt, nwthd_cnt, bs, part_cnt, pa,strict,mprv, maxtpp, m_strat,bmap_len,ct_p, ct_cnt)
     print(msg_out)
 
     for line in oconf:
@@ -98,6 +105,14 @@ def set_config(ncc_alg, wthd_cnt, theta, pt_p, bs, pa, strict, oppt,mprv,wp, max
         ccalg_m = re.search('#define CC_ALG\s+(\S+)', line.strip())
         if (ccalg_m):
             nline = '#define CC_ALG {}\n'.format(ncc_alg)
+
+        m =    re.search('#define LADS_IN_QUECC\s+(true|false)',line.strip())
+        if m:
+            if lads_in_quecc:
+                nline = '#define LADS_IN_QUECC {}\n'.format('true')
+            else:
+                nline = '#define LADS_IN_QUECC {}\n'.format('false')
+
         theta_m = re.search('#define ZIPF_THETA\s+(\d\.\d+)', line.strip())
         if (theta_m):
             nline = '#define ZIPF_THETA {}\n'.format(theta)
@@ -491,7 +506,7 @@ print("Number of ips = {:d}".format(ip_cnt))
 
 env = dict(os.environ)
 
-time_enable = True;
+time_enable = False;
 dry_run = False;
 vm_shut = False;
 
@@ -553,21 +568,23 @@ else:
 strict = [True]
 et_sync = ['AFTER_BATCH_COMP']
 
-wthreads = [vm_cores]
-# wthreads = [4] # redo experiments
+# wthreads = [vm_cores]
+# wthreads = [16] # redo experiments
 num_trials = 2
 # cc_algs = ['SILO']
 # cc_algs = ['NO_WAIT']
 # cc_algs = ['MVCC'] 
 # cc_algs = ['TIMESTAMP']  
-# cc_algs = ['QUECC']  
+cc_algs = ['QUECC']
+# cc_algs = ['LADS']
+# cc_algs = ['LADS','QUECC']
 # cc_algs = ['HSTORE']
 # cc_algs = ['MVCC','WAIT_DIE','TIMESTAMP'] #algorithms that uses timestamp allocation  
 # cc_algs = ['NO_WAIT', 'SILO'] 
 # cc_algs = ['OCC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'HSTORE','SILO', 'WAIT_DIE', 'MVCC','QUECC']
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others
-cc_algs = ['NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others but OCC
+# cc_algs = ['NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC'] # others but OCC
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'QUECC'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'WAIT_DIE'] 
 # cc_algs = ['OCC', 'NO_WAIT', 'TIMESTAMP', 'SILO', 'WAIT_DIE', 'MVCC','QUECC'] # + QueCC
@@ -627,8 +644,8 @@ parts_accessed = [0] # zero means access all available partitions
 
 ############### YCSB specific
 # zipftheta = [0.0,0.3,0.6,0.8,0.99]
-zipftheta = [0.0] #redo
-# zipftheta = [0.0,0.8] # defaults
+# zipftheta = [0.0] #redo
+zipftheta = [0.0,0.8] # defaults
 # zipftheta = [0.6,0.8] #medium + high contention 
 # zipftheta = [0.99]
 

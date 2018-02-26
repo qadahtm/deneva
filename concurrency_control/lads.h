@@ -20,7 +20,9 @@
 #include<time.h>
 #include <spinlock.h>
 
-#if CC_ALG == LADS
+#include "quecc_thread.h"
+
+#if CC_ALG == LADS || LADS_IN_QUECC
 namespace gdgcc {
 
     class ConfigInfo;
@@ -45,12 +47,14 @@ PS: I like STL template!!! But, there will be many many bugs when malloc is also
         Key ID:         with the key, record action can track the tuple that should be modified.
 
         */
-        uint32_t _txnId;
+//        uint32_t _txnId;
+        uint64_t _txnId;
         uint32_t _funcId;
         uint64_t _key;
         char *_funcName;
 
-        Spinlock *_indegree_lock;
+//        Spinlock *_indegree_lock;
+        spinlock *_indegree_lock;
         uint32_t _indegree; //the action can be executed only when indegree = 0
 
         /*
@@ -78,6 +82,7 @@ PS: I like STL template!!! But, there will be many many bugs when malloc is also
 
         //deprecated!
         uint32_t type;
+        transaction_context * txn_ctx;
 
     public:
         /*
@@ -87,6 +92,14 @@ PS: I like STL template!!! But, there will be many many bugs when malloc is also
         vector<Action *> logical_dependency;
         //Action **logical_dependency;
         int cid;
+
+        void setTxnContext(transaction_context * txn_ctx){
+            this->txn_ctx = txn_ctx;
+        }
+        transaction_context * getTxnContext(){
+            return txn_ctx;
+        }
+
 #if WORKLOAD == YCSB
         ycsb_request* req;
 #endif
@@ -100,9 +113,9 @@ PS: I like STL template!!! But, there will be many many bugs when malloc is also
 
         void init(ConfigInfo *configinfo, EnvInfo *envinfo);
 
-        uint32_t getTxnId();
+        uint64_t getTxnId();
 
-        void setTxnId(uint32_t tid);
+        void setTxnId(uint64_t tid);
 
         uint32_t getFuncId();
 
@@ -167,6 +180,13 @@ in the structure of TupleActionLinkedList
         Action *_head;
         Action *_curpos;
 
+        // size and aq_logical_deps will be used for graph partitioning
+        // we maintain this meta-data at the AQ level as an optimization
+        uint64_t size;
+        vector<ActionQueue *> aq_logical_deps;
+
+
+
 //        Spinlock lock = new Spinlock();
         spinlock * lock = new spinlock();
 
@@ -185,6 +205,26 @@ in the structure of TupleActionLinkedList
         bool pushback(Action *action);
 
         Action *fetch();
+
+        int64_t head_is_ready(){
+            //TQ: at this point, we are executing and each AQ is assigned to a
+            //dedicated execution thread. No need to protect access in this case.
+            if (_head == nullptr){
+                return -1;
+            }
+            else{
+                return _head->getIndegree();
+            }
+        }
+
+        uint64_t get_size(){
+            return size;
+        }
+
+        void reset(){
+            size = 0;
+            aq_logical_deps.clear();
+        };
     };
 
 
@@ -260,7 +300,8 @@ important: use new to initialize this object!!! not use malloc
         //vector<TupleActionLinkedList*> _activetuplesVector;
         TupleActionLinkedList ***_activetuplesVector;
         uint32_t *_active_cnt_on_part;
-        Spinlock *_spinlock;
+//        Spinlock *_spinlock;
+        spinlock *_spinlock;
 
     public:
         ActiveTupleList();
@@ -298,15 +339,73 @@ important: use new to initialize this object!!! not use malloc
     };
 
 
-/*
- * this class is not used anymore
- */
-    class DSSiteVertex {
-    public:
-        void init(uint32_t nodeid, uint32_t wnumber);
+    class DepGraph {
+    private:
+        // a map to store active queues per constructor
+        std::map<uint64_t,ActionQueue *> * active_aqs[PLAN_THREAD_CNT];
 
-        uint32_t workernumber;
-        ActionQueue **actqueue;
+        vector<ActionQueue*> * ggraph_parts[PLAN_THREAD_CNT][THREAD_CNT];
+        bool ggraph_parts_ready[PLAN_THREAD_CNT][THREAD_CNT];
+
+
+    public:
+        void init(){
+            for (int i = 0; i < PLAN_THREAD_CNT; ++i){
+                active_aqs[i] = new std::map<uint64_t,ActionQueue *>();
+
+                for (int j = 0; j < THREAD_CNT; ++j){
+                    ggraph_parts[i][j] = new vector<ActionQueue*>();
+                    ggraph_parts_ready[i][j]= false;
+                }
+            }
+        }
+
+        void set_ggraph_parts_ready(uint64_t eid, uint64_t cid){
+            ggraph_parts_ready[cid][eid] = true;
+        }
+
+        vector<ActionQueue*> * get_dgpart(uint64_t eid, uint64_t cid){
+            if (ggraph_parts_ready[cid][eid]){
+                return ggraph_parts[cid][eid];
+            }
+            else{
+                return nullptr;
+            }
+        }
+
+        void addAction(uint64_t cid, uint64_t rid, Action * action){
+            ActionQueue * aq;
+            auto search = active_aqs[cid]->find(rid);
+            if (search == active_aqs[cid]->end()){
+                // not found
+                aq = new ActionQueue();
+                aq->init();
+                active_aqs[cid]->insert(std::make_pair(rid, aq));
+            }
+            else{
+                aq = search->second;
+            }
+
+            aq->pushback(action);
+        }
+
+        // Partitions graph and assigns them to execution threads
+        void partition_graph(uint64_t cid) {
+            DEBUG_Q("CT_%lu: ready to deliver, we have %lu active queues\n", cid, (uint64_t) active_aqs[cid]->size());
+            // do round robin for now
+            uint64_t a_cnt =0;
+            uint64_t  eid = 0;
+            for (auto it = active_aqs[cid]->begin(); it != active_aqs[cid]->end(); ++it){
+                eid = a_cnt % THREAD_CNT;
+                ggraph_parts[cid][eid]->push_back(it->second);
+                if (!ggraph_parts_ready[cid][eid]){
+//                    DEBUG_Q("CT_%lu: assigned %lu active queues\n", cid,(uint64_t) active_aqs[cid]->size());
+                    ggraph_parts_ready[cid][eid] = true;
+                }
+                a_cnt++;
+            }
+//            assert(false);
+        }
     };
 
 /**************** End Action.h ************************/
@@ -517,8 +616,8 @@ save the environment information(hardware information)
         SyncWorker(ConfigInfo* configinfo);
         ~SyncWorker();
 
-        void constructor_wait(int cid);
-        void    executor_wait(int eid,int dgraph_cnt, ActionDependencyGraph**  dgraphs);
+        void constructor_wait(int cid, uint64_t batch_id);
+        void executor_wait(int eid, int dgraph_cnt, ActionDependencyGraph **dgraphs, uint64_t batch_id);
         void executor_wait_begin(int eid);  //first time to start executor
     };
 
@@ -560,6 +659,8 @@ save the environment information(hardware information)
         SyncWorker*     syncworker;
         ActionBuffer*   action_allocator;
         Workload*       workload;
+        uint64_t        batch_id;
+
     };//end of Constructor definition
 
 
@@ -574,6 +675,7 @@ save the environment information(hardware information)
         SyncWorker*     syncworker;
         Workload*       workload;
         TxnManager*     txn_man;
+        uint64_t   batch_id;
 
     public:
         Executor();

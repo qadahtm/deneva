@@ -75,11 +75,15 @@ Plock part_lock_man;
 #if CC_ALG == QUECC
 QueCCPool quecc_pool;
 #endif
-#if CC_ALG == LADS
+#if CC_ALG == LADS || LADS_IN_QUECC
+
+//#if !LADS_IN_QUECC
 gdgcc::ConfigInfo* configinfo;
 gdgcc::SyncWorker* sync_worker;
 gdgcc::ActionDependencyGraph** dgraphs;
+//#endif
 gdgcc::ActionBuffer*   action_allocator;
+gdgcc::DepGraph *   global_dgraph;
 #endif
 
 bool volatile warmup_done = false;

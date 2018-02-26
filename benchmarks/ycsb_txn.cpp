@@ -111,8 +111,8 @@ RC YCSBTxnManager::run_hstore_txn(){
     // we always commit in YCSB
     return Commit;
 }
-#if CC_ALG == LADS
-RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
+#if CC_ALG == LADS || LADS_IN_QUECC
+RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, uint64_t eid){
     RC rc = RCOK;
 #if WORKLOAD == YCSB
     //extract the primary key from the action
@@ -156,6 +156,7 @@ RC YCSBTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
         action->logical_dependency[i]->subIndegreeByOne();
     }
 
+    check_commit_ready(action);
     return rc;
 }
 #endif // #if CC_ALG == LADS

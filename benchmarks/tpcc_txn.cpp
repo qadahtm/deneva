@@ -1132,14 +1132,14 @@ RC TPCCTxnManager::run_hstore_txn() {
 #endif
 
 #if CC_ALG == LADS
-RC TPCCTxnManager::execute_lads_action(gdgcc::Action * action, int eid){
+RC TPCCTxnManager::execute_lads_action(gdgcc::Action * action, uint64_t eid){
     RC rc = RCOK;
     // not implemented yet
     assert(false);
     return rc;
 }
 
-RC TPCCTxnManager::resolve_txn_dependencies(Message* msg){
+RC TPCCTxnManager::resolve_txn_dependencies(Message* msg, transaction_context * txn_ctxs, uint64_t cid){
     assert(false);
     return RCOK;
 }

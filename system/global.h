@@ -93,6 +93,7 @@ namespace gdgcc {
 	class SyncWorker;
 	class ActionDependencyGraph;
 	class ActionBuffer;
+	class DepGraph;
 }
 //#endif
 
@@ -140,11 +141,12 @@ extern Plock part_lock_man;
 #if CC_ALG == QUECC
 extern QueCCPool quecc_pool;
 #endif
-#if CC_ALG == LADS
+#if CC_ALG == LADS || LADS_IN_QUECC
 extern gdgcc::ConfigInfo* configinfo;
 extern gdgcc::SyncWorker* sync_worker;
 extern gdgcc::ActionDependencyGraph** dgraphs;
 extern gdgcc::ActionBuffer* action_allocator;
+extern gdgcc::DepGraph * global_dgraph;
 #endif
 
 extern bool volatile warmup_done;
@@ -270,16 +272,6 @@ extern UInt32 g_batch_size;
 extern UInt32 g_exec_qs_max_size;
 // for circular array buffer for batch completeiton time
 extern const UInt32 g_batch_map_length;
-// For mapping between PTs and Cores
-extern uint16_t g_pt_map[PLAN_THREAD_CNT];
-// For mapping between ETs and Cores
-extern uint16_t g_et_map[THREAD_CNT];
-
-//#if DEBUG_QUECC
-//extern volatile atomic<int64_t> ** plan_active;
-//extern volatile atomic<int64_t> ** exec_active;
-//extern volatile atomic<int64_t> ** commit_active;
-//#endif
 #endif
 // Replication
 extern UInt32 g_repl_type;

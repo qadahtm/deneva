@@ -16,7 +16,7 @@
 // [QUECC]
 // Planner thread cnt should be greater than or equal to part_cnt
 #define PLAN_THREAD_CNT 32
-#define PART_CNT 32
+#define PART_CNT 1
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -43,9 +43,9 @@
 #define VIRTUAL_PART_CNT    PART_CNT  
 #define PAGE_SIZE         4096 
 #define CL_SIZE           64
-#define CPU_FREQ          2.0 // FOR GS32
+//#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-//#define CPU_FREQ            2.4//2.6 // FOR D15v3
+#define CPU_FREQ            2.4//2.6 // FOR D15v3
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -124,7 +124,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG NO_WAIT
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -187,8 +187,8 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-//#define BATCH_SIZE 10368
-#define BATCH_SIZE 10080
+#define BATCH_SIZE 10368
+//#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
 //#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
@@ -297,6 +297,9 @@
 #define SINGLE_NODE true
 #define ABORT_THREAD true // if this is false, ABORT_QUEUES should be true to handle aborts
 #define ABORT_QUEUES false
+
+//
+#define LADS_IN_QUECC true
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20

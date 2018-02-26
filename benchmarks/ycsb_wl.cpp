@@ -69,8 +69,8 @@ RC YCSBWorkload::init_schema(const char * schema_file) {
 	the_index = indexes["MAIN_INDEX"];
 	return RCOK;
 }
-#if CC_ALG == LADS
-RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
+#if CC_ALG == LADS || LADS_IN_QUECC
+RC YCSBWorkload::resolve_txn_dependencies(Message* msg, transaction_context * tctx, uint64_t cid){
 	YCSBClientQueryMessage* ycsb_msg = (YCSBClientQueryMessage *) msg;
 
 	//there are no logical dependency in YCSB
@@ -90,7 +90,14 @@ RC YCSBWorkload::resolve_txn_dependencies(Message* msg, int cid){
         tmpAction->setKey(req->key);
         tmpAction->req->copy(req);
 
+#if LADS_IN_QUECC
+		global_dgraph->addAction(cid, req->key, tmpAction);
+		tctx->txn_comp_cnt.fetch_add(1,memory_order_acq_rel);
+		tmpAction->setTxnId(tctx->txn_id);
+		tmpAction->setTxnContext(tctx);
+#else
 		dgraphs[cid]->addActionToGraph(req->key, tmpAction);
+#endif
 	}
 	return RCOK;
 }

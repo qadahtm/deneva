@@ -34,8 +34,8 @@ void Stats_thd::init(uint64_t thd_id) {
   worker_process_cnt_by_type= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * NO_MSG);
   DEBUG_M("Stats_thd::init worker_process_time_by_type alloc\n");
   worker_process_time_by_type= (double *) mem_allocator.align_alloc(sizeof(double) * NO_MSG);
-#if CC_ALG == QUECC
-// QueCC
+#if CC_ALG == QUECC || CC_ALG == LADS
+// QueCC or LADS
   DEBUG_M("Stats_thd::init plan_txn_cnts alloc\n");
   plan_txn_cnts= (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);
   plan_batch_cnts = (uint64_t *) mem_allocator.align_alloc(sizeof(uint64_t) * g_plan_thread_cnt);

@@ -946,8 +946,8 @@ RC WorkerThread::run_fixed_mode() {
 SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
     uint64_t next_part = 0; // we have client buffers are paritioned based on part cnt
     Message * msg = NULL;
-    transaction_context * txn_ctxs = NULL;
     priority_group * planner_pg;
+    transaction_context * txn_ctxs = NULL;
 #if PROFILE_EXEC_TIMING
     uint64_t pidle_starttime = 0;
     uint64_t pbprof_starttime = 0;
@@ -1037,7 +1037,6 @@ SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
 
 SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, TxnManager * my_txn_man) {
 
-//    uint64_t wplanner_id = 0;
     wplanner_id = 0;
 
     while (true){
@@ -1146,7 +1145,6 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
             return SUCCESS;
         }
     }
-
     M_ASSERT_V(false, "this should not happend\n");
     return FATAL_ERROR;
 }
@@ -1889,7 +1887,9 @@ RC WorkerThread::run_normal_mode() {
                     hl_prof_starttime = get_sys_clock();
                 }
 #endif
+#if !LADS_IN_QUECC
                 batch_cleanup(batch_slot);
+#endif
 #if PROFILE_EXEC_TIMING
                 if (batch_proc_starttime > 0){
                     INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);

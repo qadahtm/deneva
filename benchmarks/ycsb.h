@@ -53,7 +53,7 @@ public :
 
     int key_to_part(uint64_t key);
 
-    RC resolve_txn_dependencies(Message* msg, int cid);
+    RC resolve_txn_dependencies(Message* msg, transaction_context * txn_ctxs, uint64_t cid);
 
     INDEX *the_index;
     table_t *the_table;
@@ -128,8 +128,8 @@ public:
     RC run_hstore_txn();
 
     // For LADS
-#if CC_ALG == LADS
-    RC execute_lads_action(gdgcc::Action * action, int eid);
+#if CC_ALG == LADS || LADS_IN_QUECC
+    RC execute_lads_action(gdgcc::Action * action, uint64_t eid);
 #endif
     void copy_remote_requests(YCSBQueryMessage *msg);
 

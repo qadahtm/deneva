@@ -1022,7 +1022,7 @@ RC PPSTxnManager::run_hstore_txn() {
     return rc;
 }
 
-RC PPSTxnManager::execute_lads_action(gdgcc::Action *action, int eid) {
+RC PPSTxnManager::execute_lads_action(gdgcc::Action *action, uint64_t eid) {
     RC rc = RCOK;
     // not implemented yet
     assert(false);

@@ -53,7 +53,7 @@ void * initADGHelper(void * adg);
 WorkerThread * worker_thds;
 InputThread * input_thds;
 OutputThread * output_thds;
-#if ABORT_THREAD && CC_ALG != QUECC
+#if ABORT_THREAD && !(CC_ALG == QUECC || CC_ALG == LADS)
 AbortThread * abort_thds;
 #endif
 LogThread * log_thds;
@@ -247,6 +247,11 @@ int main(int argc, char* argv[])
 #endif
     stats.printProcInfo();
 #if CC_ALG == QUECC
+#if LADS_IN_QUECC && PIPELINED
+    printf("Pipelining with LADS in QueCC is not supported... ");
+    fflush(stdout);
+    assert(false);
+#endif
     printf("Initializing QueCC pool... ");
     fflush(stdout);
     quecc_pool.init(m_wl,0);
@@ -268,12 +273,12 @@ int main(int argc, char* argv[])
     printf("Done\n");
 #endif
 
-#if CC_ALG == LADS
+#if CC_ALG == LADS || LADS_IN_QUECC
     // initialize global data structures for LADS
     // Initialize ConfigInfo
-    printf("Initializing LADS data strutures:\nInitializing ConfigInfo ... ");
+    printf("Initializing LADS data strutures:\n");
     fflush(stdout);
-
+    printf("Initializing ConfigInfo ... ");
     configinfo = new gdgcc::ConfigInfo();
     configinfo->worker_thread_cnt = g_thread_cnt;
     configinfo->partition_cnt = g_part_cnt;
@@ -291,12 +296,13 @@ int main(int argc, char* argv[])
 //    configinfo->Txn_Queue_Size = 100000; // should not be used
     printf("Done\n");
 
+#if !LADS_IN_QUECC
     // Initialize SyncWorker
     printf("Initializing SyncWorker ... ");
     fflush(stdout);
     sync_worker = new gdgcc::SyncWorker(configinfo);
     printf("Done\n");
-
+#endif
     // Initialize Action Pool
     printf("Initializing ActionBuffer ... ");
     fflush(stdout);
@@ -305,6 +311,14 @@ int main(int argc, char* argv[])
     printf("Done\n");
     stats.printProcInfo();
     // initialize ActionGraph
+
+
+#if LADS_IN_QUECC
+    printf("Initializing Global ActionDependencyGraph ... ");
+    fflush(stdout);
+    global_dgraph = new gdgcc::DepGraph();
+    global_dgraph->init();
+#else
 
     //TODO(tq) make this run in parallel to speed up experiment execution
     printf("Initializing ActionDependencyGraphs ... ");
@@ -321,7 +335,7 @@ int main(int argc, char* argv[])
     for (uint32_t i = 0; i < g_thread_cnt; i++) {
         pthread_join(p_init_thds[i], NULL);
     }
-
+#endif
     printf("Done\n");
     stats.printProcInfo();
 #endif
@@ -331,7 +345,7 @@ int main(int argc, char* argv[])
 	uint64_t wthd_cnt = thd_cnt;
 	uint64_t rthd_cnt = g_rem_thread_cnt;
 	uint64_t sthd_cnt = g_send_thread_cnt;
-#if ABORT_THREAD && CC_ALG != QUECC
+#if ABORT_THREAD && !(CC_ALG == QUECC || CC_ALG == LADS)
     uint64_t all_thd_cnt = thd_cnt + rthd_cnt + sthd_cnt + g_abort_thread_cnt;
 #else
     uint64_t all_thd_cnt = thd_cnt + rthd_cnt + sthd_cnt;
@@ -700,7 +714,7 @@ int main(int argc, char* argv[])
     input_thds = new InputThread[rthd_cnt];
     output_thds = new OutputThread[sthd_cnt];
 #endif
-#if ABORT_THREAD && CC_ALG != QUECC
+#if ABORT_THREAD && !(CC_ALG == QUECC || CC_ALG == LADS)
     abort_thds = new AbortThread[1];
 #endif
 #if LOGGING

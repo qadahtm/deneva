@@ -1427,6 +1427,67 @@ bc_end:
     SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
     {
 
+#if LADS_IN_QUECC
+        DEBUG_Q("ET_%lu: executing graph_part %lu batch_id = %lu\n", _thd_id, wplanner_id, wbatch_id);
+        vector<gdgcc::ActionQueue *> * graph_part = global_dgraph->get_dgpart(_thd_id, wplanner_id);
+        assert(graph_part != nullptr);
+        gdgcc::ActionQueue * aq;
+        gdgcc::Action * cur_action;
+        uint64_t aq_pos = 0;
+//        uint64_t a_size = batch_part->size();
+#if PROFILE_EXEC_TIMING
+//        uint64_t quecc_prof_time =0;
+        uint64_t quecc_txn_wait_starttime =0;
+#endif
+        while(!graph_part->empty()){
+            aq = graph_part->at(aq_pos);
+//            DEBUG_Q("ET_%ld: executing AQ at %lu, with %lu actions\n", _thd_id, aq_pos, aq->get_size());
+            int64_t ready =  aq->head_is_ready();
+            if (ready == 0){
+                cur_action = aq->fetch();
+                if (cur_action != nullptr){
+                    my_txn_man->execute_lads_action(cur_action, _thd_id);
+                    action_allocator->put(-1, cur_action);
+                }
+                else{
+                    assert(false);
+                }
+            }
+            else if (ready < 0){
+                // head is null we are done we should move the next AQ
+                // if fetch returned nullptr, we are done with this AQ
+                // remove aq from batch_part
+                graph_part->erase(graph_part->begin()+aq_pos);
+                if (graph_part->size() == 0){
+                    // we are done
+                    goto end_proc;
+                }
+                aq_pos = (aq_pos % graph_part->size());
+            }
+            else{
+                // if current AQ head is not ready
+                // move to the next AQ
+                aq_pos = (aq_pos+1) % graph_part->size();
+#if PROFILE_EXEC_TIMING
+                if (quecc_txn_wait_starttime == 0){
+                    quecc_txn_wait_starttime = get_sys_clock();
+                }
+#endif
+            }
+
+end_proc:
+            if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                if (quecc_txn_wait_starttime > 0){
+                    INC_STATS(_thd_id,exec_txn_wait_time[_thd_id],get_sys_clock() - quecc_txn_wait_starttime);
+                }
+#endif
+                return BREAK;
+//                M_ASSERT_V(false, "simulation is done before finishing my batch partition\n")
+            }
+
+        }
+#else
         batch_partition * batch_part = get_curr_batch_part(batch_slot);
         Array<exec_queue_entry> * exec_q;
 
@@ -1659,7 +1720,7 @@ bc_end:
 //                M_ASSERT_V(false, "simulation is done before finishing my batch partition\n")
             }
         }
-
+#endif //#if LADS_IN_QUECC
         return SUCCESS;
     };
 
@@ -2137,12 +2198,12 @@ bc_end:
     }
 
     void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man){
-
-// Query from client
-//        DEBUG_Q("PT_%ld planning txn %ld, pbatch_cnt=%ld\n", _planner_id, planner_txn_id,pbatch_cnt);
 #if PROFILE_EXEC_TIMING
         uint64_t _txn_prof_starttime = get_sys_clock();
 #endif
+        // Quecc
+// Query from client
+//        DEBUG_Q("PT_%ld planning txn %ld, pbatch_cnt=%ld\n", _planner_id, planner_txn_id,pbatch_cnt);
         transaction_context *tctx = &txn_ctxs[pbatch_cnt];
         // reset transaction context
 
@@ -2168,10 +2229,20 @@ bc_end:
         tctx->o_id.store(-1);
 #endif
 
+        uint64_t e8 = TXN_INITIALIZED;
+        uint64_t d8 = TXN_STARTED;
+
+        if(!tctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
+            assert(false);
+        }
 #if !SERVER_GENERATE_QUERIES
         tctx->client_startts = ((ClientQueryMessage *) msg)->client_startts;
 #endif
 
+#if LADS_IN_QUECC
+        // LADS
+        _wl->resolve_txn_dependencies(msg, tctx,_planner_id);
+#else
         // create execution entry, for now it will contain only one request
         // we need to reset the mutable values of tctx
         entry->txn_id = planner_txn_id;
@@ -2217,15 +2288,7 @@ bc_end:
      * We group keys that fall in the same range to be processed together
      * TODO(tq): add repartitioning
      */
-//        uint8_t e8 = TXN_INITIALIZED;
-//        uint8_t d8 = TXN_STARTED;
 
-        uint64_t e8 = TXN_INITIALIZED;
-        uint64_t d8 = TXN_STARTED;
-
-        if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
-            assert(false);
-        }
     YCSBClientQueryMessage *ycsb_msg = ((YCSBClientQueryMessage *) msg);
     for (uint64_t j = 0; j < ycsb_msg->requests.size(); j++) {
 //        memset(entry, 0, sizeof(exec_queue_entry));
@@ -2253,6 +2316,7 @@ bc_end:
 #if YCSB_INDEX_LOOKUP_PLAN
         ((YCSBTxnManager *)my_txn_man)->lookup_key(req_buff->key,entry);
 #endif
+        entry->req_idx = j;
         // add entry into range/bucket queue
         // entry is a sturct, need to double check if this works
         // this actually performs a full memcopy when adding entries
@@ -2273,8 +2337,8 @@ bc_end:
 //    uint64_t idx;
         uint64_t rid;
 
-        uint64_t e8 = TXN_INITIALIZED;
-        uint64_t d8 = TXN_STARTED;
+//        uint64_t e8 = TXN_INITIALIZED;
+//        uint64_t d8 = TXN_STARTED;
 #if PIPLINED
         et_id = _planner_id;
 #else
@@ -2282,9 +2346,9 @@ bc_end:
 #endif
         switch (tpcc_msg->txn_type) {
             case TPCC_PAYMENT:
-                if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
-                    assert(false);
-                }
+//                if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+//                    assert(false);
+//                }
                 // index look up for warehouse record
                 tpcc_txn_man->payment_lookup_w(tpcc_msg->w_id, r_local);
                 rid = r_local->get_row_id();
@@ -2319,9 +2383,9 @@ bc_end:
             case TPCC_NEW_ORDER:
                 // plan read on warehouse record
 
-                if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
-                    assert(false);
-                }
+//                if(!entry->txn_ctx->txn_state.compare_exchange_strong(e8,d8)){
+//                    assert(false);
+//                }
 #if PLAN_NO_DIST_UPDATE_FIRST
                 //plan update on district table
                 tpcc_txn_man->neworder_lookup_d(tpcc_msg->w_id, tpcc_msg->d_id, r_local);
@@ -2400,9 +2464,13 @@ bc_end:
 
 
 #endif
+
+#endif //#if LADS_IN_QUECC
+
 #if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id,plan_txn_process_time[_planner_id], get_sys_clock() - _txn_prof_starttime);
 #endif
+
         // increment for next ransaction
         planner_txn_id++;
         pbatch_cnt++;
@@ -2416,6 +2484,9 @@ bc_end:
 
     void do_batch_delivery(uint64_t batch_slot, priority_group * planner_pg){
 
+#if LADS_IN_QUECC
+        global_dgraph->partition_graph(_planner_id);
+#else
         batch_partition *batch_part = NULL;
 
 //            DEBUG_Q("Batch complete\n")
@@ -2883,6 +2954,8 @@ bc_end:
             quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, et_id);
             exec_queues->add(exec_q);
         }
+#endif //if LADS_IN_QUECC
+
 #if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, plan_mem_alloc_time[_planner_id], get_sys_clock()-prof_starttime);
         INC_STATS(_thd_id, plan_batch_process_time[_planner_id], get_sys_clock() - batch_start_time);

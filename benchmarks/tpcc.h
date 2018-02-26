@@ -699,8 +699,8 @@ private:
 
 #if CC_ALG == LADS
     // For LADS
-    RC execute_lads_action(gdgcc::Action * action, int eid);
-    RC resolve_txn_dependencies(Message* msg);
+    RC execute_lads_action(gdgcc::Action * action, uint64_t eid);
+    RC resolve_txn_dependencies(Message* msg, transaction_context * txn_ctxs, uint64_t cid);
 #endif
     uint64_t next_item_id;
 
