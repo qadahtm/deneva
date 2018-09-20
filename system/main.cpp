@@ -411,9 +411,6 @@ int main(int argc, char* argv[])
         *(work_queue.exec_next_stage[i]) = 0;
         work_queue.commit_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t));
         *(work_queue.commit_next_stage[i]) = 0;
-#else
-//        work_queue.exec_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t)*g_thread_cnt);
-//        work_queue.commit_next_stage[i] = (int64_t *) mem_allocator.align_alloc(sizeof(int64_t)*g_thread_cnt);
 #endif
         for (UInt32 j = 0; j < g_plan_thread_cnt; ++j) {
             work_queue.plan_sblocks[i][j].done = 0;

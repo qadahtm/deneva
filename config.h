@@ -299,7 +299,7 @@
 #define ABORT_QUEUES false
 
 //
-#define LADS_IN_QUECC true
+#define LADS_IN_QUECC false
 
 // LADS
 #define LADS_ACTION_BUFFER_SIZE 1024*20
@@ -383,7 +383,7 @@
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
 // small tpcc schemas shrink the table size.
-#define TPCC_SMALL          true
+#define TPCC_SMALL          false
 #define MAX_ITEMS_SMALL 10000
 #define CUST_PER_DIST_SMALL 2000
 #define MAX_ITEMS_NORM 100000

@@ -1,0 +1,27 @@
+add_sources(
+        abort_queue.cpp
+        abort_thread.cpp
+        calvin_thread.cpp
+        client_thread.cpp
+        global.cpp
+        helper.cpp
+        io_thread.cpp
+        lock_free_queue.cpp
+        log_thread.cpp
+        logger.cpp
+        manager.cpp
+        mem_alloc.cpp
+        msg_queue.cpp
+        parser.cpp
+        pool.cpp
+        query.cpp
+        sequencer.cpp
+        sim_manager.cpp
+        thread.cpp
+        txn.cpp
+        txn_table.cpp
+        wl.cpp
+        work_queue.cpp
+        worker_thread.cpp
+        quecc_thread.cpp
+)

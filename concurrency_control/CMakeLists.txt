@@ -1,0 +1,14 @@
+add_sources(
+        maat.cpp
+        occ.cpp
+        silo.cpp
+        row_mvcc.cpp
+        row_ts.cpp
+        row_lock.cpp
+        row_maat.cpp
+        row_occ.cpp
+        row_silo.cpp
+        row_lock.cpp
+        plock.cpp
+        lads.cpp
+)
