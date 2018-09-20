@@ -3,5 +3,6 @@ config.h
 results*
 figs*
 *ifconfig.txt
+pynb/.ipynb_checkpoints/*
 rundb
 runcl
