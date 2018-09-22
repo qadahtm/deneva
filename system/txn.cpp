@@ -660,7 +660,9 @@ void TxnManager::commit_stats() {
 #if !SINGLE_NODE
     if (!IS_LOCAL(ctid) && CC_ALG != CALVIN) {
         INC_STATS(ctid, remote_txn_commit_cnt, 1);
+#if PROFILE_EXEC_TIMING
         txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
+#endif
         return;
     }
 #endif

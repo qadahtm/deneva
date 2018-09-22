@@ -5,18 +5,14 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 1
-#define THREAD_CNT 32
+#define NODE_CNT 2
+#define THREAD_CNT 2
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 32
+#define CORE_CNT 4
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
-// PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
-// [QUECC]
-// Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT 32
-#define PART_CNT 1
+#define PART_CNT THREAD_CNT
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -26,9 +22,9 @@
 // seems to lower the number of transactions submitted
 // to the server
 #define CLIENT_NODE_CNT 1//4
-#define CLIENT_THREAD_CNT 4
-#define CLIENT_REM_THREAD_CNT 2
-#define CLIENT_SEND_THREAD_CNT 2
+#define CLIENT_THREAD_CNT 1
+#define CLIENT_REM_THREAD_CNT 1
+#define CLIENT_SEND_THREAD_CNT 1
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -60,15 +56,15 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      true
+#define PROFILE_EXEC_TIMING      false
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT 100//1000000 * 1
+#define MAX_TXN_IN_FLIGHT BATCH_SIZE*2
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
-#define SERVER_GENERATE_QUERIES true
+#define SERVER_GENERATE_QUERIES false
 
 
 
@@ -101,7 +97,7 @@
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
 #define SET_AFFINITY false
-#define SET_AFFINITY_AFTER_INIT true
+#define SET_AFFINITY_AFTER_INIT false
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
 
@@ -181,6 +177,9 @@
 #define ZERO_SEED_RAND_WL false
 
 // [QUECC]
+// PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
+// Planner thread cnt should be greater than or equal to part_cnt
+#define PLAN_THREAD_CNT THREAD_CNT
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
@@ -259,7 +258,7 @@
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
 #define FIXED_COMMIT_THREAD_CNT true
-#define COMMIT_THREAD_CNT 8
+#define COMMIT_THREAD_CNT 1
 #define TXN_CNT_COMMIT_THRESHOLD (THREAD_CNT*PLAN_THREAD_CNT)*2
 
 
@@ -294,7 +293,7 @@
 #define IMMEDIATE           2
 #define COMMIT_BEHAVIOR     AFTER_BATCH_COMP
 
-#define SINGLE_NODE true
+#define SINGLE_NODE false
 #define ABORT_THREAD true // if this is false, ABORT_QUEUES should be true to handle aborts
 #define ABORT_QUEUES false
 
@@ -353,13 +352,13 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM THREAD_CNT
 //#define SYNTH_TABLE_SIZE 1024
-//#define SYNTH_TABLE_SIZE  65536
+#define SYNTH_TABLE_SIZE  65536
 //#define SYNTH_TABLE_SIZE   10*1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
 //#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
-#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
+//#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
 #define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
@@ -568,10 +567,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
+#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

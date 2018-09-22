@@ -47,7 +47,7 @@ void InputThread::setup() {
                 simulation->process_setup_msg();
             } else {
                 assert(ISSERVER || ISREPLICA);
-                //printf("Received Msg %d from node %ld\n",msg->rtype,msg->return_node_id);
+                printf("Received Msg %d from node %ld\n",msg->rtype,msg->return_node_id);
 #if CC_ALG == CALVIN
                 if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
                   work_queue.sequencer_enqueue(get_thd_id(),msg);
@@ -200,7 +200,9 @@ RC InputThread::server_recv_loop() {
 //      DEBUG_Q("Enqueue to planning layer\n")
 #if WORKLOAD == YCSB
             if (msg->rtype == CL_QRY) {
-                work_queue.plan_enqueue(get_thd_id(), msg);
+                // assume 1 input thread
+                // FIXME(tq): if there are > 1 input threads planner_msg_cnt risks a race condition and must inc atomically
+                work_queue.plan_enqueue(planner_msg_cnt % g_plan_thread_cnt, msg);
                 planner_msg_cnt++;
 #if QUECC_DEBUG
                 work_queue.inflight_msg.fetch_add(1);

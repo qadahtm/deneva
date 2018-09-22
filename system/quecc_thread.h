@@ -58,6 +58,7 @@ struct transaction_context {
 #endif
 #if !SERVER_GENERATE_QUERIES
     uint64_t client_startts;
+    uint64_t return_node_id; //8
 #endif
 #if PARALLEL_COMMIT
     // 8 bytes
@@ -145,10 +146,6 @@ struct exec_queue_entry {
 //#if ROW_ACCESS_IN_CTX
     uint64_t req_idx; // 8 bytes
 //#endif
-
-#if !SERVER_GENERATE_QUERIES
-    uint64_t return_node_id; //8
-#endif
 } __attribute__((aligned));
 
 
@@ -772,8 +769,6 @@ private:
 
 #endif
 
-    void print_eqs_ranges_after_swap() const;
-    void print_eqs_ranges_before_swap() const;
 };
 
 #if CT_ENABLED

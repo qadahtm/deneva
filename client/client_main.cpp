@@ -55,7 +55,8 @@ int main(int argc, char* argv[])
 //    assert(g_core_cnt == (g_total_client_thread_cnt+2));
     // TQ: relax assertion, total threads should be at most equal to the core count
     // We can have some unused cores for the client
-    assert(g_core_cnt >= (g_total_client_thread_cnt+2));
+    DEBUG_Q("core_cnt=%u, total_client_thread_cnt =%u\n",g_core_cnt,g_total_client_thread_cnt)
+    assert(g_core_cnt >= (g_total_client_thread_cnt));
 	uint64_t seed = get_sys_clock();
 	srand(seed);
 	printf("Random seed: %ld\n",seed);

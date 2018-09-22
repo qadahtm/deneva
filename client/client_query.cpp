@@ -151,12 +151,13 @@ Client_query_queue::initQueriesParallel() {
     }while(!next_tid.compare_exchange_strong(tid,tid+1));
 
     uint64_t request_cnt;
-    if (g_part_cnt == 1){
-        request_cnt = (g_max_txn_per_part/g_thread_cnt) + 4;
-    }
-    else{
-        request_cnt = g_max_txn_per_part + 4;
-    }
+    request_cnt = g_max_txn_per_part + 4;
+//    if (g_part_cnt == 1){
+//        request_cnt = (g_max_txn_per_part/g_thread_cnt) + 4;
+//    }
+//    else{
+//        request_cnt = g_max_txn_per_part + 4;
+//    }
 
     uint32_t final_request;
 
@@ -165,23 +166,23 @@ Client_query_queue::initQueriesParallel() {
     request_cnt = g_max_txn_per_part + 4;
     final_request = request_cnt;
 #else
-//    if (tid == g_init_parallelism-1) {
-//        final_request = request_cnt;
-//    } else {
-//        final_request = request_cnt / g_init_parallelism * (tid+1);
-//    }
-
-    if (g_part_cnt == 1){
+    if (tid == g_init_parallelism-1) {
         final_request = request_cnt;
+    } else {
+        final_request = request_cnt / g_init_parallelism * (tid+1);
     }
-    else{
-        if (tid < g_part_cnt){
-            final_request = request_cnt;
-        }
-        else{
-            return;
-        }
-    }
+
+//    if (g_part_cnt == 1){
+//        final_request = request_cnt;
+//    }
+//    else{
+//        if (tid < g_part_cnt){
+//            final_request = request_cnt;
+//        }
+//        else{
+//            return;
+//        }
+//    }
 
 #endif
 
@@ -254,12 +255,31 @@ Client_query_queue::initQueriesParallel() {
         }
     }
 #else
-M_ASSERT_V(false,"Not suppoprted\n");
+//M_ASSERT_V(false,"Not suppoprted\n");
   DEBUG_WL("final_request = %d\n", final_request)
   DEBUG_WL("request_cnt = %lu\n", request_cnt)
   DEBUG_WL("g_init_parallelism = %d\n", g_init_parallelism)
   DEBUG_WL("g_servers_per_client = %d\n", g_servers_per_client)
-  DEBUG_WL("Client: tid(%d): generated query count = %d\n", tid, gq_cnt);
+//  DEBUG_WL("Client: tid(%d): generated query count = %d\n", tid, q_cnt);
+    UInt32 gq_cnt = 0;
+#if CREATE_TXN_FILE
+    DEBUG_WL("single threaded generation ...\n")
+  for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
+    // SINGLE thread
+//    for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+    for (UInt32 query_id = 0; query_id < final_request; query_id ++) {
+      queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+      gq_cnt++;
+    }
+  }
+#else
+    for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
+        for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
+            queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+            gq_cnt++;
+        }
+    }
+#endif
 #endif
 
 }
@@ -287,32 +307,42 @@ Message * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread
     return query;
 }
 #else
-BaseQuery * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread_id) {
-    M_ASSERT_V(server_id < size, "server_id=%ld, size=%ld, thread_id=%ld\n",server_id, size, thread_id);
+//BaseQuery * Client_query_queue::get_next_query(uint64_t server_id, uint64_t thread_id) {
+//    M_ASSERT_V(server_id < size, "server_id=%ld, size=%ld, thread_id=%ld\n",server_id, size, thread_id);
+//    assert(server_id < size);
+//    uint64_t query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
+//    uint64_t max_txns_per_thread;
+//    if (g_part_cnt == 1){
+//        max_txns_per_thread = (g_max_txn_per_part/g_thread_cnt) + 4;
+//    }
+//    else{
+//        max_txns_per_thread = g_max_txn_per_part + 4;
+//    }
+//    if (query_id >= max_txns_per_thread) {
+//
+////        __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
+////        query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
+//        *(query_cnt[server_id]) = 0;
+//        query_id = 0;
+//    }
+//    assert(query_id < max_txns_per_thread);
+//    BaseQuery *query = queries[server_id][query_id];
+////#if WORKLOAD == TPCC
+////    TPCCQuery *tpcc_query = (TPCCQuery *) query;
+////    M_ASSERT_V(server_id == wh_to_part(tpcc_query->w_id), "Warehouse id mismatch?!!! wt_id=%lu, w_id=%lu\n",server_id,tpcc_query->w_id);
+////    DEBUG_Q("server_id=%ld, size=%ld, thread_id=%ld, w_id=%lu\n",server_id, size, thread_id, tpcc_query->w_id);
+////#endif
+//    M_ASSERT_V(query, "could not get next query???\n");
+//    return query;
+//}
+BaseQuery * Client_query_queue::get_next_query(uint64_t server_id,uint64_t thread_id) {
     assert(server_id < size);
     uint64_t query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
-    uint64_t max_txns_per_thread;
-    if (g_part_cnt == 1){
-        max_txns_per_thread = (g_max_txn_per_part/g_thread_cnt) + 4;
+    if(query_id > g_max_txn_per_part) {
+        __sync_bool_compare_and_swap(query_cnt[server_id],query_id+1,0);
+        query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
     }
-    else{
-        max_txns_per_thread = g_max_txn_per_part + 4;
-    }
-    if (query_id >= max_txns_per_thread) {
-
-//        __sync_bool_compare_and_swap(query_cnt[server_id], query_id + 1, 0);
-//        query_id = __sync_fetch_and_add(query_cnt[server_id], 1);
-        *(query_cnt[server_id]) = 0;
-        query_id = 0;
-    }
-    assert(query_id < max_txns_per_thread);
-    BaseQuery *query = queries[server_id][query_id];
-//#if WORKLOAD == TPCC
-//    TPCCQuery *tpcc_query = (TPCCQuery *) query;
-//    M_ASSERT_V(server_id == wh_to_part(tpcc_query->w_id), "Warehouse id mismatch?!!! wt_id=%lu, w_id=%lu\n",server_id,tpcc_query->w_id);
-//    DEBUG_Q("server_id=%ld, size=%ld, thread_id=%ld, w_id=%lu\n",server_id, size, thread_id, tpcc_query->w_id);
-//#endif
-    M_ASSERT_V(query, "could not get next query???\n");
+    BaseQuery * query = queries[server_id][query_id];
     return query;
 }
 #endif

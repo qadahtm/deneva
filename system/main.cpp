@@ -756,6 +756,7 @@ int main(int argc, char* argv[])
 
     endtime = get_server_clock();
     printf("Initialization Time = %ld\n", endtime - starttime);
+    printf("all_thd_cnt = %lu\n", all_thd_cnt);
     fflush(stdout);
     warmup_done = true;
     pthread_barrier_init( &warmup_bar, NULL, all_thd_cnt);
@@ -940,11 +941,10 @@ int main(int argc, char* argv[])
 #endif
 
 
-#if !SERVER_GENERATE_QUERIES
+#if SERVER_GENERATE_QUERIES
     //TQ: start simulation, there is no need to wait anymore
-    simulation->process_setup_msg();
-#endif
     simulation->set_setup_done();
+#endif
 
 	for (uint64_t i = 0; i < all_thd_cnt ; i++) 
 		pthread_join(p_thds[i], NULL);

@@ -164,7 +164,8 @@ uint64_t QWorkQueue::get_random_planner_id(uint64_t thd_id) {
 
 
 void QWorkQueue::plan_enqueue(uint64_t thd_id, Message * msg){
-    uint64_t planner_id = get_random_planner_id(thd_id);
+//    uint64_t planner_id = get_random_planner_id(thd_id);
+    uint64_t planner_id = thd_id;
     work_queue_entry * entry = (work_queue_entry*)mem_allocator.align_alloc(sizeof(work_queue_entry));
     entry->msg = msg;
     entry->rtype = msg->rtype;
@@ -210,9 +211,13 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
 //    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
     //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);
 //    DEBUG_M("PlanQueue::dequeue work_queue_entry free\n");
+#if PROFILE_EXEC_TIMING
     prof_starttime = get_sys_clock();
+#endif
     mem_allocator.free(entry,sizeof(work_queue_entry));
+#if PROFILE_EXEC_TIMING
     INC_STATS(thd_id, plan_queue_deq_free_mem_time[home_partition], get_sys_clock()-prof_starttime);
+#endif
   }
 #endif
 #if PROFILE_EXEC_TIMING

@@ -1977,7 +1977,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 #endif // #if ROW_ACCESS_TRACKING
 #if !SERVER_GENERATE_QUERIES
     assert(msg->return_node_id != g_node_id);
-        entry->return_node_id = msg->return_node_id;
+    tctx->return_node_id = msg->return_node_id;
 #endif
 
 #if WORKLOAD == YCSB
@@ -2226,46 +2226,46 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id) {
     checkAndSplitRange(mrange,key,et_id,exec_qs_ranges,exec_queues,exec_qs_ranges_tmp,exec_queues_tmp);
 }
-
-void PlannerThread::print_eqs_ranges_after_swap() const {//        // print contents after split
-#if SPLIT_MERGE_ENABLED
-    for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
-        DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
-    }
-
-    for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-        DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
-                _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
-    }
-#endif
-    for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-        DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-    }
-    for (uint64_t i =0; i < exec_queues->size(); ++i){
-        DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
-                _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
-    }
-}
-
-void PlannerThread::print_eqs_ranges_before_swap() const {//        // print contents after split
-#if SPLIT_MERGE_ENABLED
-    for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
-        DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
-    }
-
-    for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
-        DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
-                _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
-    }
-#endif
-    for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-        DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
-    }
-    for (uint64_t i =0; i < exec_queues->size(); ++i){
-        DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
-                _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
-    }
-}
+//
+//void PlannerThread::print_eqs_ranges_after_swap() const {//        // print contents after split
+//#if SPLIT_MERGE_ENABLED
+//    for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+//        DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+//    }
+//
+//    for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//        DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range= %lu\n",
+//                _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+//    }
+//#endif
+//    for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//        DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+//    }
+//    for (uint64_t i =0; i < exec_queues->size(); ++i){
+//        DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//    }
+//}
+//
+//void PlannerThread::print_eqs_ranges_before_swap() const {//        // print contents after split
+//#if SPLIT_MERGE_ENABLED
+//    for (uint64_t i =0; i < exec_qs_ranges_tmp->size(); ++i){
+//        DEBUG_Q("PL_%ld: new exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges_tmp->get(i));
+//    }
+//
+//    for (uint64_t i =0; i < exec_queues_tmp->size(); ++i){
+//        DEBUG_Q("PL_%ld: new exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                _planner_id, i, exec_queues_tmp->get(i)->size(), (uint64_t) exec_queues_tmp->get(i), exec_qs_ranges_tmp->get(i));
+//    }
+//#endif
+//    for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+//        DEBUG_Q("PL_%ld: old exec_qs_ranges[%lu] = %lu\n", _planner_id, i, exec_qs_ranges->get(i));
+//    }
+//    for (uint64_t i =0; i < exec_queues->size(); ++i){
+//        DEBUG_Q("PL_%ld: old exec_queues[%lu] size = %lu, ptr = %lu, range=%lu\n",
+//                _planner_id, i, exec_queues->get(i)->size(), (uint64_t) exec_queues->get(i), exec_qs_ranges->get(i));
+//    }
+//}
 
 // QueCCPool methods implementation
 
