@@ -263,8 +263,8 @@ Message * QWorkQueue::sequencer_dequeue(uint64_t thd_id) {
   work_queue_entry * entry = NULL;
   bool valid = seq_queue->pop(entry);
 
-  uint64_t seq_id = query_seq_cnt % client_query_queue.size;
-  query_seq_cnt++;
+//  uint64_t seq_id = query_seq_cnt % client_query_queue.size;
+//  query_seq_cnt++;
 
   if(valid) {
     msg = entry->msg;

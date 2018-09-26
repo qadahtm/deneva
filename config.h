@@ -6,13 +6,13 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 2
-#define THREAD_CNT 2
+#define THREAD_CNT 4
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
-#define CORE_CNT 4
+#define CORE_CNT 8
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT THREAD_CNT
+#define PART_CNT (NODE_CNT*THREAD_CNT)
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -21,10 +21,10 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 1//4
-#define CLIENT_THREAD_CNT 1
-#define CLIENT_REM_THREAD_CNT 1
-#define CLIENT_SEND_THREAD_CNT 1
+#define CLIENT_NODE_CNT 4
+#define CLIENT_THREAD_CNT 4
+#define CLIENT_REM_THREAD_CNT 2
+#define CLIENT_SEND_THREAD_CNT 2
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -60,7 +60,7 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT BATCH_SIZE*2
+#define MAX_TXN_IN_FLIGHT BATCH_SIZE*10
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -120,7 +120,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG QUECC
+#define CC_ALG NO_WAIT
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -352,10 +352,10 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM THREAD_CNT
 //#define SYNTH_TABLE_SIZE 1024
-#define SYNTH_TABLE_SIZE  65536
+//#define SYNTH_TABLE_SIZE  65536
 //#define SYNTH_TABLE_SIZE   10*1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-//#define SYNTH_TABLE_SIZE 16783200 // ~16M recs so that it is divisiable by different part_cnt values
+#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
@@ -567,10 +567,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
-#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
+#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

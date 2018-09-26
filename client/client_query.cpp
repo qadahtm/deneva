@@ -50,12 +50,12 @@ Client_query_queue::init(Workload * h_wl) {
     // allocate a set of queries for each thread
     query_cnt = new uint64_t * [size];
     size_t query_cnt_per_thread;
-    if (g_part_cnt == 1){
-        query_cnt_per_thread = (g_max_txn_per_part/g_thread_cnt) + 4;
-    }
-    else{
-        query_cnt_per_thread = g_max_txn_per_part + 4;
-    }
+//    if (g_part_cnt == 1){
+//        query_cnt_per_thread = (g_max_txn_per_part/g_thread_cnt) + 4;
+//    }
+//    else{
+    query_cnt_per_thread = g_max_txn_per_part + 4;
+//    }
 
 #if CREATE_TXN_FILE
     query_cnt_per_thread = g_max_txn_per_part + 4;
@@ -256,10 +256,10 @@ Client_query_queue::initQueriesParallel() {
     }
 #else
 //M_ASSERT_V(false,"Not suppoprted\n");
-  DEBUG_WL("final_request = %d\n", final_request)
-  DEBUG_WL("request_cnt = %lu\n", request_cnt)
-  DEBUG_WL("g_init_parallelism = %d\n", g_init_parallelism)
-  DEBUG_WL("g_servers_per_client = %d\n", g_servers_per_client)
+  DEBUG_Q("final_request = %d\n", final_request)
+  DEBUG_Q("request_cnt = %lu\n", request_cnt)
+  DEBUG_Q("g_init_parallelism = %d\n", g_init_parallelism)
+  DEBUG_Q("g_servers_per_client = %d\n", g_servers_per_client)
 //  DEBUG_WL("Client: tid(%d): generated query count = %d\n", tid, q_cnt);
     UInt32 gq_cnt = 0;
 #if CREATE_TXN_FILE

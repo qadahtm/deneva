@@ -996,6 +996,10 @@ SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
 #if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id, plan_queue_dequeue_time[_planner_id], get_sys_clock()-pbprof_starttime);
 #endif
+
+        if (simulation->is_done()){
+            return BREAK;
+        }
 #if !SINGLE_NODE
         if(!msg) {
 #if PROFILE_EXEC_TIMING
@@ -4235,6 +4239,39 @@ transaction_context * WorkerThread::get_tctx_from_pg(uint64_t txnid, priority_gr
     }
 }
 
+void WorkerThread::finalize_txn_commit(transaction_context *tctx, RC rc) {
+    uint64_t e8,d8;
+#if PROFILE_EXEC_TIMING
+    uint64_t commit_time = get_sys_clock();
+    uint64_t timespan_long = commit_time - tctx->starttime;
+    // Committing
+    INC_STATS_ARR(_thd_id, first_start_commit_latency, timespan_long);
+#endif
+    // Sending response to client a
+#if !SERVER_GENERATE_QUERIES
+    Message * rsp_msg = Message::create_message(CL_RSP);
+    rsp_msg->txn_id = tctx->txn_id;
+//    rsp_msg->batch_id = tctx->batch_id; // using batch_id from local, we can also use the one in the context
+    ((ClientResponseMessage *) rsp_msg)->client_startts = tctx->client_startts;
+    rsp_msg->lat_work_queue_time = 0;
+    rsp_msg->lat_msg_queue_time = 0;
+    rsp_msg->lat_cc_block_time = 0;
+    rsp_msg->lat_cc_time = 0;
+    rsp_msg->lat_process_time = 0;
+    rsp_msg->lat_network_time = 0;
+    rsp_msg->lat_other_time = 0;
+
+    msg_queue.enqueue(_thd_id, rsp_msg, tctx->return_node_id);
+#endif
+    wt_release_accesses(tctx,rc);
+    e8 = TXN_READY_TO_COMMIT;
+    d8 = TXN_COMMITTED;
+    if (tctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
+        M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
+    }
+//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld\n",
+//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
+}
 #endif // if CC_ALG == QUECC
 
 RC WorkerThread::run_normal_mode() {
@@ -4272,15 +4309,33 @@ RC WorkerThread::run_normal_mode() {
     // Array to track ranges
     exec_qs_ranges->init(g_exec_qs_max_size);
 #if WORKLOAD == YCSB
-    for (uint64_t i =0; i<g_thread_cnt-1; ++i){
-
-        if (i == 0){
-            exec_qs_ranges->add(bucket_size);
-            continue;
-        }
-        exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
+    assert(g_thread_cnt == g_plan_thread_cnt);
+//    uint64_t range_start_node = g_node_id * (g_thread_cnt * bucket_size);
+    uint64_t range_start_node = 0;
+    uint64_t total_eq_cnt = g_cluster_worker_thread_cnt;
+    for (uint64_t i =0; i<total_eq_cnt; ++i){
+        uint64_t range_boundary = range_start_node + ((i+1)*bucket_size);
+        DEBUG_Q("Node_id=%u,WT_id=%lu,i=%lu, range_boundary=%lu\n",g_node_id, _thd_id,i,range_boundary);
+        exec_qs_ranges->add(range_boundary);
     }
-    exec_qs_ranges->add(g_synth_table_size); // last range is the table size
+    assert(total_eq_cnt*bucket_size == g_synth_table_size);
+
+//    for (uint64_t i =0; i<g_thread_cnt-1; ++i){
+//
+//        if (i == 0){
+//            exec_qs_ranges->add(bucket_size);
+//            continue;
+//        }
+//        exec_qs_ranges->add(exec_qs_ranges->get(i-1)+bucket_size);
+//    }
+//    if (g_node_id == g_node_cnt-1){
+//        DEBUG_Q("Node_id=%u,WT_id=%lu, adding sythntablesize\n",g_node_id, _thd_id);
+//        exec_qs_ranges->add(g_synth_table_size); // last range is the table size
+//    }
+//    else{
+//        DEBUG_Q("Node_id=%u,WT_id=%lu, adding bucket_size\n",g_node_id, _thd_id);
+//        exec_qs_ranges->add(exec_qs_ranges->get(g_thread_cnt-1)+bucket_size);
+//    }
 #elif WORKLOAD == TPCC
     uint64_t bucket_cnt = g_num_wh;
     if (g_num_wh < g_thread_cnt) {
@@ -4314,7 +4369,7 @@ RC WorkerThread::run_normal_mode() {
             exec_queues->add(exec_q);
     }
 #else
-    for (uint64_t i = 0; i < g_thread_cnt; i++) {
+    for (uint64_t i = 0; i < total_eq_cnt; i++) {
         Array<exec_queue_entry> * exec_q;
         quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i);
         exec_queues->add(exec_q);
@@ -5275,40 +5330,6 @@ ts_t WorkerThread::get_next_ts() {
         _curr_ts = glob_manager.get_ts(get_thd_id());
         return _curr_ts;
     }
-}
-
-void WorkerThread::finalize_txn_commit(transaction_context *tctx, RC rc) {
-    uint64_t e8,d8;
-#if PROFILE_EXEC_TIMING
-    uint64_t commit_time = get_sys_clock();
-    uint64_t timespan_long = commit_time - tctx->starttime;
-    // Committing
-    INC_STATS_ARR(_thd_id, first_start_commit_latency, timespan_long);
-#endif
-    // Sending response to client a
-#if !SERVER_GENERATE_QUERIES
-    Message * rsp_msg = Message::create_message(CL_RSP);
-    rsp_msg->txn_id = tctx->txn_id;
-//    rsp_msg->batch_id = tctx->batch_id; // using batch_id from local, we can also use the one in the context
-    ((ClientResponseMessage *) rsp_msg)->client_startts = tctx->client_startts;
-    rsp_msg->lat_work_queue_time = 0;
-    rsp_msg->lat_msg_queue_time = 0;
-    rsp_msg->lat_cc_block_time = 0;
-    rsp_msg->lat_cc_time = 0;
-    rsp_msg->lat_process_time = 0;
-    rsp_msg->lat_network_time = 0;
-    rsp_msg->lat_other_time = 0;
-
-    msg_queue.enqueue(_thd_id, rsp_msg, tctx->return_node_id);
-#endif
-    wt_release_accesses(tctx,rc);
-    e8 = TXN_READY_TO_COMMIT;
-    d8 = TXN_COMMITTED;
-    if (tctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
-        M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
-    }
-//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld\n",
-//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
 }
 
 

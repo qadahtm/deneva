@@ -220,10 +220,10 @@ public:
 #endif
 private:
 //  uint64_t head;
-#if CC_ALG == QUECC
+//#if CC_ALG == QUECC
     int64_t _et_id =-1;
     int64_t _pt_id =-1;
-#endif
+//#endif
 };
 
 

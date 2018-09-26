@@ -142,6 +142,7 @@ UInt32 g_send_thread_cnt = SEND_THREAD_CNT;
 // sequencer + scheduler thread
 UInt32 g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_abort_thread_cnt + g_logger_thread_cnt + 2;
 #elif CC_ALG == QUECC || CC_ALG == LADS
+UInt32 g_cluster_worker_thread_cnt = NODE_CNT*THREAD_CNT;
 UInt32 g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_plan_thread_cnt;
 #elif CC_ALG == DUMMY_CC
 UInt32 g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt;
@@ -202,10 +203,6 @@ const UInt32 g_plan_thread_cnt = THREAD_CNT;
 UInt32 g_batch_size = BATCH_SIZE;
 UInt32 g_exec_qs_max_size = EXEC_QS_MAX_SIZE;
 const UInt32 g_batch_map_length = BATCH_MAP_LENGTH;
-// For mapping between PTs and Cores
-uint16_t g_pt_map[PLAN_THREAD_CNT];
-// For mapping between ETs and Cores
-uint16_t g_et_map[THREAD_CNT];
 
 #if DEBUG_QUECC
 volatile atomic<int64_t> ** plan_active;

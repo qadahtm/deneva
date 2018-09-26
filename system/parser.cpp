@@ -187,9 +187,10 @@ void parser(int argc, char * argv[]) {
   g_total_thread_cnt += g_logger_thread_cnt; // logger thread
 #endif
 #if CC_ALG == CALVIN
-//    g_total_thread_cnt += 2; // sequencer + scheduler thread
+    g_total_thread_cnt += 2; // sequencer + scheduler thread
   // Remove abort thread
   g_abort_thread_cnt = 0;
+    g_total_thread_cnt -= 1;
 #endif
 
 #if CC_ALG == QUECC

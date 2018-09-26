@@ -221,9 +221,9 @@ RC InputThread::server_recv_loop() {
         INC_STATS(_thd_id, mtx[29], get_sys_clock() - starttime);
 
     }
-
+#if CC_ALG == QUECC
     DEBUG_Q("Total messages enq. to planners = %ld\n", planner_msg_cnt);
-
+#endif
     printf("FINISH %ld:%ld\n", _node_id, _thd_id);
     fflush(stdout);
     return FINISH;

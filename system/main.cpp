@@ -355,8 +355,8 @@ int main(int argc, char* argv[])
     all_thd_cnt += 1; // logger thread
 #endif
 #if CC_ALG == CALVIN
-//    all_thd_cnt += 2; // sequencer + scheduler thread
-    wthd_cnt = thd_cnt -2; // use less worker counts
+    all_thd_cnt += 2; // sequencer + scheduler thread
+//    wthd_cnt = thd_cnt -2; // use less worker counts ???
 #endif
 
 #if CC_ALG == QUECC

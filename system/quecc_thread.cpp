@@ -2353,7 +2353,8 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     // populate with g_thead_cnt+1 pools. The pool at g_thread_cnt will be used when there is no perference to specific
     // thread id
     // FIXME(tq): do we need this for batch partitions
-    for (uint64_t i=0; i < g_thread_cnt; ++i){
+
+    for (uint64_t i=0; i < g_cluster_worker_thread_cnt; ++i){
         for (uint64_t j=0; j < g_plan_thread_cnt; ++j){
             exec_queue_free_list[i][j]     = new boost::lockfree::queue<Array<exec_queue_entry> *> (FREE_LIST_INITIAL_SIZE);
             batch_part_free_list[i][j]     = new boost::lockfree::queue<batch_partition *> (FREE_LIST_INITIAL_SIZE);
@@ -2439,7 +2440,7 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
 #endif
     }
     else{
-//        M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
+        M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
         exec_q->clear();
 #if DEBUG_QUECC
         exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
@@ -2456,7 +2457,7 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 //    while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
     while(!exec_queue_free_list[qet_id][qpt_id]->push(exec_q)){};
 #if DEBUG_QUECC
-//    SAMPLED_DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
+//    DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
     exec_q_rel_cnts[et_id][planner_id].fetch_add(1);
 #endif
 }

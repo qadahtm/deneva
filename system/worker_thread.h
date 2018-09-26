@@ -148,7 +148,7 @@ public:
 
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
-    uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
+    uint64_t bucket_size = g_synth_table_size / (g_thread_cnt*g_node_cnt);
 #elif WORKLOAD == TPCC
     // 9223372036854775807 = 2^63
     // FIXME(tq): Use a parameter to determine the maximum database size

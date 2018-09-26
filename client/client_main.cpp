@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
 #endif
 
   endtime = get_server_clock();
-  printf("Initialization Time = %ld\n", endtime - starttime);
+  printf("Initialization Time = %ld, all_thd_cnt(client)=%lu\n", endtime - starttime,all_thd_cnt);
   fflush(stdout);
 	warmup_done = true;
 	pthread_barrier_init( &warmup_bar, NULL, all_thd_cnt);
@@ -166,42 +166,61 @@ int main(int argc, char* argv[])
     CPU_ZERO(&cpus);
     CPU_SET(cpu_cnt, &cpus);
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
-    cpu_cnt++;
+//    cpu_cnt++;
+
 	for (uint64_t i = 0; i < thd_cnt; i++) {
-		CPU_ZERO(&cpus);
+//#if SET_AFFINITY
+        CPU_ZERO(&cpus);
+        CPU_SET(cpu_cnt, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        cpu_cnt++;
+//#endif
+//		CPU_ZERO(&cpus);
 //#if TPORT_TYPE_IPC
 //        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
 //#elif !SET_AFFINITY
 //        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
 //#else
-        CPU_SET(cpu_cnt, &cpus);
+//        CPU_SET(cpu_cnt, &cpus);
 //#endif
 //    cpu_cnt = (cpu_cnt + 1) % g_servers_per_client;
-        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+//        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
         client_thds[i].init(id,g_node_id,m_wl);
 		pthread_create(&p_thds[id++], &attr, run_thread, (void *)&client_thds[i]);
         pthread_setname_np(p_thds[id-1], "worker");
-        cpu_cnt++;
+//        cpu_cnt++;
     }
 
 	for (uint64_t j = 0; j < rthd_cnt ; j++) {
         input_thds[j].init(id,g_node_id,m_wl);
+//#if SET_AFFINITY
         CPU_ZERO(&cpus);
         CPU_SET(cpu_cnt, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        cpu_cnt++;
+//#endif
+//        CPU_ZERO(&cpus);
+//        CPU_SET(cpu_cnt, &cpus);
+//        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
 		pthread_create(&p_thds[id++], &attr, run_thread, (void *)&input_thds[j]);
         pthread_setname_np(p_thds[id-1], "receiver");
-        cpu_cnt++;
+//        cpu_cnt++;
     }
 
 	for (uint64_t i = 0; i < sthd_cnt; i++) {
         output_thds[i].init(id,g_node_id,m_wl);
+//#if SET_AFFINITY
         CPU_ZERO(&cpus);
         CPU_SET(cpu_cnt, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        cpu_cnt++;
+//#endif
+//        CPU_ZERO(&cpus);
+//        CPU_SET(cpu_cnt, &cpus);
+//        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
 		pthread_create(&p_thds[id++], &attr, run_thread, (void *)&output_thds[i]);
         pthread_setname_np(p_thds[id-1], "sender");
-        cpu_cnt++;
+//        cpu_cnt++;
     }
 	for (uint64_t i = 0; i < all_thd_cnt; i++) 
 		pthread_join(p_thds[i], NULL);

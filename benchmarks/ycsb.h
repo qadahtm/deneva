@@ -52,9 +52,9 @@ public :
     RC get_txn_man(TxnManager *&txn_manager);
 
     int key_to_part(uint64_t key);
-
+#if CC_ALG == QUECC
     RC resolve_txn_dependencies(Message* msg, transaction_context * txn_ctxs, uint64_t cid);
-
+#endif
     INDEX *the_index;
     table_t *the_table;
 #if NUMA_ENABLED
