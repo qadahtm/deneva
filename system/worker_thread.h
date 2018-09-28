@@ -109,6 +109,8 @@ public:
 
     RC commit_txn(priority_group * planner_pg, uint64_t txn_idx);
 
+    RC commit_txn(transaction_context * tctx);
+
     void finalize_txn_commit(transaction_context * tctx, RC rc);
 
     void wt_release_accesses(transaction_context * context, RC rc);
@@ -124,6 +126,7 @@ public:
 #if !PIPELINED
 
     uint64_t _planner_id;
+    uint64_t _worker_cluster_wide_id;
     uint64_t query_cnt =0;
 
     inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){

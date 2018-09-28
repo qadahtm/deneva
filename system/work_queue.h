@@ -96,7 +96,7 @@ public:
 #if BATCH_MAP_ORDER == BATCH_ET_PT
     volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];
 #else //BATCH_MAP_ORDER == BATCH_PT_ET
-    volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT][THREAD_CNT];
+    volatile atomic<uint64_t> batch_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT*NODE_CNT][THREAD_CNT];
 #endif
 //    uint64_t gbatch_id = 0;
 //    batch_partition batch_map[BATCH_MAP_LENGTH][THREAD_CNT][PLAN_THREAD_CNT];

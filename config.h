@@ -6,13 +6,14 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 2
-#define THREAD_CNT 4
+#define THREAD_CNT 2
 #define REM_THREAD_CNT 1//THREAD_CNT
 #define SEND_THREAD_CNT 1//THREAD_CNT
 #define CORE_CNT 8
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
-#define PART_CNT (NODE_CNT*THREAD_CNT)
+//#define PART_CNT (NODE_CNT*THREAD_CNT)
+#define PART_CNT NODE_CNT
 
 
 // TQ: since we have 20 cores per node on halstead
@@ -21,10 +22,10 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 4
-#define CLIENT_THREAD_CNT 4
-#define CLIENT_REM_THREAD_CNT 2
-#define CLIENT_SEND_THREAD_CNT 2
+#define CLIENT_NODE_CNT 1
+#define CLIENT_THREAD_CNT 2
+#define CLIENT_REM_THREAD_CNT 1
+#define CLIENT_SEND_THREAD_CNT 1
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -120,7 +121,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG NO_WAIT
+#define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -186,7 +187,8 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-#define BATCH_SIZE 10368
+#define BATCH_SIZE 64 // testing
+//#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
@@ -242,7 +244,7 @@
 #define YCSB_INDEX_LOOKUP_PLAN true
 
 #define CT_ENABLED false
-#define EXEC_BUILD_TXN_DEPS true
+#define EXEC_BUILD_TXN_DEPS false
 #define TDG_ENTRY_LENGTH 1000
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
@@ -253,7 +255,7 @@
 #define MIN_EXECQ_SIZE 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
-#define ROW_ACCESS_TRACKING true
+#define ROW_ACCESS_TRACKING false
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
@@ -334,7 +336,8 @@
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
 //#define MAX_TXN_PER_PART    (500000/PART_CNT)
-#define MAX_TXN_PER_PART    15625
+//#define MAX_TXN_PER_PART    15625
+#define MAX_TXN_PER_PART    32
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -352,10 +355,10 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM THREAD_CNT
 //#define SYNTH_TABLE_SIZE 1024
-//#define SYNTH_TABLE_SIZE  65536
+#define SYNTH_TABLE_SIZE  65536*NODE_CNT
 //#define SYNTH_TABLE_SIZE   10*1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
@@ -472,7 +475,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -567,10 +570,10 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
+#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

@@ -481,7 +481,8 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
         }
         assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
 #endif
-//        DEBUG_WL("Selected part_id = %ld, key=%ld, computed_part_id=%d\n", partition_id, primary_key, ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
+//        DEBUG_Q("Selected part_id = %ld, key=%ld, computed_part_id=%d, g_part_cnt=%u, g_synth_table_size=%lu\n",
+//                partition_id, primary_key, ((YCSBWorkload *)h_wl)->key_to_part(primary_key),g_part_cnt,g_synth_table_size);
         assert(primary_key < g_synth_table_size);
 
         req->key = primary_key;
