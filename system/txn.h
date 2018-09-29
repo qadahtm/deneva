@@ -199,18 +199,20 @@ public:
             e8 = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
             d8 = e8 + 1;
         } while(!entry->txn_ctx->completion_cnt.compare_exchange_strong(e8,d8,memory_order_acq_rel));
-#if SINGLE_NODE
+//#if SINGLE_NODE
         if (d8 == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
-//            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu\n",entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel), entry->txn_ctx->txn_comp_cnt.load());
+            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu, txn_ctx_ptr=%lu\n",
+                    entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel),
+                    entry->txn_ctx->txn_comp_cnt.load(),(uint64_t)entry->txn_ctx);
             // this is the last entry to be executed, we should be ready to commit
-                e8 = TXN_STARTED;
-                d8 = TXN_READY_TO_COMMIT;
-                if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8,memory_order_acq_rel)) {
-                    M_ASSERT_V(false,"ET_%ld: Invalid txn state = %ld, txn_id=%ld, ctx_txn_id=%lu\n",
-                               _thd_id,entry->txn_ctx->txn_state.load(), entry->txn_id, entry->txn_ctx->txn_id);
-                }
+//                e8 = TXN_STARTED;
+//                d8 = TXN_READY_TO_COMMIT;
+//                if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8,memory_order_acq_rel)) {
+//                    M_ASSERT_V(false,"ET_%ld: Invalid txn state = %ld, txn_id=%ld, ctx_txn_id=%lu\n",
+//                               _thd_id,entry->txn_ctx->txn_state.load(), entry->txn_id, entry->txn_ctx->txn_id);
+//                }
         }
-#endif
+//#endif
     }
 
     void     row_access_backup(exec_queue_entry * entry, access_t type, row_t * row, uint64_t ctid);

@@ -148,10 +148,11 @@ public:
     void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man);
 
     void do_batch_delivery(uint64_t batch_slot, priority_group * planner_pg);
+    void do_batch_delivery_mpt(uint64_t batch_slot, priority_group * planner_pg);
 
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
-    uint64_t bucket_size = g_synth_table_size / (g_thread_cnt*g_node_cnt);
+    uint64_t bucket_size = g_synth_table_size / g_cluster_worker_thread_cnt;
 #elif WORKLOAD == TPCC
     // 9223372036854775807 = 2^63
     // FIXME(tq): Use a parameter to determine the maximum database size
@@ -172,7 +173,14 @@ private:
 
 
 #if CC_ALG == QUECC
-    uint64_t planner_batch_size = g_batch_size/g_plan_thread_cnt;
+    uint64_t planner_batch_size = get_planner_batch_size();
+
+    uint64_t get_planner_batch_size() {
+//        return g_batch_size/g_cluster_worker_thread_cnt;
+        assert(quecc_pool.planner_batch_size > 0);
+        return quecc_pool.planner_batch_size;
+    }
+
 #if !PIPELINED
     // for QueCC palnning
 
@@ -251,6 +259,11 @@ private:
 #endif // - if CC_ALG == QUECC
 
 
+    uint64_t get_exec_node(uint64_t i);
+    uint64_t get_plan_node(uint64_t i);
+
+    uint64_t map_to_planner_id(uint64_t cwid);
+    uint64_t map_to_cwplanner_id(uint64_t planner_id);
 };
 
 #endif

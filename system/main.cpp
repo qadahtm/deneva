@@ -92,8 +92,8 @@ int main(int argc, char* argv[])
 	printf("Random seed: %ld\n",seed);
 
 #if CC_ALG == QUECC && BATCHING_MODE == SIZE_BASED
-    M_ASSERT_V(g_batch_size % g_plan_thread_cnt == 0, "(BATCH_SIZE) remainder PLAN_THREAD_CNT != 0,"
-            " please configure them proparly, remainder = %d", g_batch_size % g_plan_thread_cnt)
+    M_ASSERT_V(g_batch_size % g_cluster_worker_thread_cnt == 0, "(BATCH_SIZE) remainder PLAN_THREAD_CNT != 0,"
+            " please configure them proparly, remainder = %d", g_batch_size % g_cluster_worker_thread_cnt)
 #endif
 	int64_t starttime;
 	int64_t endtime;
@@ -388,6 +388,8 @@ int main(int argc, char* argv[])
             all_thd_cnt, g_this_total_thread_cnt);
     M_ASSERT_V(all_thd_cnt == g_this_total_thread_cnt, "all_thd_cnt (%ld) ==  g_this_total_thread_cnt (%d)\n",
                all_thd_cnt, g_this_total_thread_cnt);
+
+    assert(BATCH_SIZE/(PLAN_THREAD_CNT*NODE_CNT) > 0);
 
     pthread_t * p_thds;
     pthread_attr_t attr;

@@ -60,8 +60,8 @@ void QWorkQueue::init() {
   }
 #else
   for (uint64_t i=0; i < g_batch_map_length ; i++){
-    for (uint64_t j=0; j < g_plan_thread_cnt; j++){
-      for (uint64_t k=0; k< g_thread_cnt ; k++){
+    for (uint64_t j=0; j < g_cluster_worker_thread_cnt; j++){
+      for (uint64_t k=0; k< g_cluster_worker_thread_cnt ; k++){
         (batch_map[i][j][k]).store(0);
       }
     }
@@ -206,7 +206,7 @@ Message * QWorkQueue::plan_dequeue(uint64_t thd_id, uint64_t home_partition) {
     work_queue_entry * entry = NULL;
     bool valid = plan_queue[home_partition]->pop(entry);
     if(valid) {
-    msg = entry->msg;
+        msg = entry->msg;
     assert(msg);
 //    DEBUG_Q("Planner Dequeue (%ld,%ld)\n",entry->txn_id,entry->batch_id);
     //DEBUG("DEQUEUE (%ld,%ld) %ld; %ld; %d, 0x%lx\n",msg->txn_id,msg->batch_id,msg->return_node_id,queue_time,msg->rtype,(uint64_t)msg);

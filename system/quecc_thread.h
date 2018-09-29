@@ -152,7 +152,7 @@ struct exec_queue_entry {
 struct priority_group{
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
-    transaction_context txn_ctxs[BATCH_SIZE/PLAN_THREAD_CNT];
+    transaction_context txn_ctxs[BATCH_SIZE/(PLAN_THREAD_CNT*NODE_CNT)];
 #else
     transaction_context * txn_ctxs;
 #endif
@@ -316,9 +316,9 @@ private:
     row_data_pool_t row_data_pool[THREAD_CNT*NODE_CNT];
     spinlock * row_data_pool_lock;
     boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
-    boost::lockfree::queue<Array<exec_queue_entry> *> * exec_queue_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
-    boost::lockfree::queue<batch_partition *> * batch_part_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
-    boost::lockfree::queue<atomic<uint8_t> *> * exec_qs_status_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
+    boost::lockfree::queue<Array<exec_queue_entry> *> * exec_queue_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    boost::lockfree::queue<batch_partition *> * batch_part_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    boost::lockfree::queue<atomic<uint8_t> *> * exec_qs_status_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
     boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
@@ -331,26 +331,26 @@ private:
 
     // Stats for debugging
     // TODO(tq): remove or use a macro to turn them off
-#if DEBUG_QUECC
-    atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
-    atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
-    atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
+#if DEBUG_QUECC && false
+    atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
 
-    atomic<uint64_t> exec_q_alloc_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
-    atomic<uint64_t> exec_q_reuse_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
-    atomic<uint64_t> exec_q_rel_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT];
+    atomic<uint64_t> exec_q_alloc_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> exec_q_reuse_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> exec_q_rel_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
 
-    atomic<uint64_t> exec_qs_alloc_cnts[PLAN_THREAD_CNT];
-    atomic<uint64_t> exec_qs_reuse_cnts[PLAN_THREAD_CNT];
-    atomic<uint64_t> exec_qs_rel_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> exec_qs_alloc_cnts[PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> exec_qs_reuse_cnts[PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> exec_qs_rel_cnts[PLAN_THREAD_CNT*NODE_CNT];
 
-    atomic<uint64_t> txn_ctxs_alloc_cnts[PLAN_THREAD_CNT];
-    atomic<uint64_t> txn_ctxs_reuse_cnts[PLAN_THREAD_CNT];
-    atomic<uint64_t> txn_ctxs_rel_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> txn_ctxs_alloc_cnts[PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> txn_ctxs_reuse_cnts[PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> txn_ctxs_rel_cnts[PLAN_THREAD_CNT*NODE_CNT];
 
-    atomic<uint64_t> pg_alloc_cnts[PLAN_THREAD_CNT];
-    atomic<uint64_t> pg_reuse_cnts[PLAN_THREAD_CNT];
-    atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT];
+    atomic<uint64_t> pg_alloc_cnts[PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> pg_reuse_cnts[PLAN_THREAD_CNT*NODE_CNT];
+    atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT*NODE_CNT];
 #endif
 };
 
