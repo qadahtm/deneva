@@ -159,7 +159,7 @@ public:
 //    boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
 //    boost::lockfree::queue<priority_group *> ** pg_free_list;
 
-#if QUECC_DEBUG
+#if DEBUG_QUECC & false
     atomic<int64_t> inflight_msg;
 #endif
 //------

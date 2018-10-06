@@ -105,8 +105,18 @@ RC YCSBWorkload::resolve_txn_dependencies(Message* msg, transaction_context * tc
 
 int 
 YCSBWorkload::key_to_part(uint64_t key) {
+#if YCSB_RANGE_PARITIONING
 	uint64_t rows_per_part = g_synth_table_size / g_part_cnt;
 	return (key / rows_per_part) % g_part_cnt;
+#else
+	//TQ: it is assumed that NODE_CNT==PART_CNT
+	// for QUECC, we further partition within a single node
+#if CC_ALG == QUECC
+	return key % (g_cluster_worker_thread_cnt);
+#else
+	return key % g_part_cnt;
+#endif
+#endif
 }
 
 RC YCSBWorkload::init_table() {
@@ -306,10 +316,17 @@ void *YCSBWorkload::init_table_slice() {
 		 key++
 			) {
 #if !SERVER_GENERATE_QUERIES
-        if(GET_NODE_ID(key_to_part(key)) != g_node_id) {
-      ++key;
-      continue;
-    }
+#if YCSB_RANGE_PARITIONING
+		if (GET_NODE_ID(key_to_part(key)) != g_node_id) {
+			++key;
+			continue;
+		}
+#else
+		if (GET_NODE_ID(key_to_part(key)) != g_node_id) {
+			++key;
+			continue;
+		}
+#endif // #if YCSB_RANGE_PARITIONING
 #endif
 
 		++key_cnt;

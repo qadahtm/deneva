@@ -34,7 +34,11 @@ public:
   uint64_t last_worker_epoch_time;
   uint64_t last_seq_epoch_time;
   int64_t epoch_txn_cnt;
-  uint64_t txn_cnt;
+
+#if COUNT_BASED_SIM_ENABLED
+  std::atomic<uint64_t> txn_cnt_warmup;
+  std::atomic<uint64_t> txn_cnt;
+#endif
   uint64_t inflight_cnt;
 
   void init();
@@ -46,7 +50,8 @@ public:
   bool timeout();
   void set_starttime(uint64_t starttime);
   void process_setup_msg();
-  void inc_txn_cnt(); 
+  void inc_txn_cnt();
+	void inc_txn_cnt(uint64_t v);
   void inc_inflight_cnt(); 
   void dec_inflight_cnt(); 
   uint64_t get_worker_epoch(); 

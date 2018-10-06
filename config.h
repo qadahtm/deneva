@@ -6,9 +6,10 @@
 // Simulation + Hardware
 /***********************************************/
 #define NODE_CNT 2
-#define THREAD_CNT 2
-#define REM_THREAD_CNT 1//THREAD_CNT
-#define SEND_THREAD_CNT 1//THREAD_CNT
+//#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
+#define THREAD_CNT 4
+#define REM_THREAD_CNT 2//THREAD_CNT
+#define SEND_THREAD_CNT 2//THREAD_CNT
 #define CORE_CNT 8
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
@@ -22,10 +23,10 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 1
-#define CLIENT_THREAD_CNT 2
-#define CLIENT_REM_THREAD_CNT 1
-#define CLIENT_SEND_THREAD_CNT 1
+#define CLIENT_NODE_CNT 2
+#define CLIENT_THREAD_CNT 4
+#define CLIENT_REM_THREAD_CNT 2
+#define CLIENT_SEND_THREAD_CNT 2
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -42,7 +43,8 @@
 #define CL_SIZE           64
 //#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
-#define CPU_FREQ            2.4//2.6 // FOR D15v3
+//#define CPU_FREQ            2.5// FOR m4.2xlarge
+#define CPU_FREQ            3.0// FOR c4.2xlarge
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -61,7 +63,8 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT BATCH_SIZE*10
+#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
+//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*4
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -114,7 +117,8 @@
 
 #define PRIORITY_WORK_QUEUE false
 #define PRIORITY PRIORITY_ACTIVE
-#define MSG_SIZE_MAX 4096
+#define MSG_SIZE_MAX 4096*128
+//#define MSG_SIZE_MAX 4096*16
 #define MSG_TIME_LIMIT 0
 
 /***********************************************/
@@ -187,8 +191,8 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-#define BATCH_SIZE 64 // testing
-//#define BATCH_SIZE 10368
+//#define BATCH_SIZE 256 // testing
+#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
@@ -241,7 +245,8 @@
 #define ARRAY_ENTRY     0
 #define VECTOR_ENTRY    1
 
-#define YCSB_INDEX_LOOKUP_PLAN true
+// this does not work in distributed settings
+#define YCSB_INDEX_LOOKUP_PLAN false
 
 #define CT_ENABLED false
 #define EXEC_BUILD_TXN_DEPS false
@@ -249,9 +254,9 @@
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
 // Controls execution queue split behavior.
-#define EXECQ_CAP_FACTOR 20
+#define EXECQ_CAP_FACTOR 10
 #define EXECQ_EXPAND_FACTOR 1
-#define EXPANDABLE_EQS true
+#define EXPANDABLE_EQS false
 #define MIN_EXECQ_SIZE 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
@@ -335,9 +340,9 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-//#define MAX_TXN_PER_PART    (500000/PART_CNT)
+#define MAX_TXN_PER_PART    500000
 //#define MAX_TXN_PER_PART    15625
-#define MAX_TXN_PER_PART    32
+//#define MAX_TXN_PER_PART    32
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -353,12 +358,13 @@
 #define DATA_PERC 100
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
-#define INIT_PARALLELISM THREAD_CNT
+#define INIT_PARALLELISM    4//THREAD_CNT
+#define YCSB_RANGE_PARITIONING true
 //#define SYNTH_TABLE_SIZE 1024
-#define SYNTH_TABLE_SIZE  65536*NODE_CNT
+//#define SYNTH_TABLE_SIZE  65536*NODE_CNT
 //#define SYNTH_TABLE_SIZE   10*1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-//#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
+#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
@@ -398,7 +404,7 @@
 #define WH_UPDATE         true
 #define NUM_WH THREAD_CNT
 // % of transactions that access multiple partitions
-#define MPR 0.0 // used for TPCC and YCSB
+#define MPR 1.0 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -475,7 +481,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -496,6 +502,12 @@ enum PPSTxnType {PPS_ALL = 0,
 //#define SIM_BATCH_CNT 1000/BATCH_SIZE
 #define SIM_BATCH_CNT 1000
 //#define SIM_BATCH_CNT 12000
+//#define SIM_TXN_CNT 1024*1024*60 // 60 Million transactions per server
+//#define SIM_TXN_CNT_WARMUP 1024*1024*30 // 60 Million transactions per server
+#define SIM_TXN_CNT BATCH_SIZE*2 // 60 Million transactions per server
+#define SIM_TXN_CNT_WARMUP BATCH_SIZE*1 // 60 Million transactions per server
+#define COUNT_BASED_SIM_ENABLED false
+
 /***********************************************/
 // Constant
 /***********************************************/
@@ -567,13 +579,13 @@ enum PPSTxnType {PPS_ALL = 0,
 #define BILLION 1000000000UL // in ns => 1 second
 #define MILLION 1000000UL // in ns => 1 second
 #define STAT_ARR_SIZE 1024
-#define PROG_TIMER 10 * BILLION // in s
+#define PROG_TIMER 5 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
-//#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 20 * BILLION // ~60 seconds
-#define WARMUP_TIMER 1 * 20 * BILLION // ~1 second
+#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 30 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 10 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

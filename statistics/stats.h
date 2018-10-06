@@ -40,6 +40,7 @@ public:
 	void print(FILE * outf, bool prog);
 	void print_client(FILE * outf, bool prog);
 	void clear();
+    void free();
 
 	char _pad2[CL_SIZE];
   
@@ -364,6 +365,7 @@ public:
 	Stats_thd * totals;
 	
 	void init(uint64_t thread_cnt);
+    void free(uint64_t thread_cnt);
 	void clear(uint64_t tid);
 	//void add_lat(uint64_t thd_id, uint64_t latency);
 	void commit(uint64_t thd_id);

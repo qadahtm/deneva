@@ -151,6 +151,8 @@ public:
 
     RC run_quecc_txn(exec_queue_entry *exec_qe);
 
+    RC run_quecc_txn(exec_queue_entry * exec_qe, bool update_context);
+
     RC payment_lookup_w(uint64_t w_id, row_t *&r_wh_local) {
         uint64_t key;
         itemid_t *item;

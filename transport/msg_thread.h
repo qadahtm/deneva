@@ -50,6 +50,7 @@ struct mbuf {
     //size += s;
   }
   bool fits(uint64_t s) {
+//    DEBUG_Q("Message size=%lu, Max Size=%lu\n",(ptr+s),g_msg_size);
     return (ptr + s) <= g_msg_size;
   }
   bool ready() {

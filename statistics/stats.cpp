@@ -591,7 +591,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   if(single_part_txn_cnt > 0)
     single_part_txn_avg_time = single_part_txn_run_time / single_part_txn_cnt;
   fprintf(outf,
-#if QUECC_DEBUG
+#if DEBUG_QUECC & false
           ",inf_msgs=%ld"
 #endif
   ",tput=%f"
@@ -618,7 +618,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ",record_write_cnt=%ld"
   ",parts_touched=%ld"
   ",avg_parts_touched=%f"
-#if QUECC_DEBUG
+#if DEBUG_QUECC & false
           ,work_queue.inflight_msg.load()
 #endif
   ,tput
@@ -1918,6 +1918,10 @@ void Stats_thd::combine(Stats_thd * stats) {
   lat_s_rem_process_time+=stats->lat_s_rem_process_time;
 }
 
+void Stats_thd::free() {
+
+}
+
 
 void Stats::init(uint64_t thread_cnt) {
 	if (!STATS_ENABLE) 
@@ -2263,6 +2267,18 @@ void Stats::cpu_util(FILE * outf) {
   lastCPU = now;
   lastSysCPU = timeSample.tms_stime;
   lastUserCPU = timeSample.tms_utime;
+}
+
+void Stats::free(uint64_t thread_cnt) {
+  totals->free();
+
+  for(uint64_t i = 0; i < thread_cnt; i++) {
+    _stats[i]->free();
+    mem_allocator.free(_stats[i],0);
+  }
+
+  delete [] _stats;
+  delete totals;
 }
 
 

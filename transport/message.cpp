@@ -170,6 +170,17 @@ Message * Message::create_message(RemReqType rtype) {
     case CL_RSP:
       msg = new ClientResponseMessage;
       break;
+#if CC_ALG == QUECC
+      case REMOTE_EQ:
+          msg = new RemoteEQMessage;
+      break;
+      case REMOTE_EQ_ACK:
+          msg = new RemoteEQAckMessage;
+      break;
+      case REMOTE_OP_ACK:
+          msg = new RemoteOpAckMessage;
+      break;
+#endif
     default: assert(false);
   }
   assert(msg);
@@ -177,6 +188,8 @@ Message * Message::create_message(RemReqType rtype) {
   msg->txn_id = UINT64_MAX;
   msg->batch_id = UINT64_MAX;
   msg->return_node_id = g_node_id;
+
+#if CC_ALG != QUECC
   msg->wq_time = 0;
   msg->mq_time = 0;
   msg->ntwk_time = 0;
@@ -188,7 +201,7 @@ Message * Message::create_message(RemReqType rtype) {
   msg->lat_process_time = 0;
   msg->lat_network_time = 0;
   msg->lat_other_time = 0;
-
+#endif
 
   return msg;
 }
@@ -197,7 +210,7 @@ uint64_t Message::mget_size() {
   uint64_t size = 0;
   size += sizeof(RemReqType);
   size += sizeof(uint64_t);
-#if CC_ALG == CALVIN
+#if CC_ALG == CALVIN || CC_ALG == QUECC
   size += sizeof(uint64_t);
 #endif
   // for stats, send message queue time
@@ -211,7 +224,7 @@ uint64_t Message::mget_size() {
 void Message::mcopy_from_txn(TxnManager * txn) {
   //rtype = query->rtype;
   txn_id = txn->get_txn_id();
-#if CC_ALG == CALVIN
+#if CC_ALG == CALVIN || CC_ALG == QUECC
   batch_id = txn->get_batch_id();
 #endif
 }
@@ -225,7 +238,7 @@ void Message::mcopy_from_buf(char * buf) {
   uint64_t ptr = 0;
   COPY_VAL(rtype,buf,ptr);
   COPY_VAL(txn_id,buf,ptr);
-#if CC_ALG == CALVIN
+#if CC_ALG == CALVIN || CC_ALG == QUECC
   COPY_VAL(batch_id,buf,ptr);
 #endif
   COPY_VAL(mq_time,buf,ptr);
@@ -249,7 +262,7 @@ void Message::mcopy_to_buf(char * buf) {
   uint64_t ptr = 0;
   COPY_BUF(buf,rtype,ptr);
   COPY_BUF(buf,txn_id,ptr);
-#if CC_ALG == CALVIN
+#if CC_ALG == CALVIN || CC_ALG == QUECC
   COPY_BUF(buf,batch_id,ptr);
 #endif
   COPY_BUF(buf,mq_time,ptr);
@@ -259,7 +272,7 @@ void Message::mcopy_to_buf(char * buf) {
   COPY_BUF(buf,lat_cc_block_time,ptr);
   COPY_BUF(buf,lat_cc_time,ptr);
   COPY_BUF(buf,lat_process_time,ptr);
-  if ((CC_ALG == CALVIN && rtype == CL_QRY && txn_id % g_node_cnt == g_node_id) || (CC_ALG != CALVIN && IS_LOCAL(txn_id))) {
+  if (((CC_ALG == CALVIN || CC_ALG == QUECC) && rtype == CL_QRY && txn_id % g_node_cnt == g_node_id) || (CC_ALG != CALVIN && IS_LOCAL(txn_id))) {
     lat_network_time = get_sys_clock();
   } else {
     lat_other_time = get_sys_clock() - lat_other_time;
@@ -366,6 +379,29 @@ void Message::release_message(Message * msg) {
       delete m_msg;
       break;
                  }
+
+#if CC_ALG == QUECC
+      case REMOTE_EQ:{
+          RemoteEQMessage * m_msg = (RemoteEQMessage*)msg;
+          m_msg->release();
+          delete m_msg;
+          break;
+      }
+
+      case REMOTE_EQ_ACK:{
+          RemoteEQAckMessage * m_msg = (RemoteEQAckMessage*)msg;
+          m_msg->release();
+          delete m_msg;
+          break;
+      }
+
+      case REMOTE_OP_ACK:{
+          RemoteOpAckMessage * m_msg = (RemoteOpAckMessage*)msg;
+          m_msg->release();
+          delete m_msg;
+          break;
+      }
+#endif
     default: { assert(false); }
   }
 }
@@ -1266,6 +1302,132 @@ void DoneMessage::copy_to_buf(char * buf) {
   uint64_t ptr = Message::mget_size();
  assert(ptr == get_size());
 }
+
+/************************/
+
+#if CC_ALG == QUECC
+uint64_t RemoteEQMessage::get_size() {
+    uint64_t size = Message::mget_size();
+    size += sizeof(uint64_t); // for planner_id
+    size += sizeof(uint64_t); // for exec_id
+    size += sizeof(uint64_t); // for EQ size
+    if (exec_q != nullptr){
+        size += sizeof(exec_queue_entry) * exec_q->size();
+    }
+    return size;
+}
+
+
+void RemoteEQMessage::copy_from_buf(char * buf) {
+    Message::mcopy_from_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    COPY_VAL(planner_id,buf,ptr);
+    COPY_VAL(exec_id,buf,ptr);
+    size_t size;
+    COPY_VAL(size,buf,ptr);
+//    DEBUG_Q("1RemoteEQMessage %lu, batch_id=%lu, planner_id=%lu, exec_id=%lu, op_cnt=%lu\n",
+//            ptr,batch_id,planner_id,exec_id,size);
+    if (size > 0){
+        quecc_pool.exec_queue_get_or_create(exec_q,planner_id,exec_id);
+        size_t items_size = sizeof(exec_queue_entry)*size;
+        memcpy(exec_q->items,&buf[ptr],items_size);
+        ptr += items_size;
+        exec_q->count = size;
+    }
+    else{
+        exec_q = nullptr;
+    }
+//    DEBUG_Q("2RemoteEQMessage %lu\n",ptr);
+    assert(ptr == get_size());
+}
+
+void RemoteEQMessage::copy_to_buf(char * buf) {
+    Message::mcopy_to_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    COPY_BUF(buf,planner_id,ptr);
+    COPY_BUF(buf,exec_id,ptr);
+    size_t size = exec_q->size();
+    COPY_BUF(buf,size,ptr);
+    size_t items_size = sizeof(exec_queue_entry)*size;
+    memcpy(&buf[ptr], exec_q->items,items_size);
+    ptr += items_size;
+//    DEBUG_Q("Sending RemoteEQMessage: batch_id=%lu, planner_id=%lu, exec_id=%lu, size=%lu\n",batch_id,planner_id,exec_id,size);
+    assert(ptr == get_size());
+}
+
+void RemoteEQMessage::copy_from_txn(TxnManager * txn) {
+    Message::mcopy_from_txn(txn);
+}
+
+void RemoteEQMessage::copy_to_txn(TxnManager * txn) {
+    Message::mcopy_to_txn(txn);
+}
+
+void RemoteEQMessage::release() {
+//    Message::release();
+}
+
+/************************/
+
+uint64_t RemoteEQAckMessage::get_size() {
+    uint64_t size = Message::mget_size();
+    size += sizeof(uint64_t); // for planner_id
+    size += sizeof(uint64_t); // for exec_id
+    return size;
+}
+
+void RemoteEQAckMessage::copy_from_txn(TxnManager * txn) {
+    Message::mcopy_from_txn(txn);
+}
+
+void RemoteEQAckMessage::copy_to_txn(TxnManager * txn) {
+    Message::mcopy_to_txn(txn);
+}
+
+void RemoteEQAckMessage::copy_from_buf(char * buf) {
+    Message::mcopy_from_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    COPY_VAL(planner_id,buf,ptr);
+    COPY_VAL(exec_id,buf,ptr);
+    assert(ptr == get_size());
+}
+
+void RemoteEQAckMessage::copy_to_buf(char * buf) {
+    Message::mcopy_to_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    COPY_BUF(buf,planner_id,ptr);
+    COPY_BUF(buf,exec_id,ptr);
+    assert(ptr == get_size());
+}
+
+/************************/
+
+uint64_t RemoteOpAckMessage::get_size() {
+    uint64_t size = Message::mget_size();
+    return size;
+}
+
+void RemoteOpAckMessage::copy_from_txn(TxnManager * txn) {
+    Message::mcopy_from_txn(txn);
+}
+
+void RemoteOpAckMessage::copy_to_txn(TxnManager * txn) {
+    Message::mcopy_to_txn(txn);
+}
+
+void RemoteOpAckMessage::copy_from_buf(char * buf) {
+    Message::mcopy_from_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    assert(ptr == get_size());
+}
+
+void RemoteOpAckMessage::copy_to_buf(char * buf) {
+    Message::mcopy_to_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    assert(ptr == get_size());
+}
+
+#endif
 
 /************************/
 

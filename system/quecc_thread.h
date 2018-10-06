@@ -162,6 +162,7 @@ struct batch_partition{
     atomic<uint64_t> status;
     priority_group * planner_pg;
     bool empty;
+    bool remote;
     // A small optimization in case there is only a single exec_q
     // This optimization will avoid a cache miss
     bool single_q;
@@ -311,6 +312,18 @@ public:
     uint64_t exec_queue_capacity;
     uint64_t planner_batch_size;
 
+    static uint64_t get_exec_node(uint64_t i);
+    static uint64_t get_plan_node(uint64_t i);
+
+    static uint64_t map_to_planner_id(uint64_t cwid);
+    static uint64_t map_to_cwplanner_id(uint64_t planner_id);
+
+    struct timespec ts_req[THREAD_CNT];
+    struct timespec ts_rem[THREAD_CNT];
+
+    atomic<int32_t> batch_deps[BATCH_MAP_LENGTH];
+    atomic<int64_t> last_commited_batch_id;
+
 private:
 
     row_data_pool_t row_data_pool[THREAD_CNT*NODE_CNT];
@@ -331,7 +344,7 @@ private:
 
     // Stats for debugging
     // TODO(tq): remove or use a macro to turn them off
-#if DEBUG_QUECC && false
+#if DEBUG_QUECC
     atomic<uint64_t> batch_part_alloc_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
     atomic<uint64_t> batch_part_reuse_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
     atomic<uint64_t> batch_part_rel_cnts[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
@@ -349,6 +362,7 @@ private:
     atomic<uint64_t> txn_ctxs_rel_cnts[PLAN_THREAD_CNT*NODE_CNT];
 
     atomic<uint64_t> pg_alloc_cnts[PLAN_THREAD_CNT*NODE_CNT];
+
     atomic<uint64_t> pg_reuse_cnts[PLAN_THREAD_CNT*NODE_CNT];
     atomic<uint64_t> pg_rel_cnts[PLAN_THREAD_CNT*NODE_CNT];
 #endif
@@ -632,7 +646,7 @@ public:
 
             // release current mrange
 //            quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
-            quecc_pool.exec_queue_release(mrange,_planner_id,_thd_id);
+            quecc_pool.exec_queue_release(mrange,QueCCPool::map_to_planner_id(_planner_id),_thd_id);
 //        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
 
             // use the new ranges to assign the new execution entry

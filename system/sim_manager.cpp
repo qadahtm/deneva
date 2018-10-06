@@ -24,7 +24,10 @@ void SimManager::init() {
   warmup_end_time = 0;
 	start_set = false;
 	sim_init_done = false;
-  txn_cnt = 0;
+#if COUNT_BASED_SIM_ENABLED
+  txn_cnt.store(0,memory_order_acq_rel);
+  txn_cnt_warmup.store(0,memory_order_acq_rel);
+#endif
   inflight_cnt = 0;
   epoch_txn_cnt = 0;
   worker_epoch = 1;
@@ -109,7 +112,27 @@ void SimManager::process_setup_msg() {
 }
 
 void SimManager::inc_txn_cnt() {
-  ATOM_ADD(txn_cnt,1);
+  inc_txn_cnt(1);
+}
+
+void SimManager::inc_txn_cnt(uint64_t v) {
+#if COUNT_BASED_SIM_ENABLED
+  uint64_t tcnt = 0;
+  if (is_warmup_done()){
+    tcnt = txn_cnt.fetch_add(v,memory_order_acq_rel);
+    if ((tcnt+v) >= (SIM_TXN_CNT/NODE_CNT)){
+      set_done();
+    }
+  }
+  else{
+    // still in warmup
+    tcnt = txn_cnt_warmup.fetch_add(v,memory_order_acq_rel);
+    if ((tcnt+v) >= (SIM_TXN_CNT_WARMUP/NODE_CNT)){
+      ATOM_CAS(warmup_end_time,0,get_server_clock());
+      ATOM_CAS(warmup,false,true);
+    }
+  }
+#endif
 }
 
 void SimManager::inc_inflight_cnt() {

@@ -69,7 +69,7 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
         // free msg, queries
 #if WORKLOAD == YCSB
         YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)wait_list[id].msg;
-#if !SINGLE_NODE && SERVER_GENERATE_QUERIES
+#if !SINGLE_NODE
         // we should not clear query request pointers because they will be reused by transactions
         for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
             DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
@@ -78,7 +78,7 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
 #endif
 #elif WORKLOAD == TPCC
         TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)wait_list[id].msg;
-#if !SINGLE_NODE && SERVER_GENERATE_QUERIES
+#if !SINGLE_NODE
       if(cl_msg->txn_type == TPCC_NEW_ORDER) {
           for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
               DEBUG_M("Sequencer::process_ack() items free\n");

@@ -30,6 +30,7 @@
 #include "message.h"
 #include "client_txn.h"
 #include "work_queue.h"
+#include "txn.h"
 
 void InputThread::setup() {
 
@@ -65,7 +66,7 @@ void InputThread::setup() {
 //      DEBUG_Q("Enqueue to planning layer\n")
 #if WORKLOAD == YCSB
                 if (msg->rtype == CL_QRY) {
-                    work_queue.plan_enqueue(get_thd_id(), msg);
+                    work_queue.plan_enqueue(planner_msg_cnt % g_plan_thread_cnt, msg);
                     planner_msg_cnt++;
                     msgs->erase(msgs->begin());
                     continue;
@@ -131,8 +132,9 @@ RC InputThread::client_recv_loop() {
             //INC_STATS_ARR(get_thd_id(),all_lat,timespan);
             inf = client_man.dec_inflight(return_node_offset);
             // TQ: QueCC stats
-            client_man.inflight_msgs.fetch_sub(1);
-            stats.totals->quecc_txn_comp_cnt.fetch_add(1);
+//            client_man.inflight_msgs.fetch_sub(1);
+//            stats.totals->quecc_txn_comp_cnt.fetch_add(1);
+//            simulation->inc_txn_cnt(1);
 
             DEBUG("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
                   float(timespan)/BILLION);
@@ -204,7 +206,7 @@ RC InputThread::server_recv_loop() {
                 // FIXME(tq): if there are > 1 input threads planner_msg_cnt risks a race condition and must inc atomically
                 work_queue.plan_enqueue(planner_msg_cnt % g_plan_thread_cnt, msg);
                 planner_msg_cnt++;
-#if QUECC_DEBUG
+#if DEBUG_QUECC & false
                 work_queue.inflight_msg.fetch_add(1);
 #endif
                 msgs->erase(msgs->begin());
@@ -212,6 +214,104 @@ RC InputThread::server_recv_loop() {
             }
 #endif
 
+            if( msg->rtype == RDONE) {
+                assert(ISSERVERN(msg->get_return_id()));
+//                DEBUG_Q("Received RDONE from node=%lu for batch_id=%lu\n", msg->return_node_id, msg->batch_id);
+
+                quecc_pool.batch_deps[ msg->batch_id % g_batch_map_length].fetch_add(-1,memory_order_acq_rel);
+                Message::release_message(msg);
+                msgs->erase(msgs->begin());
+
+                continue;
+            }
+
+            if (msg->rtype == REMOTE_EQ) {
+                RemoteEQMessage * eq_msg = (RemoteEQMessage *) msg;
+                //spin here if other node is ahead of the currently executing batch on this node
+//                while(quecc_pool.last_commited_batch_id.load(memory_order_acq_rel) < (eq_msg->batch_id-1)){}
+
+                uint64_t batch_slot = eq_msg->batch_id % g_batch_map_length;
+                batch_partition * batch_part;
+                quecc_pool.batch_part_get_or_create(batch_part, eq_msg->planner_id, eq_msg->exec_id);
+
+                if (eq_msg->exec_q == nullptr){
+                    batch_part->empty = true;
+//                    quecc_pool.exec_queue_release(eq_msg->exec_q, eq_msg->planner_id, eq_msg->exec_id);
+                    DEBUG_Q("Received Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu, EQ_size=%lu\n",
+                            eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id, 0L);
+                }
+                else{
+                    DEBUG_Q("Received Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu, EQ_size=%lu\n",
+                            eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id, eq_msg->exec_q->size());
+                    batch_part->exec_q = eq_msg->exec_q;
+                }
+
+                batch_part->remote = true;
+
+                uint64_t expected = 0;
+                uint64_t desired = (uint64_t) batch_part;
+                // neet to spin if batch slot is not ready
+                while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
+
+//                if(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired)){
+//                    // this should not happen after spinning but can happen if simulation is done
+//                    M_ASSERT_V(false, "Node_%u: For batch %lu : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
+//                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
+//                }
+
+//                DEBUG_Q("Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu] EQ_size=%lu\n",
+//                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id, eq_msg->exec_q->size());
+
+                // cannot release message yet!! relase on cleanup ???
+                //Actually we can release it here since the pointer of exec_q is already set
+                Message::release_message(msg);
+                msgs->erase(msgs->begin());
+                continue;
+            }
+
+
+            if (msg->rtype == REMOTE_EQ_ACK) {
+                RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) msg;
+                DEBUG_Q("Received ACK for remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",
+                        req_ack->return_node_id, req_ack->planner_id, req_ack->exec_id, req_ack->batch_id);
+                uint64_t batch_slot = req_ack->batch_id % g_batch_map_length;
+                batch_partition * batch_part = (batch_partition *) work_queue.batch_map[batch_slot][req_ack->planner_id][req_ack->exec_id].load();
+                assert(batch_part);
+                //assume single EQ per batch part
+                assert(batch_part->single_q);
+
+                // update txn contexts 'locally'
+                if (!batch_part->empty){
+                    for (uint64_t j = 0; j < batch_part->exec_q->size(); ++j) {
+//                        batch_part->exec_q->get_ptr(j)->txn_ctx->completion_cnt.fetch_add(1,memory_order_acq_rel);
+                        TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
+                    }
+//                    DEBUG_Q("updated txn_ctx for %lu entries\n",batch_part->exec_q->size());
+                }
+
+//                // release EQs
+                quecc_pool.exec_queue_release(batch_part->exec_q, req_ack->planner_id, req_ack->exec_id);
+//
+//                // release batch part
+                quecc_pool.batch_part_release(batch_part, req_ack->planner_id, req_ack->exec_id);
+
+//                // reset or clean up
+//                uint64_t desired = 0;
+//                uint64_t expected = (uint64_t) batch_part;
+//#if BATCH_MAP_ORDER == BATCH_ET_PT
+//                while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
+//                    DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
+//                }
+//#else
+////        DEBUG_Q("ET_%ld: RESET batch map slot=%ld, PG=%ld, batch_id=%ld \n", _thd_id, batch_slot, wplanner_id, wbatch_id);
+//                if(!work_queue.batch_map[batch_slot][req_ack->planner_id][req_ack->exec_id].compare_exchange_strong(expected, desired)){
+//                    M_ASSERT_V(false, "ET_%ld: failing to RESET map slot for REMOTE EQ \n", req_ack->exec_id);
+//                }
+//#endif
+                Message::release_message(msg);
+                msgs->erase(msgs->begin());
+                continue;
+            }
 #endif // CC_ALG == QUECC
             work_queue.enqueue(get_thd_id(), msg, false);
             msgs->erase(msgs->begin());

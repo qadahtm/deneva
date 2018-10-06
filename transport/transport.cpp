@@ -228,7 +228,7 @@ void Transport::send_msg(uint64_t send_thread_id, uint64_t dest_node_id, void * 
   // Copy messages to nanomsg buffer
 	void * buf = nn_allocmsg(size,0);
 	memcpy(buf,sbuf,size);
-  DEBUG("%ld Sending batch of %d bytes to node %ld on socket %ld\n",send_thread_id,size,dest_node_id,(uint64_t)socket);
+//  DEBUG("%ld Sending batch of %d bytes to node %ld on socket %ld\n",send_thread_id,size,dest_node_id,(uint64_t)socket);
 
   int rc = -1;
   while(rc < 0 && (!simulation->is_setup_done() || (simulation->is_setup_done() && !simulation->is_done()))) {
@@ -295,7 +295,7 @@ std::vector<Message*> * Transport::recv_msg(uint64_t thd_id) {
 	starttime = get_sys_clock();
 
   msgs = Message::create_messages((char*)buf);
-  DEBUG("Batch of %d bytes recv from node %ld; Time: %f\n",bytes,msgs->front()->return_node_id,simulation->seconds_from_start(get_sys_clock()));
+//  DEBUG("Batch of %d bytes recv from node %ld; Time: %f\n",bytes,msgs->front()->return_node_id,simulation->seconds_from_start(get_sys_clock()));
 
 	nn::freemsg(buf);	
 

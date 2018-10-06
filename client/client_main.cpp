@@ -156,25 +156,27 @@ int main(int argc, char* argv[])
 	warmup_done = true;
 	pthread_barrier_init( &warmup_bar, NULL, all_thd_cnt);
 
-	uint64_t cpu_cnt = 0;
-	cpu_set_t cpus;
 	// spawn and run txns again.
 	starttime = get_server_clock();
     simulation->run_starttime = starttime;
 
     uint64_t id = 0;
+#if SET_AFFINITY
+    uint64_t cpu_cnt = 0;
+    cpu_set_t cpus;
     CPU_ZERO(&cpus);
     CPU_SET(cpu_cnt, &cpus);
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
+#endif
 //    cpu_cnt++;
 
 	for (uint64_t i = 0; i < thd_cnt; i++) {
-//#if SET_AFFINITY
+#if SET_AFFINITY
         CPU_ZERO(&cpus);
         CPU_SET(cpu_cnt, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
         cpu_cnt++;
-//#endif
+#endif
 //		CPU_ZERO(&cpus);
 //#if TPORT_TYPE_IPC
 //        CPU_SET(g_node_id * thd_cnt + cpu_cnt, &cpus);
@@ -193,12 +195,12 @@ int main(int argc, char* argv[])
 
 	for (uint64_t j = 0; j < rthd_cnt ; j++) {
         input_thds[j].init(id,g_node_id,m_wl);
-//#if SET_AFFINITY
+#if SET_AFFINITY
         CPU_ZERO(&cpus);
         CPU_SET(cpu_cnt, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
         cpu_cnt++;
-//#endif
+#endif
 //        CPU_ZERO(&cpus);
 //        CPU_SET(cpu_cnt, &cpus);
 //        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
@@ -209,12 +211,12 @@ int main(int argc, char* argv[])
 
 	for (uint64_t i = 0; i < sthd_cnt; i++) {
         output_thds[i].init(id,g_node_id,m_wl);
-//#if SET_AFFINITY
+#if SET_AFFINITY
         CPU_ZERO(&cpus);
         CPU_SET(cpu_cnt, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
         cpu_cnt++;
-//#endif
+#endif
 //        CPU_ZERO(&cpus);
 //        CPU_SET(cpu_cnt, &cpus);
 //        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);

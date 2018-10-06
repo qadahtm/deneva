@@ -944,7 +944,7 @@ RC WorkerThread::run_fixed_mode() {
 
 #if !PIPELINED
 SRC WorkerThread::plan_batch(uint64_t batch_slot, TxnManager * my_txn_man) {
-    uint64_t next_part = 0; // we have client buffers are paritioned based on part cnt
+//    uint64_t next_part = 0; // we have client buffers are paritioned based on part cnt
     Message * msg = NULL;
     priority_group * planner_pg;
     transaction_context * txn_ctxs = NULL;
@@ -1295,7 +1295,7 @@ void WorkerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, 
 
         // release current mrange
 //            quecc_pool.exec_queue_release(mrange,_planner_id,RAND(g_plan_thread_cnt));
-        quecc_pool.exec_queue_release(mrange,_planner_id,_thd_id);
+        quecc_pool.exec_queue_release(mrange,QueCCPool::map_to_planner_id(_planner_id),_thd_id);
 //        DEBUG_Q("PL_%ld: key =%lu, nidx=%ld, idx=%ld, trial=%d\n", _planner_id, key, nidx, idx, trial);
 
         // use the new ranges to assign the new execution entry
@@ -1614,6 +1614,7 @@ void WorkerThread::plan_client_msg(Message *msg, transaction_context *txn_ctxs, 
 
 #if !INIT_QUERY_MSGS
     // Free message, as there is no need for it anymore
+    msg->release();
     Message::release_message(msg);
 #endif
 
@@ -1644,14 +1645,14 @@ void WorkerThread::do_batch_delivery_mpt(uint64_t batch_slot, priority_group * p
 #endif
 
 
-//#if DEBUG_QUECC
-//        uint64_t total_eq_entries = 0;
-//        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
-//            DEBUG_Q("ET_%ld: plan_batch - ET[%ld] = %ld\n",_thd_id,i,exec_queues->get(i)->size());
-//            total_eq_entries += exec_queues->get(i)->size();
-//        }
-//        DEBUG_Q("ET_%ld: plan_batch - total eq entries = %ld\n",_thd_id,total_eq_entries);
-//#endif
+#if DEBUG_QUECC & false
+        uint64_t total_eq_entries = 0;
+        for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
+            DEBUG_Q("ET_%ld: plan_batch - ET[%ld] = %ld\n",_thd_id,i,exec_queues->get(i)->size());
+            total_eq_entries += exec_queues->get(i)->size();
+        }
+        DEBUG_Q("ET_%ld: plan_batch - total eq entries = %ld\n",_thd_id,total_eq_entries);
+#endif
 
 
     // consider remote EQs
@@ -1665,87 +1666,66 @@ void WorkerThread::do_batch_delivery_mpt(uint64_t batch_slot, priority_group * p
      * If remote: create a message and enqueue to sender thread
      */
 
-    uint64_t planner_cwid = map_to_cwplanner_id(_planner_id);
+    uint64_t planner_cwid = QueCCPool::map_to_cwplanner_id(_planner_id);
 
     for (uint64_t i =0; i < exec_qs_ranges->size(); ++i){
         exec_q_tmp = exec_queues->get(i);
 
-        if (get_exec_node(i) == g_node_id) {
-            // local
-            quecc_pool.batch_part_get_or_create(batch_part, planner_cwid, i);
-            batch_part->exec_q = exec_q_tmp;
-            batch_part->planner_pg = planner_pg;
-            DEBUG_Q("Node_%u:PT_%lu:CWCID_%lu:WT_%lu:TargetNode=%lu: Assigned to ET_%lu, size = %lu\n",
-                    g_node_id,_planner_id,planner_cwid,_thd_id,get_exec_node(i), i, exec_q_tmp->size()
-            );
+        // assign all EQs locally
+        quecc_pool.batch_part_get_or_create(batch_part, planner_cwid, i);
+        batch_part->exec_q = exec_q_tmp;
+        batch_part->planner_pg = planner_pg;
 
-            // In case batch slot is not ready, spin!
-            expected = 0;
-            desired = (uint64_t) batch_part;
-            if(!work_queue.batch_map[batch_slot][planner_cwid][i].compare_exchange_strong(expected, desired)){
-                // this should not happen after spinning but can happen if simulation is done
-                M_ASSERT_V(false, "Node_%u:PT_%lu:CWPID_%lu:WT_%lu:TargetNode=%lu:targetEQ:%lu: For batch %ld : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
-                           g_node_id,_planner_id,planner_cwid,_thd_id,get_exec_node(i),i, wbatch_id, batch_slot, _planner_id, work_queue.batch_map[batch_slot][planner_cwid][i].load());
-            }
-
+        if (batch_part->exec_q->size() == 0){
+            batch_part->empty = true;
         }
-        else{
+
+        // In case batch slot is not ready, spin!
+        expected = 0;
+        desired = (uint64_t) batch_part;
+//        DEBUG_Q("N_%u:PT_%lu:CWCID_%lu:WT_%lu:TargetNode=%lu: Batch_map[%lu][%lu][%lu] , size = %lu\n",
+//                g_node_id,_planner_id,planner_cwid,_thd_id,QueCCPool::get_exec_node(i),wbatch_id,planner_cwid,i, exec_q_tmp->size()
+//        );
+
+        if (QueCCPool::get_exec_node(i) != g_node_id) {
             // remote
             // FIXME(tq): just for testing implement actual remote handling, these should be sent to remote nodes
             // FIXME(tq): also we should reduce the dimention of the batch map and do not include slots for these
-            // for now, just ignore them
-            assert(exec_q_tmp->size() == 0);
-//            quecc_pool.batch_part_get_or_create(batch_part, _planner_id, i);
-//            if (exec_q_tmp->size() == 0) {
-//                batch_part->empty = true;
-//                quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, et_id);
-                DEBUG_Q("Node_%u:PT_%lu:CWCID_%lu:WT_%lu:TargetNode=%lu: Ignoring assignment to ET_%lu, size = %lu\n",
-                        g_node_id,_planner_id,planner_cwid,_thd_id,get_exec_node(i), i, 0L
-                );
-//            }
-//            else{
-//                M_ASSERT_V(false, "Node_%u:WT_%ld:CWPID_%lu: For batch %ld : remote is not empty!!!! [%ld],  PG=[%ld], batch_map_val=%ld\n",
-//                           g_node_id,_thd_id,planner_cwid, wbatch_id, batch_slot, _planner_id, work_queue.batch_map[batch_slot][_planner_id][i].load());
-//            }
-//            expected = 0;
-//            desired = (uint64_t) batch_part;
-//            if(!work_queue.batch_map[batch_slot][planner_cwid][i].compare_exchange_strong(expected, desired)){
-//                // this should not happen after spinning but can happen if simulation is done
-//                M_ASSERT_V(false, "Node_%u:PT_%lu:CWPID_%lu:WT_%lu:TargetNode=%lu:targetEQ:%lu: For batch %ld : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
-//                           g_node_id,_planner_id,planner_cwid,_thd_id,get_exec_node(i),i, wbatch_id, batch_slot, _planner_id, work_queue.batch_map[batch_slot][_planner_id][i].load());
-//            }
+            // for remote EQs we keep track of their operations,
+            // when their execution gets ack'ed we can update their txn contexts correctly
+//            assert(exec_q_tmp->size() == 0);
+//            quecc_pool.batch_part_get_or_create(batch_part, planner_cwid, i);
+//            batch_part->empty = true;
+
+            DEBUG_Q("N_%u:PT_%lu:CWCID_%lu:WT_%lu:TargetNode=%lu: Sending EQ to REMOTE ET_%lu, size = %lu, batch_id=%lu\n",
+                    g_node_id,_planner_id,planner_cwid,_thd_id,QueCCPool::get_exec_node(i), i, exec_q_tmp->size(),wbatch_id
+            );
+
+            // create remote message and send it
+            Message * req_msg = (RemoteEQMessage *) Message::create_message(REMOTE_EQ);
+            req_msg->batch_id = wbatch_id;
+            req_msg->return_node_id = get_node_id();
+            ((RemoteEQMessage *) req_msg)->planner_id = planner_cwid;
+            ((RemoteEQMessage *) req_msg)->exec_id = i;
+            ((RemoteEQMessage *) req_msg)->exec_q = exec_q_tmp;
+            msg_queue.enqueue(_thd_id,req_msg,QueCCPool::get_exec_node(i));
+
+            batch_part->remote = true;
         }
-    }
-
-    //FIXME(tq): remove me later must
-    // batch_part is set by the receiver thread
-    // fill in dummy values for remote planners
-    // pretent that I am a remote planner with the same
-    for (uint64_t i= 0;  i<g_node_cnt ; i++) {
-        if (i != (uint64_t)g_node_id){
-            planner_cwid = _planner_id + (i * g_plan_thread_cnt);
-
-            for (uint64_t j= 0;  j<g_thread_cnt ; j++) {
-                uint64_t et_cwid = j + (g_node_id *
-                                        g_thread_cnt);
-                assert(get_exec_node(et_cwid) == g_node_id);
-                quecc_pool.batch_part_get_or_create(batch_part, planner_cwid, et_cwid);
-                batch_part->empty = true;
-                DEBUG_Q("Pretending to be Node_%lu:PT_%lu:CWID_%lu:TargetNode=%u: Assigned (empty) to ET_%lu, size = %lu\n",
-                        i,planner_cwid,_worker_cluster_wide_id,g_node_id, et_cwid, 0L
-                );
-                expected = 0;
-                desired = (uint64_t) batch_part;
-                if(!work_queue.batch_map[batch_slot][planner_cwid][et_cwid].compare_exchange_strong(expected, desired)){
-                    // this should not happen after spinning but can happen if simulation is done
-                    M_ASSERT_V(false, "Node_%u:PT_%lu:CWPID_%lu:WT_%lu:TargetNode=%lu:targetEQ:%lu: For batch %lu : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
-                               g_node_id,i,_worker_cluster_wide_id,_worker_cluster_wide_id,get_exec_node(_worker_cluster_wide_id),_worker_cluster_wide_id, wbatch_id, batch_slot, i, work_queue.batch_map[batch_slot][planner_cwid][et_cwid].load());
-                }
-
-            }
+        else{
+            DEBUG_Q("N_%u:PT_%lu:CWCID_%lu:WT_%lu:TargetNode=%lu: Assigned LOCAL to ET_%lu, size = %lu, batch_id=%lu\n",
+                    g_node_id,_planner_id,planner_cwid,_thd_id,QueCCPool::get_exec_node(i), i, exec_q_tmp->size(),wbatch_id
+            );
         }
-    }
 
+        while(!simulation->is_done() && !work_queue.batch_map[batch_slot][planner_cwid][i].compare_exchange_strong(expected, desired)){};
+
+//        if(!work_queue.batch_map[batch_slot][planner_cwid][i].compare_exchange_strong(expected, desired)){
+//            // this should not happen after spinning but can happen if simulation is done
+//            M_ASSERT_V(false, "Node_%u:PT_%lu:CWPID_%lu:WT_%lu:TargetNode=%lu:targetEQ:%lu: For batch %ld : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
+//                       g_node_id,_planner_id,planner_cwid,_thd_id,QueCCPool::get_exec_node(i),i, wbatch_id, batch_slot, _planner_id, work_queue.batch_map[batch_slot][planner_cwid][i].load());
+//        }
+    }
 
 #if PROFILE_EXEC_TIMING
     INC_STATS(_thd_id, plan_merge_time[_planner_id], get_sys_clock()-_prof_starttime);
@@ -1758,7 +1738,7 @@ void WorkerThread::do_batch_delivery_mpt(uint64_t batch_slot, priority_group * p
     exec_queues->clear();
     for (uint64_t i = 0; i < exec_qs_ranges->size(); i++) {
         Array<exec_queue_entry> * exec_q;
-        quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i);
+        quecc_pool.exec_queue_get_or_create(exec_q, QueCCPool::map_to_cwplanner_id(_planner_id), i);
         exec_queues->add(exec_q);
     }
 
@@ -1852,7 +1832,7 @@ void WorkerThread::do_batch_delivery(uint64_t batch_slot, priority_group * plann
             else{
                 uint64_t et_id =  (rand() % g_thread_cnt);
 //                    DEBUG_Q("PT_%ld: releasing empty to ET_%ld\n", _planner_id, et_id);
-                quecc_pool.exec_queue_release(exec_q_tmp,_planner_id, et_id);
+                quecc_pool.exec_queue_release(exec_q_tmp,QueCCPool::map_to_planner_id(_planner_id), et_id);
             }
         }
     }
@@ -3210,6 +3190,29 @@ SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
 #endif
 //                DEBUG_Q("ET_%ld: all other ETs has finished their commit\n", _thd_id);
 
+        //TQ: At this point all the local threads are sync'ed and arrived at here
+        for (uint32_t i = 0; i < g_node_cnt; ++i) {
+            if (i != g_node_id) {
+//                DEBUG_Q("N_%u:WT_%lu: Sending RDONE msg for batch_id=%lu to node=%u\n",g_node_id,_thd_id,wbatch_id,i);
+                Message * batch_done_msg = Message::create_message(RDONE);
+                batch_done_msg->batch_id = wbatch_id;
+                msg_queue.enqueue(_thd_id,batch_done_msg,i);
+            }
+        }
+
+        while(!simulation->is_done() && quecc_pool.batch_deps[batch_slot].load(memory_order_acq_rel) > 0){}
+
+        if (simulation->is_done()){
+            return BREAK;
+        }
+        // we should have received messages from all nodes
+        //reste batch_deps
+        int32_t de = 0;
+        if(!quecc_pool.batch_deps[batch_slot].compare_exchange_strong(de,(NODE_CNT-1),memory_order_acq_rel)){
+            assert(false);
+        }
+
+//        DEBUG_Q("N_%u:WT_%lu: all nodes are done for batch_id=%lu\n",g_node_id,_thd_id,wbatch_id);
         //TODO(tq): remove this later
 #if SYNC_MASTER_BATCH_CLEANUP
         // cleanup my batch part and allow planners waiting on me to
@@ -3522,7 +3525,7 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
 #endif
 
 #endif
-        DEBUG_Q("N_%u:ET_%lu: got a PG from planner %lu, batch_slot = %lu\n",g_node_id,_thd_id, wplanner_id, batch_slot);
+//        DEBUG_Q("N_%u:ET_%lu: got a PG from planner %lu, batch_slot = %lu\n",g_node_id,_thd_id, wplanner_id, batch_slot);
 //
         if (execute_batch_part(batch_slot, eq_comp_cnts, my_txn_man) == BREAK){
             return BREAK;
@@ -3544,7 +3547,8 @@ SRC WorkerThread::execute_batch(uint64_t batch_slot, uint64_t * eq_comp_cnts, Tx
         INC_STATS(_thd_id, wt_pg_sync_exec_time[_thd_id], get_sys_clock()-hl_prof_starttime);
 #endif
 #endif
-        DEBUG_Q("N_%u:ET_%lu: finished PG from planner %lu, batch_slot = %lu\n",g_node_id,_thd_id, wplanner_id, batch_slot);
+//        DEBUG_Q("N_%u:ET_%lu: finished PG from planner %lu, batch_slot = %lu, batch_id=%lu\n",
+//                g_node_id,_thd_id, wplanner_id, batch_slot,wbatch_id);
 
         // go to the next batch partition prepared by the next planner since the previous one has been committed
         wplanner_id++;
@@ -3612,10 +3616,6 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
     uint64_t commit_et_id =0;
     uint64_t commit_cnt = 0;
     uint64_t abort_cnt = 0;
-//    uint64_t cplanner_id = 0;
-
-    uint64_t e8 =0;
-    uint64_t d8 =0;
 
     RC rc;
 #if FIXED_COMMIT_THREAD_CNT
@@ -3626,7 +3626,10 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
 
 
     for (uint64_t i=0; i < g_plan_thread_cnt;++i){
-        DEBUG_Q("N_%u:WT_%lu: going to commit for PG[%lu], pg_index=%lu, plan_node=%lu\n",g_node_id, _thd_id, map_to_cwplanner_id(i),i,get_plan_node(i));
+//        if(_thd_id == 0){
+//            DEBUG_Q("N_%u:WT_%lu: going to commit for PG[%lu], pg_index=%lu, batch_id=%lu\n",
+//                    g_node_id, _thd_id, QueCCPool::map_to_cwplanner_id(i),i,wbatch_id);
+//        }
         abort_cnt = 0;
         commit_cnt = 0;
 #if PROFILE_EXEC_TIMING
@@ -3646,8 +3649,8 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
                 // I should be committing this transaction
                 assert(i < g_plan_thread_cnt && batch_slot < g_batch_map_length);
                 planner_pg = &work_queue.batch_pg_map[batch_slot][i];
-                DEBUG_Q("N_%u:ET_%ld:CWID_%lu: is trying to commit txn_id = %ld, batch_id = %ld, txn_per_pg=%lu, txn_ctx_ptr=%lu\n",
-                        g_node_id,_thd_id,_worker_cluster_wide_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg, (uint64_t)&planner_pg->txn_ctxs[j]);
+//                DEBUG_Q("N_%u:ET_%ld:CWID_%lu: is trying to commit txn_id = %ld, batch_id = %ld, txn_per_pg=%lu, txn_ctx_ptr=%lu\n",
+//                        g_node_id,_thd_id,_worker_cluster_wide_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg, (uint64_t)&planner_pg->txn_ctxs[j]);
 //                rc = commit_txn(planner_pg, j);
                 rc = commit_txn(&planner_pg->txn_ctxs[j]);
                 if (rc == Commit){
@@ -3681,13 +3684,13 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
 //                        M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
 //                    }
 
-                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld, txn_per_pg=%lu\n",
-                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg);
+//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld, txn_per_pg=%lu\n",
+//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg);
                     commit_cnt++;
                 }
                 else if (rc == WAIT){
-                    DEBUG_Q("ET_%ld: WAIT transaction txn_id = %ld, batch_id = %ld, txn_per_pg=%lu\n",
-                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg);
+//                    DEBUG_Q("ET_%ld: WAIT transaction txn_id = %ld, batch_id = %ld, txn_per_pg=%lu\n",
+//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id,txn_per_pg);
                     pending_txns->push_back(j);
                 }
                 else{
@@ -3758,6 +3761,10 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
 //                DEBUG_Q("ET_%ld: wating on txn_id = %ld, batch_id = %ld, rc = %d, commit_cnt = %ld, commit_dep_cnt=%ld\n",
 //                            _thd_id, planner_pg->txn_ctxs[txn_idx].txn_id, wbatch_id, rc,
 //                                commit_cnt, planner_pg->txn_ctxs[txn_idx].commit_dep_cnt.load(memory_order_acq_rel));
+
+//                if (simulation->is_done()){
+//                    break;
+//                }
                 continue;
             }
             if (rc == Commit){
@@ -3800,8 +3807,8 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
             pending_txns->pop_front();
         }
 
-        DEBUG_Q("N_%u:ET_%ld: committed %ld transactions, batch_id = %lu, PG=%lu, pg_idx=%lu\n",
-                g_node_id,_thd_id, commit_cnt, wbatch_id,map_to_cwplanner_id(i), i);
+//        DEBUG_Q("N_%u:ET_%ld: committed %ld transactions, batch_id = %lu, PG=%lu, pg_idx=%lu\n",
+//                g_node_id,_thd_id, commit_cnt, wbatch_id,QueCCPool::map_to_cwplanner_id(i), i);
         INC_STATS(_thd_id, txn_cnt, commit_cnt);
         INC_STATS(_thd_id, total_txn_abort_cnt, abort_cnt);
 //                DEBUG_Q("ET_%ld: commit count = %ld, PG=%ld, txn_per_pg = %ld, batch_id = %ld\n",
@@ -3810,6 +3817,9 @@ RC WorkerThread::commit_batch(uint64_t batch_slot){
         INC_STATS(_thd_id,exec_txn_commit_time[_thd_id],get_sys_clock() - quecc_commit_starttime);
 #endif
     }
+#if COUNT_BASED_SIM_ENABLED
+    simulation->inc_txn_cnt(commit_cnt+abort_cnt);
+#endif
     free(pending_txns);
     return RCOK;
 }
@@ -3839,18 +3849,18 @@ void WorkerThread::cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id,
     // reset batch_map_slot to zero after processing it
     // reset map slot to 0 to allow planners to use the slot
     batch_partition * batch_part = get_batch_part(batch_slot, wplanner_id, et_id);
-
+    assert(batch_part);
 #if PROFILE_EXEC_TIMING
     uint64_t quecc_prof_time;
 #endif
     if (batch_part->empty){
-#if PROFILE_EXEC_TIMING
-        quecc_prof_time = get_sys_clock();
-#endif
-        quecc_pool.batch_part_release(batch_part, wplanner_id, et_id);
-#if PROFILE_EXEC_TIMING
-        INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
-#endif
+//#if PROFILE_EXEC_TIMING
+//        quecc_prof_time = get_sys_clock();
+//#endif
+//        quecc_pool.batch_part_release(batch_part, wplanner_id, et_id);
+//#if PROFILE_EXEC_TIMING
+//        INC_STATS(_thd_id,exec_mem_free_time[et_id],get_sys_clock() - quecc_prof_time);
+//#endif
 //            DEBUG_Q("ET_%ld: PG %ld is empty to th next PG\n",_thd_id, wplanner_id);
         goto bc_end;
     }
@@ -3888,13 +3898,14 @@ void WorkerThread::cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id,
 
 batch_partition * WorkerThread::get_curr_batch_part(uint64_t batch_slot){
     batch_partition * batch_part;
-    DEBUG_Q("N_%u:WT_%ld:CWID_%lu: going to return batch part PG=%ld, batch_slot = %ld, batch_id = %ld!!\n",
-            g_node_id,_thd_id,_worker_cluster_wide_id, wplanner_id, batch_slot, wbatch_id);
+//    DEBUG_Q("N_%u:WT_%ld:CWID_%lu: going to return batch part Batch_map[%lu][%lu][%lu] for execution\n",
+//            g_node_id,_thd_id,_worker_cluster_wide_id, wbatch_id, wplanner_id, _worker_cluster_wide_id);
 #if BATCH_MAP_ORDER == BATCH_ET_PT
     batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
 #else
     do{
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_worker_cluster_wide_id].load();
+        if (simulation->is_done()) return batch_part;
     } while(batch_part == 0);
 #endif
     M_ASSERT_V(batch_part, "N_%u:WT_%ld: batch part pointer is zero, PG=%ld, batch_slot = %ld, batch_id = %ld!!\n",
@@ -4041,6 +4052,8 @@ end_proc:
         }
 #else
     batch_partition * batch_part = get_curr_batch_part(batch_slot);
+    if (simulation->is_done()) return BREAK;
+
     Array<exec_queue_entry> * exec_q;
 
     volatile uint64_t batch_part_eq_cnt = 0;
@@ -4084,7 +4097,8 @@ end_proc:
 
     if (batch_part->empty){
 //            DEBUG_Q("ET_%ld: going to work on PG %ld, batch_id = %ld\n",_thd_id, wplanner_id, wbatch_id);
-        return SUCCESS;
+        goto end_remote_eq;
+//        return SUCCESS;
     }
 
     //select an execution queue to work on.
@@ -4139,6 +4153,12 @@ end_proc:
         quecc_prof_time = get_sys_clock();
 #endif
 //            M_ASSERT_V(exec_qe_ptr->txn_ctx,"ET_%ld: invalid transaction context, batch_id=%ld\n", _thd_id, wbatch_id);
+        if (QueCCPool::get_plan_node(wplanner_id) == g_node_id){
+            my_txn_man->update_context = true;
+        }
+        else{
+            my_txn_man->update_context = false;
+        }
         rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
         capture_txn_deps(batch_slot, exec_qe_ptr, rc);
 #if PROFILE_EXEC_TIMING
@@ -4272,6 +4292,17 @@ end_proc:
 //                M_ASSERT_V(false, "simulation is done before finishing my batch partition\n")
         }
     }
+
+    end_remote_eq:
+    if (batch_part->remote){
+        DEBUG_Q("Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, et_id=%lu, remote node=%lu\n",
+                wbatch_id,wplanner_id,_worker_cluster_wide_id,QueCCPool::get_plan_node(wplanner_id));
+        RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) Message::create_message(REMOTE_EQ_ACK);
+        req_ack->batch_id = wbatch_id;
+        req_ack->planner_id = wplanner_id;
+        req_ack->exec_id = _worker_cluster_wide_id;
+        msg_queue.enqueue(_thd_id,req_ack,QueCCPool::get_plan_node(wplanner_id));
+    }
 #endif //#if LADS_IN_QUECC
     return SUCCESS;
 }
@@ -4343,8 +4374,11 @@ RC WorkerThread::commit_txn(transaction_context * j_ctx) {
     commit_txn_end:
     j_ctx->depslock.unlock();
 #else
-    if (frag_comp_cnt != frag_txn_cnt){
+    if (frag_comp_cnt < frag_txn_cnt){
         rc = WAIT;
+    }
+    else if(frag_comp_cnt > frag_txn_cnt){
+        assert(false);
     }
 #endif // #if EXEC_BUILD_TXN_DEPS
     return rc;
@@ -4622,7 +4656,7 @@ RC WorkerThread::run_normal_mode() {
 #else
     for (uint64_t i = 0; i < total_eq_cnt; i++) {
         Array<exec_queue_entry> * exec_q;
-        quecc_pool.exec_queue_get_or_create(exec_q, _planner_id, i);
+        quecc_pool.exec_queue_get_or_create(exec_q, QueCCPool::map_to_cwplanner_id(_planner_id), i);
         exec_queues->add(exec_q);
     }
 #endif
@@ -4954,13 +4988,13 @@ RC WorkerThread::run_normal_mode() {
 #endif
         if (src == SUCCESS){
         //Sync
-            DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
+//            DEBUG_Q("WT_%ld: going to sync for planning phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
 #if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 hl_prof_starttime = get_sys_clock();
             }
 #endif
-//            src = sync_on_planning_phase_end(batch_slot);
+            src = sync_on_planning_phase_end(batch_slot);
 #if PROFILE_EXEC_TIMING
             if (batch_proc_starttime > 0){
                 INC_STATS(_thd_id, wt_hl_sync_plan_time[_thd_id], get_sys_clock()-hl_prof_starttime);
@@ -4988,7 +5022,7 @@ RC WorkerThread::run_normal_mode() {
             if (src == SUCCESS) {
 
                 // ET is done with its PGs for the current batch
-            DEBUG_Q("ET_%ld: done with my batch partition, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
+//            DEBUG_Q("ET_%ld: done with my batch partitions, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
 
 //            DEBUG_Q("WT_%ld: going to sync for execution phase end, batch_id = %ld at batch_slot = %ld\n", _thd_id, wbatch_id, batch_slot);
                 // Sync
@@ -5008,7 +5042,7 @@ RC WorkerThread::run_normal_mode() {
                     goto end_et;
                 }
                 //Commit
-                DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
+//                DEBUG_Q("ET_%ld: starting parallel commit, batch_id = %ld\n", _thd_id, wbatch_id);
 
                 // process txn contexts in the current batch that are assigned to me (deterministically)
 #if PROFILE_EXEC_TIMING
@@ -5025,7 +5059,7 @@ RC WorkerThread::run_normal_mode() {
 #endif
 
                 // indicate that I am done with all commit phase
-                DEBUG_Q("N_%u:ET_%ld: is done with commit task, going to cleanup and sync for commit\n",g_node_id, _thd_id);
+//                DEBUG_Q("N_%u:ET_%ld: is done with commit task, going to cleanup and sync for commit\n",g_node_id, _thd_id);
 #if PROFILE_EXEC_TIMING
                 if (batch_proc_starttime > 0){
                     hl_prof_starttime = get_sys_clock();
@@ -5228,13 +5262,17 @@ RC WorkerThread::process_rfin(Message *msg) {
         txn_man->abort();
         txn_man->reset();
         txn_man->reset_query();
-        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), GET_NODE_ID(msg->get_txn_id()));
+//        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), GET_NODE_ID(msg->get_txn_id()));
+        assert(txn_man->get_txn_id() == msg->get_txn_id());
+        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), msg->get_return_id());
         return Abort;
     }
     txn_man->commit();
     //if(!txn_man->query->readonly() || CC_ALG == OCC)
-    if (!((FinishMessage *) msg)->readonly || CC_ALG == MAAT || CC_ALG == OCC)
-        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), GET_NODE_ID(msg->get_txn_id()));
+    if (!((FinishMessage *) msg)->readonly || CC_ALG == MAAT || CC_ALG == OCC){
+//        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), GET_NODE_ID(msg->get_txn_id()));
+        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), msg->get_return_id());
+    }
     release_txn_man();
 
     return RCOK;
@@ -5307,7 +5345,7 @@ RC WorkerThread::process_rack_rfin(Message *msg) {
 }
 
 RC WorkerThread::process_rqry_rsp(Message *msg) {
-    DEBUG("RQRY_RSP %ld\n", msg->get_txn_id());
+    DEBUG("RQRY_RSP txn_id=%ld\n", msg->get_txn_id());
     assert(IS_LOCAL(msg->get_txn_id()));
 
     txn_man->txn_stats.remote_wait_time += get_sys_clock() - txn_man->txn_stats.wait_starttime;
@@ -5320,9 +5358,9 @@ RC WorkerThread::process_rqry_rsp(Message *msg) {
     RC rc = txn_man->run_txn();
     check_if_done(rc);
 
-    if (rc != RCOK || rc != Abort){
-        DEBUG_Q("TH_%ld: RC=%d", _thd_id,rc);
-    }
+//    if (rc != RCOK || rc != Abort){
+//        DEBUG_Q("TH_%ld: RC=%d\n", _thd_id,rc);
+//    }
 
     return rc;
 
@@ -5398,8 +5436,11 @@ RC WorkerThread::process_rprepare(Message *msg) {
 }
 
 uint64_t WorkerThread::get_next_txn_id() {
-    uint64_t txn_id = (get_node_id() + get_thd_id() * g_node_cnt)
-                      + (g_thread_cnt * g_node_cnt * _thd_txn_id);
+    uint64_t txn_id;
+    do{
+        txn_id = (get_node_id() + get_thd_id() * g_node_cnt)
+                 + (g_thread_cnt * g_node_cnt * _thd_txn_id);
+    }while(GET_NODE_ID(txn_id) != g_node_id);
     ++_thd_txn_id;
     return txn_id;
 }
@@ -5565,6 +5606,34 @@ RC WorkerThread::process_calvin_rtxn(Message *msg) {
     if (rc == RCOK && txn_man->calvin_exec_phase_done()) {
         calvin_wrapup();
     }
+    if (msg->return_node_id != g_node_id){
+        // participant node is not the same as sequencer node
+        // release message here, otherwise sequencer will release
+        // free msg, queries
+#if WORKLOAD == YCSB
+        YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
+#if !SINGLE_NODE
+        // we should not clear query request pointers because they will be reused by transactions
+        for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+            DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
+            mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+        }
+#endif
+#elif WORKLOAD == TPCC
+        TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
+#if !SINGLE_NODE
+      if(cl_msg->txn_type == TPCC_NEW_ORDER) {
+          for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
+              DEBUG_M("Sequencer::process_ack() items free\n");
+              mem_allocator.free(cl_msg->items[i],sizeof(Item_no));
+          }
+      }
+#endif
+#elif WORKLOAD == PPS
+      PPSClientQueryMessage* cl_msg = (PPSClientQueryMessage*)msg;
+
+#endif
+    }
     return RCOK;
 
 }
@@ -5586,22 +5655,6 @@ ts_t WorkerThread::get_next_ts() {
         _curr_ts = glob_manager.get_ts(get_thd_id());
         return _curr_ts;
     }
-}
-
-uint64_t WorkerThread::get_exec_node(uint64_t i) {
-    return i/g_thread_cnt;
-}
-
-uint64_t WorkerThread::get_plan_node(uint64_t i) {
-    return i/g_plan_thread_cnt;
-}
-
-uint64_t WorkerThread::map_to_planner_id(uint64_t cwid){
-    return cwid-(g_node_id*g_plan_thread_cnt);
-}
-
-uint64_t WorkerThread::map_to_cwplanner_id(uint64_t planner_id){
-    return planner_id + (g_node_id*g_plan_thread_cnt);
 }
 
 

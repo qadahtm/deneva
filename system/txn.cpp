@@ -405,6 +405,10 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
     _cur_tid = 0;
 #endif
 
+#if CC_ALG == QUECC
+    update_context = false;
+#endif
+
     txn_ready = true;
     twopl_wait_start = 0;
 
@@ -658,9 +662,10 @@ void TxnManager::commit_stats() {
     INC_STATS(ctid, total_txn_commit_cnt, 1);
 
 #if !SINGLE_NODE
-    if (!IS_LOCAL(ctid) && CC_ALG != CALVIN) {
-        INC_STATS(ctid, remote_txn_commit_cnt, 1);
+    if(!IS_LOCAL(get_txn_id()) && CC_ALG != CALVIN) {
+        INC_STATS(ctid,remote_txn_commit_cnt,1);
 #if PROFILE_EXEC_TIMING
+//        txn_stats.commit_stats(get_thd_id(),get_txn_id(),get_batch_id(), timespan_long, timespan_short);
         txn_stats.commit_stats(ctid, txn_id, batch_id, timespan_long, timespan_short);
 #endif
         return;
@@ -670,6 +675,9 @@ void TxnManager::commit_stats() {
 
     INC_STATS(ctid, txn_cnt, 1);
     INC_STATS(ctid, local_txn_commit_cnt, 1);
+#if COUNT_BASED_SIM_ENABLED
+    simulation->inc_txn_cnt(1);
+#endif
 #if PROFILE_EXEC_TIMING
     INC_STATS(ctid, txn_run_time, timespan_long);
 #endif
@@ -710,7 +718,7 @@ void TxnManager::commit_stats() {
     INC_STATS_ARR(ctid, last_start_commit_latency, timespan_short);
     INC_STATS_ARR(ctid, first_start_commit_latency, timespan_long);
 #endif
-
+    M_ASSERT_V(query->partitions_touched.size() > 0,"Committed %s txn=%lu \n", IS_LOCAL(get_txn_id())? "local" : "remote",get_txn_id());
     assert(query->partitions_touched.size() > 0);
     INC_STATS(ctid, parts_touched, query->partitions_touched.size());
     INC_STATS(ctid, part_cnt[query->partitions_touched.size() - 1], 1);

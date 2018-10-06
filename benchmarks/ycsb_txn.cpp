@@ -241,8 +241,22 @@ bool YCSBTxnManager::is_local_request(uint64_t idx) {
 
 RC YCSBTxnManager::send_remote_request() {
     YCSBQuery *ycsb_query = (YCSBQuery *) query;
-    uint64_t dest_node_id = GET_NODE_ID(ycsb_query->requests[next_record_id]->key);
-    ycsb_query->partitions_touched.add_unique(GET_PART_ID(0, dest_node_id));
+    uint64_t dest_node_id = GET_NODE_ID(_wl->key_to_part(ycsb_query->requests[next_record_id]->key));
+//    DEBUG_Q("dest_node_id=%lu for key=%lu\n",dest_node_id,ycsb_query->requests[next_record_id]->key);
+//    ycsb_query->partitions_touched.add_unique(GET_PART_ID(0, dest_node_id));
+    ycsb_query->partitions_touched.add_unique(_wl->key_to_part(ycsb_query->requests[next_record_id]->key));
+    assert(ycsb_query->partitions_touched.size() > 1);
+    msg_queue.enqueue(get_thd_id(), Message::create_message(this, RQRY), dest_node_id);
+    return WAIT_REM;
+}
+
+RC YCSBTxnManager::send_remote_request(YCSBQuery *ycsb_query, uint64_t dest_node_id) {
+//    YCSBQuery *ycsb_query = (YCSBQuery *) query;
+//    uint64_t dest_node_id = GET_NODE_ID(_wl->key_to_part(ycsb_query->requests[next_record_id]->key));
+//    DEBUG_Q("dest_node_id=%lu for key=%lu\n",dest_node_id,ycsb_query->requests[next_record_id]->key);
+//    ycsb_query->partitions_touched.add_unique(GET_PART_ID(0, dest_node_id));
+    ycsb_query->partitions_touched.add_unique(_wl->key_to_part(ycsb_query->requests[next_record_id]->key));
+    assert(ycsb_query->partitions_touched.size() > 1);
     msg_queue.enqueue(get_thd_id(), Message::create_message(this, RQRY), dest_node_id);
     return WAIT_REM;
 }
@@ -250,9 +264,9 @@ RC YCSBTxnManager::send_remote_request() {
 void YCSBTxnManager::copy_remote_requests(YCSBQueryMessage *msg) {
     YCSBQuery *ycsb_query = (YCSBQuery *) query;
     //msg->requests.init(ycsb_query->requests.size());
-    uint64_t dest_node_id = GET_NODE_ID(ycsb_query->requests[next_record_id]->key);
+    uint64_t dest_node_id = GET_NODE_ID(_wl->key_to_part(ycsb_query->requests[next_record_id]->key));
     while (next_record_id < ycsb_query->requests.size() && !is_local_request(next_record_id) &&
-           GET_NODE_ID(ycsb_query->requests[next_record_id]->key) == dest_node_id) {
+           GET_NODE_ID(_wl->key_to_part(ycsb_query->requests[next_record_id]->key)) == dest_node_id) {
         YCSBQuery::copy_request_to_msg(ycsb_query, msg, next_record_id++);
     }
 }
@@ -472,7 +486,10 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     rc = run_ycsb_1(req->acctype, row);
     assert(rc == RCOK);
 
-    check_commit_ready(exec_qe);
+    // we only update the transaction context locally
+    if (update_context){
+        check_commit_ready(exec_qe);
+    }
 #endif
 //    INC_STATS(get_thd_id(), exec_txn_proc_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
 

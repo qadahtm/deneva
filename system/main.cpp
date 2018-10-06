@@ -356,7 +356,8 @@ int main(int argc, char* argv[])
 #endif
 #if CC_ALG == CALVIN
     all_thd_cnt += 2; // sequencer + scheduler thread
-//    wthd_cnt = thd_cnt -2; // use less worker counts ???
+//    all_thd_cnt -= 2; // use fewer worker threads
+//    wthd_cnt = thd_cnt -2; // update worker thread cnt
 #endif
 
 #if CC_ALG == QUECC
@@ -402,7 +403,7 @@ int main(int argc, char* argv[])
     CPU_ZERO(&cpus);
     CPU_SET(cpu_cnt, &cpus);
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
-    cpu_cnt++;
+//    cpu_cnt++;
 #endif
 #if CC_ALG == QUECC && WT_SYNC_METHOD == SYNC_BLOCK
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
@@ -824,7 +825,8 @@ int main(int argc, char* argv[])
 #endif
 
 #if (CC_ALG != CALVIN && CC_ALG != QUECC && CC_ALG != DUMMY_CC && CC_ALG != LADS) && ABORT_THREAD
-#if SET_AFFINITY
+//TQ: no affinity for abort thread
+#if SET_AFFINITY & false
       CPU_ZERO(&cpus);
       CPU_SET(cpu_cnt, &cpus);
       pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
@@ -963,7 +965,9 @@ int main(int argc, char* argv[])
   // Free things
 	//tport_man.shutdown();
   m_wl->index_delete_all();
-
+#if CC_ALG == QUECC
+  quecc_pool.free_all();
+#endif
   /*
   txn_table.delete_all();
   txn_pool.free_all();

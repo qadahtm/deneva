@@ -168,6 +168,9 @@ public:
 #if CC_ALG == QUECC
     // For QueCC
     virtual RC      run_quecc_txn(exec_queue_entry * exec_qe) = 0;
+
+    bool update_context;
+
 #if LADS_IN_QUECC
     void check_commit_ready(gdgcc::Action *action) {
         uint64_t e8;
@@ -192,7 +195,8 @@ public:
     }
 #endif // LADS_IN_QUECC
 
-    void check_commit_ready(exec_queue_entry *entry) {
+    //FIXME(tq): this static function updates txn_ctx of the entry blindly without checking if the txn_context is local
+    static void check_commit_ready(exec_queue_entry *entry) {
         uint64_t e8;
         uint64_t d8;
         do{
@@ -200,10 +204,11 @@ public:
             d8 = e8 + 1;
         } while(!entry->txn_ctx->completion_cnt.compare_exchange_strong(e8,d8,memory_order_acq_rel));
 //#if SINGLE_NODE
-        if (d8 == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
-            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu, txn_ctx_ptr=%lu\n",
-                    entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel),
-                    entry->txn_ctx->txn_comp_cnt.load(),(uint64_t)entry->txn_ctx);
+        if (d8 > (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
+            assert(false);
+//            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu, txn_ctx_ptr=%lu\n",
+//                    entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel),
+//                    entry->txn_ctx->txn_comp_cnt.load(),(uint64_t)entry->txn_ctx);
             // this is the last entry to be executed, we should be ready to commit
 //                e8 = TXN_STARTED;
 //                d8 = TXN_READY_TO_COMMIT;

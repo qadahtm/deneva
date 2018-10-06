@@ -1,4 +1,3 @@
-config.h
 *.o
 results*
 figs*
@@ -6,3 +5,5 @@ figs*
 pynb/.ipynb_checkpoints/*
 rundb
 runcl
+.idea
+cmake-build-debug

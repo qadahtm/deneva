@@ -25,6 +25,7 @@
 class ycsb_request;
 class LogRecord;
 struct Item_no;
+struct exec_queue_entry;
 
 class Message {
 public:
@@ -226,6 +227,48 @@ public:
   uint64_t batch_id;
 };
 
+#if CC_ALG == QUECC
+class RemoteEQMessage : public Message {
+public:
+    void copy_from_buf(char * buf);
+    void copy_to_buf(char * buf);
+    void copy_from_txn(TxnManager * txn);
+    void copy_to_txn(TxnManager * txn);
+    uint64_t get_size();
+    void init() {}
+    void release();
+    uint64_t planner_id;
+    uint64_t exec_id;
+    Array<exec_queue_entry> * exec_q;
+
+};
+
+class RemoteEQAckMessage : public Message {
+public:
+    void copy_from_buf(char * buf);
+    void copy_to_buf(char * buf);
+    void copy_from_txn(TxnManager * txn);
+    void copy_to_txn(TxnManager * txn);
+    uint64_t get_size();
+    void init() {}
+    void release() {}
+    uint64_t planner_id;
+    uint64_t exec_id;
+};
+
+class RemoteOpAckMessage : public Message {
+public:
+    void copy_from_buf(char * buf);
+    void copy_to_buf(char * buf);
+    void copy_from_txn(TxnManager * txn);
+    void copy_to_txn(TxnManager * txn);
+    uint64_t get_size();
+    void init() {}
+    void release() {}
+    uint64_t batch_id;
+};
+#endif
+
 class ClientResponseMessage : public Message {
 public:
   void copy_from_buf(char * buf);
@@ -253,7 +296,7 @@ public:
 
   uint64_t pid;
   uint64_t ts;
-#if CC_ALG == CALVIN
+#if CC_ALG == CALVIN || CC_ALG == QUECC
   uint64_t batch_id;
   uint64_t txn_id;
 #endif
@@ -436,5 +479,4 @@ public:
   Array<uint64_t> part_keys;
 };
 
-
-#endif
+#endif //#ifndef _MESSAGE_H_

@@ -43,7 +43,7 @@ void MessageQueue::init() {
 }
 
 void MessageQueue::enqueue(uint64_t thd_id, Message * msg,uint64_t dest) {
-  DEBUG("MQ Enqueue %ld\n",dest)
+//  DEBUG("MQ Enqueue %ld\n",dest)
   assert(dest < g_total_node_cnt);
 //  if(dest != g_node_id && ISSERVERN(g_node_id)){
 //    DEBUG_Q("dest = %ld , g_node_id = %d \n",dest, g_node_id);
@@ -128,7 +128,7 @@ uint64_t MessageQueue::dequeue(uint64_t thd_id, Message *& msg) {
     dest = entry->dest;
     assert(dest < g_total_node_cnt);
     msg = entry->msg;
-    DEBUG("MQ Dequeue %ld\n",dest)
+//    DEBUG("MQ Dequeue %ld\n",dest)
     INC_STATS(thd_id,msg_queue_delay_time,curr_time - entry->starttime);
     INC_STATS(thd_id,msg_queue_cnt,1);
     msg->mq_time = curr_time - entry->starttime;

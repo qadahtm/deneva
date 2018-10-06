@@ -128,7 +128,7 @@ public:
     uint64_t _planner_id;
     uint64_t _worker_cluster_wide_id;
     uint64_t query_cnt =0;
-
+#if YCSB_RANGE_PARITIONING
     inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
         for (uint32_t i = 0; i < ranges->size(); i++){
             if (key <= ranges->get(i)){
@@ -138,7 +138,12 @@ public:
         M_ASSERT_V(false, "could not assign to range key = %lu\n", key);
         return (uint32_t) ranges->size()-1;
     }
-
+#else
+    inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
+//        return (uint32_t) key % g_cluster_worker_thread_cnt;
+        return (uint32_t) (key % g_node_cnt);
+    }
+#endif
     uint64_t get_key_from_entry(exec_queue_entry * entry);
 
     void splitMRange(Array<exec_queue_entry> *& mrange, uint64_t et_id);
@@ -257,13 +262,6 @@ private:
 #endif
 #endif // - if !PIPELINED
 #endif // - if CC_ALG == QUECC
-
-
-    uint64_t get_exec_node(uint64_t i);
-    uint64_t get_plan_node(uint64_t i);
-
-    uint64_t map_to_planner_id(uint64_t cwid);
-    uint64_t map_to_cwplanner_id(uint64_t planner_id);
 };
 
 #endif

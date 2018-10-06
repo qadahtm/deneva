@@ -110,6 +110,7 @@ public:
 #if CC_ALG == QUECC
     // For QueCC
     RC run_quecc_txn(exec_queue_entry * exec_qe);
+
 #if YCSB_INDEX_LOOKUP_PLAN
     inline RC lookup_key(uint64_t key, exec_queue_entry *&entry) ALWAYS_INLINE {
         itemid_t *item;
@@ -149,6 +150,8 @@ private:
     bool is_local_request(uint64_t idx);
 
     RC send_remote_request();
+
+    RC send_remote_request(YCSBQuery *ycsb_query, uint64_t dest_node_id);
 
     row_t *row;
     YCSBWorkload *_wl;

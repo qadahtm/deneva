@@ -38,6 +38,7 @@
 #include <time.h> 
 #include <sys/time.h>
 #include <math.h>
+#include <atomic>
 
 #include "pthread.h"
 #include "config.h"
@@ -308,6 +309,11 @@ enum RemReqType {INIT_DONE=0,
     RFWD,
     RDONE,
     CL_RSP, //TQ: Client response
+//#if CC_ALG == QUECC
+	REMOTE_EQ,
+	REMOTE_EQ_ACK,
+	REMOTE_OP_ACK,
+//#endif
     LOG_MSG,
     LOG_MSG_RSP,
     LOG_FLUSHED,

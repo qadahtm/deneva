@@ -147,7 +147,7 @@ void QWorkQueue::init() {
 //    pg_free_list[i] = new boost::lockfree::queue<priority_group *> (FREE_LIST_INITIAL_SIZE);
 //  }
 
-#if QUECC_DEBUG
+#if DEBUG_QUECC & false
   inflight_msg.store(0);
 #endif
   DEBUG_Q("Initialized batch_map\n");
