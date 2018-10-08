@@ -105,7 +105,7 @@ public:
 
     SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man);
 
-    RC commit_batch(uint64_t batch_slot);
+    SRC commit_batch(uint64_t batch_slot);
 
     RC commit_txn(priority_group * planner_pg, uint64_t txn_idx);
 

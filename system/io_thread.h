@@ -33,6 +33,7 @@ public:
 #if CC_ALG == QUECC
 	// Counter for number of messages enqueued to planning layer
 	uint64_t planner_msg_cnt = 0;
+	uint64_t planner_enq_msg_cnt[PLAN_THREAD_CNT];
 #endif
 };
 

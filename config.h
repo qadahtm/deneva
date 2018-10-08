@@ -5,7 +5,7 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 2
+#define NODE_CNT 4
 //#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
 #define THREAD_CNT 4
 #define REM_THREAD_CNT 2//THREAD_CNT
@@ -23,7 +23,7 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 2
+#define CLIENT_NODE_CNT 4
 #define CLIENT_THREAD_CNT 4
 #define CLIENT_REM_THREAD_CNT 2
 #define CLIENT_SEND_THREAD_CNT 2
@@ -369,7 +369,7 @@
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.9//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -584,8 +584,8 @@ enum PPSTxnType {PPS_ALL = 0,
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 #define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 30 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 10 * BILLION // ~1 second
+//#define DONE_TIMER 1 * 10 * BILLION // ~60 seconds
+//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
 
 #define SEED 0
 #define SHMEM_ENV false

@@ -304,14 +304,21 @@ void *YCSBWorkload::init_table_slice() {
 //	while ((UInt32) next_tid.load() < g_init_parallelism) {}
 //	assert((UInt32) next_tid.load() == g_init_parallelism);
 
-	uint64_t slice_size = g_synth_table_size / g_init_parallelism;
+//	uint64_t slice_size = g_synth_table_size / g_init_parallelism;
+	uint64_t node_slice_size = g_synth_table_size / g_part_cnt;
+	uint64_t thd_slice_size = node_slice_size / g_init_parallelism;
 
-	printf("Thd %d: slice size = %ld, inserting from %ld, to %ld\n", tid, slice_size, slice_size * tid, (slice_size * (tid+1))-1);
-	uint64_t slice_end = slice_size * (tid + 1);
-	if (tid == g_init_parallelism-1){
-		slice_end = g_synth_table_size;
-	}
-	for (uint64_t key = slice_size * tid;
+	uint64_t slice_start = (g_node_id * node_slice_size) + (tid * thd_slice_size);
+	uint64_t slice_end = (g_node_id * node_slice_size) + ((tid+1) * thd_slice_size);
+
+	assert((slice_end-slice_start) == thd_slice_size);
+
+	printf("N_%u:Thd %d: slice size = %ld, inserting from %ld, to %ld\n",g_node_id, tid, thd_slice_size, slice_start, (slice_end)-1);
+
+//	if (tid == g_init_parallelism-1){
+//		slice_end = g_synth_table_size;
+//	}
+	for (uint64_t key = slice_start;
 		 key < slice_end;
 		 key++
 			) {

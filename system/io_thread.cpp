@@ -48,7 +48,7 @@ void InputThread::setup() {
                 simulation->process_setup_msg();
             } else {
                 assert(ISSERVER || ISREPLICA);
-                printf("Received Msg %d from node %ld\n",msg->rtype,msg->return_node_id);
+//                printf("Received Msg %d from node %ld\n",msg->rtype,msg->return_node_id);
 #if CC_ALG == CALVIN
                 if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
                   work_queue.sequencer_enqueue(get_thd_id(),msg);
@@ -66,7 +66,9 @@ void InputThread::setup() {
 //      DEBUG_Q("Enqueue to planning layer\n")
 #if WORKLOAD == YCSB
                 if (msg->rtype == CL_QRY) {
-                    work_queue.plan_enqueue(planner_msg_cnt % g_plan_thread_cnt, msg);
+                    uint64_t dplan_id = planner_msg_cnt % g_plan_thread_cnt;
+                    planner_enq_msg_cnt[dplan_id]++;
+                    work_queue.plan_enqueue(dplan_id, msg);
                     planner_msg_cnt++;
                     msgs->erase(msgs->begin());
                     continue;
@@ -136,7 +138,7 @@ RC InputThread::client_recv_loop() {
 //            stats.totals->quecc_txn_comp_cnt.fetch_add(1);
 //            simulation->inc_txn_cnt(1);
 
-            DEBUG("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
+            DEBUG_Q("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
                   float(timespan)/BILLION);
             assert(inf >= 0);
             // delete message here
@@ -167,6 +169,13 @@ RC InputThread::server_recv_loop() {
     uint64_t starttime;
 
     std::vector<Message *> *msgs;
+#if CC_ALG == QUECC
+    // avoids enqueue to the same planner
+    planner_msg_cnt = _thd_id;
+    for (int i = 0; i < PLAN_THREAD_CNT; ++i) {
+        planner_enq_msg_cnt[i] = 0;
+    }
+#endif
 
     while (!simulation->is_done()) {
         heartbeat();
@@ -204,7 +213,9 @@ RC InputThread::server_recv_loop() {
             if (msg->rtype == CL_QRY) {
                 // assume 1 input thread
                 // FIXME(tq): if there are > 1 input threads planner_msg_cnt risks a race condition and must inc atomically
-                work_queue.plan_enqueue(planner_msg_cnt % g_plan_thread_cnt, msg);
+                uint64_t dplan_id = planner_msg_cnt % g_plan_thread_cnt;
+                planner_enq_msg_cnt[dplan_id]++;
+                work_queue.plan_enqueue(dplan_id, msg);
                 planner_msg_cnt++;
 #if DEBUG_QUECC & false
                 work_queue.inflight_msg.fetch_add(1);
@@ -216,8 +227,8 @@ RC InputThread::server_recv_loop() {
 
             if( msg->rtype == RDONE) {
                 assert(ISSERVERN(msg->get_return_id()));
-//                DEBUG_Q("Received RDONE from node=%lu for batch_id=%lu\n", msg->return_node_id, msg->batch_id);
-
+                DEBUG_Q("Received RDONE from node=%lu for batch_id=%lu\n", msg->return_node_id, msg->batch_id);
+//                assert(((uint64_t)quecc_pool.last_commited_batch_id.load(memory_order_acq_rel)+1) == msg->batch_id);
                 quecc_pool.batch_deps[ msg->batch_id % g_batch_map_length].fetch_add(-1,memory_order_acq_rel);
                 Message::release_message(msg);
                 msgs->erase(msgs->begin());
@@ -322,6 +333,9 @@ RC InputThread::server_recv_loop() {
 
     }
 #if CC_ALG == QUECC
+    for (uint64_t i = 0; i < g_plan_thread_cnt ; ++i) {
+        DEBUG_Q("Total messages enq. to planner[%lu] = %ld\n",i, planner_enq_msg_cnt[i]);
+    }
     DEBUG_Q("Total messages enq. to planners = %ld\n", planner_msg_cnt);
 #endif
     printf("FINISH %ld:%ld\n", _node_id, _thd_id);

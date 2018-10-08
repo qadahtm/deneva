@@ -53,6 +53,8 @@ RC ClientThread::run() {
       txns_sent[i] = 0;
 
 	run_starttime = get_sys_clock();
+    uint64_t s_cntr = 0;
+    uint64_t s_bound = 100000;
 
   while(!simulation->is_done()) {
     heartbeat();
@@ -68,15 +70,18 @@ RC ClientThread::run() {
 		if (iters == UINT64_MAX)
 			iters = 0;
 #if LOAD_METHOD == LOAD_MAX
-//      uint64_t s_cntr = 0;
-//      uint64_t s_bound = 100000;
 		if ((inf_cnt = client_man.inc_inflight(next_node)) < 0){
-//            if (s_cntr % s_bound == 0){
-//                DEBUG_Q("Thread_%ld, No sending any more inf=%d\n", _thd_id, inf_cnt);
-//            }
-//            s_cntr++;
+            if (s_cntr % s_bound == 0){
+                DEBUG_Q("Thread_%lu, No sending any more inf=%d\n", _thd_id, inf_cnt);
+                for (UInt32 j = 0; j < g_servers_per_client; ++j) {
+                    DEBUG_Q("inflight txn cnt for node %u = %d\n",(next_node),client_man.get_inflight(next_node))
+                }
+            }
+            s_cntr++;
             continue;
         }
+
+        s_cntr=0;
 
 		m_query = (BaseQuery *) client_query_queue.get_next_query(next_node,_thd_id);
     if(last_send_time > 0) {
@@ -115,7 +120,7 @@ RC ClientThread::run() {
 
 
 	for (uint64_t l = 0; l < g_servers_per_client; ++l)
-		printf("Txns sent to node %lu: %d\n", l+g_server_start_node, txns_sent[l]);
+		printf("CWT_%lu: Txns sent to node %lu: %d\n", _thd_id, l+g_server_start_node, txns_sent[l]);
 
   //SET_STATS(get_thd_id(), total_runtime, get_sys_clock() - simulation->run_starttime); 
 
