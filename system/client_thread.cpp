@@ -54,7 +54,7 @@ RC ClientThread::run() {
 
 	run_starttime = get_sys_clock();
     uint64_t s_cntr = 0;
-    uint64_t s_bound = 100000;
+//    uint64_t s_bound = 100000;
 
   while(!simulation->is_done()) {
     heartbeat();

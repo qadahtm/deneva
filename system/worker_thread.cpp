@@ -1473,11 +1473,12 @@ void WorkerThread::plan_client_msg(Message *msg, transaction_context *txn_ctxs, 
     // TPCC
         TPCCClientQueryMessage *tpcc_msg = ((TPCCClientQueryMessage *) msg);
         TPCCTxnManager * tpcc_txn_man = (TPCCTxnManager *)my_txn_man;
+    Array<exec_queue_entry> *mrange;
+#if SINGLE_NODE
         row_t * r_local;
-        Array<exec_queue_entry> *mrange;
 //    uint64_t idx;
         uint64_t rid;
-
+#endif
 //        uint64_t e8 = TXN_INITIALIZED;
 //        uint64_t d8 = TXN_STARTED;
 #if PIPLINED

@@ -1649,7 +1649,6 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
 }
 
 RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
-    row_t * r_no;
     RC rc = RCOK;
 #if ENABLE_EQ_SWITCH
     if (entry->txn_ctx->o_id.load() == -1){
@@ -1666,6 +1665,7 @@ RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
 #endif
 
 #if SINGLE_NODE
+    row_t * r_no;
     rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
     r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
