@@ -33,6 +33,7 @@ def exec_cmd(cmd, env, async=False):
     return p
 
 def live_output(p):
+	print("liveOutput for {}".format(str(p)))
 	while p.poll() is None:
 		print(p.stdout.readline().decode(encoding="utf-8", errors="strict"), end='')
 	print(p.stdout.readline().decode(encoding="utf-8", errors="strict"), end='')
@@ -43,6 +44,7 @@ def wait_for(plist, output=False, liveOutput=False, live_output_node_idx=0):
 	# done observing live output if enabled
 	for i,p in enumerate(plist):		
 		if p:
+			print("Waiting for node {}".format(i))
 			p.wait()
 			if output:
 				print('Output of node: {}'.format(i))
@@ -78,7 +80,7 @@ env = dict(os.environ)
 node_list = ec2_nodes.node_list
 
 run_exp = True
-liveOutput_enabled = False #print live output for S0
+liveOutput_enabled = True #print live output for S0
 liveOutput_node = 0
 
 src_dir = '/mnt/efs/expodb/deneva'
@@ -99,6 +101,7 @@ for nip in node_list:
 	print('working on node (ifconfig sync): {}'.format(nip), end=',')
 	rcmd = 'ssh ubuntu@{} {}'.format(nip,'cp -f /mnt/efs/expodb/ifconfig.txt ~/{}/ifconfig.txt'.format(build_dir))
 	proc_list.append(exec_cmd(rcmd,env,True))
+print('')
 wait_for(proc_list)
 proc_list.clear()
 print('done (ifconfig sync)!')
@@ -108,6 +111,7 @@ for nip in node_list:
 	print('working on node (EFS sync): {}'.format(nip), end=',')
 	rcmd = 'ssh ubuntu@{} {}'.format(nip,'rsync -axvP {} ~/'.format(src_dir))
 	proc_list.append(exec_cmd(rcmd,env,True))
+print('')
 wait_for(proc_list)
 proc_list.clear()
 print('done (EFS sync)!')
@@ -117,7 +121,7 @@ for nip in node_list:
 	print('working on node (building): {}'.format(nip), end=',')
 	rcmd = 'ssh ubuntu@{} "{}"'.format(nip,'cd ~/{}; make clean; make -j8'.format(build_dir))
 	proc_list.append(exec_cmd(rcmd,env,True))
-
+print('')
 wait_for(proc_list)
 proc_list.clear()
 print('done (building)!')
@@ -126,12 +130,12 @@ for nip in node_list:
 	print('working on node (kill all): {}'.format(nip), end=',')
 	rcmd = 'ssh ubuntu@{} "{}"'.format(nip,'pkill -9 rundb; pkill -9 runcl')
 	proc_list.append(exec_cmd(rcmd,env,True))
-
+print('')
 wait_for(proc_list)
 proc_list.clear()
 print('done (kill-all)!')
 
-# skip_nodes = set([0,1,2,3])
+# skip_nodes = set([1,2,3])
 skip_nodes = set()
 
 if run_exp:
@@ -157,6 +161,6 @@ if run_exp:
 				proc_list.append(None) # append empty
 				print("Skipped client {}: {}".format(tag,i))
 
-	wait_for(proc_list,True)
+	wait_for(proc_list,True, liveOutput_enabled,0)
 	proc_list.clear()
 	print('done (experiment)!')

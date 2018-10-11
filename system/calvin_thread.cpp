@@ -40,7 +40,8 @@ void CalvinLockThread::setup() {
 
 RC CalvinLockThread::run() {
     tsetup();
-
+    printf("Running CalvinLockThread %ld\n",_thd_id);
+    fflush(stdout);
     RC rc = RCOK;
     TxnManager * txn_man;
     uint64_t prof_starttime = get_sys_clock();
@@ -111,7 +112,8 @@ bool CalvinSequencerThread::is_batch_ready() {
 
 RC CalvinSequencerThread::run() {
     tsetup();
-
+    printf("Running CalvinSequencerThread %ld\n",_thd_id);
+    fflush(stdout);
     Message * msg;
     uint64_t idle_starttime = 0;
     uint64_t prof_starttime = 0;

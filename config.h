@@ -51,7 +51,7 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD YCSB
+#define WORKLOAD TPCC
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
@@ -63,8 +63,8 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
-//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*4
+//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
+#define MAX_TXN_IN_FLIGHT BATCH_SIZE*2
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -100,7 +100,7 @@
 /***********************************************/
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
-#define SET_AFFINITY false
+#define SET_AFFINITY true
 #define SET_AFFINITY_AFTER_INIT false
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
@@ -125,7 +125,9 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
+//#define CC_ALG NO_WAIT
 #define CC_ALG QUECC
+//#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -192,11 +194,12 @@
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
 //#define BATCH_SIZE 256 // testing
-#define BATCH_SIZE 10368
+//#define BATCH_SIZE 10368
+//#define BATCH_SIZE 10368*(THREAD_CNT*NODE_CNT)
 //#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
 //#define BATCH_SIZE 13440
-//#define BATCH_SIZE 40320 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
+#define BATCH_SIZE 40320*2 //lcm(2,3,4,5,6,8,9,10,12,14,15,16,18,20,24,28,32,36,48,56,64,72,96,112,128)
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
@@ -342,7 +345,7 @@
  */
 #define MAX_TXN_PER_PART    500000
 //#define MAX_TXN_PER_PART    15625
-//#define MAX_TXN_PER_PART    32
+//#define MAX_TXN_PER_PART    32 //debugging
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -359,7 +362,7 @@
 //#define ACCESS_PERC 0.03
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM    4//THREAD_CNT
-#define YCSB_RANGE_PARITIONING true
+#define RANGE_PARITIONING true
 //#define SYNTH_TABLE_SIZE 1024
 //#define SYNTH_TABLE_SIZE  65536*NODE_CNT
 //#define SYNTH_TABLE_SIZE   10*1048576
@@ -369,7 +372,7 @@
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.9//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -391,7 +394,7 @@
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
 // small tpcc schemas shrink the table size.
-#define TPCC_SMALL          false
+#define TPCC_SMALL          true
 #define MAX_ITEMS_SMALL 10000
 #define CUST_PER_DIST_SMALL 2000
 #define MAX_ITEMS_NORM 100000
@@ -402,9 +405,9 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH THREAD_CNT
+#define NUM_WH (4*NODE_CNT)
 // % of transactions that access multiple partitions
-#define MPR 1.0 // used for TPCC and YCSB
+#define MPR 0.15 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -425,7 +428,8 @@ enum TPCCTxnType {TPCC_ALL,
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
-#define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
+#define PERC_PAYMENT 1.0 // percentage of payment transactions in the workload
+#define TPCC_PAYMENT_H_INSERT_ENABLED true
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16
@@ -579,13 +583,13 @@ enum PPSTxnType {PPS_ALL = 0,
 #define BILLION 1000000000UL // in ns => 1 second
 #define MILLION 1000000UL // in ns => 1 second
 #define STAT_ARR_SIZE 1024
-#define PROG_TIMER 5 * BILLION // in s
+#define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-//#define DONE_TIMER 1 * 10 * BILLION // ~60 seconds
-//#define WARMUP_TIMER 1 * 1 * BILLION // ~1 second
+#define WARMUP_TIMER 1 * 10 * BILLION // ~1 minutes
+//#define DONE_TIMER 1 * 10 * BILLION // debugging
+//#define WARMUP_TIMER 1 * 1 * BILLION // debugging
 
 #define SEED 0
 #define SHMEM_ENV false

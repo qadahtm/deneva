@@ -254,6 +254,7 @@ public:
     void release() {}
     uint64_t planner_id;
     uint64_t exec_id;
+    bool update_contexts;
 };
 
 class RemoteOpAckMessage : public Message {
@@ -265,7 +266,8 @@ public:
     uint64_t get_size();
     void init() {}
     void release() {}
-    uint64_t batch_id;
+    uint64_t planner_id;
+    uint64_t txn_idx;
 };
 #endif
 

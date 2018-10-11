@@ -160,6 +160,11 @@ uint64_t MakeNumberString(int min, int max, char* str) {
 
 uint64_t wh_to_part(uint64_t wid) {
 	assert(g_part_cnt <= g_num_wh);
+#if RANGE_PARITIONING
+	uint64_t wh_per_part = g_num_wh/g_part_cnt;
+    return (wid-1) / wh_per_part ;
+#else
 	return (wid-1) % g_part_cnt ;
+#endif
 }
 #endif //WORKLOAD == TPCC

@@ -151,59 +151,65 @@ bool TPCCQuery::readonly() {
   return false;
 }
 
-BaseQuery * TPCCQueryGenerator::gen_payment(uint64_t home_partition) {
-  TPCCQuery * query = new TPCCQuery;
-	set<uint64_t> partitions_accessed;
+BaseQuery *TPCCQueryGenerator::gen_payment(uint64_t home_partition) {
+    TPCCQuery *query = new TPCCQuery;
+    set<uint64_t> partitions_accessed;
 
-	query->txn_type = TPCC_PAYMENT;
-  uint64_t home_warehouse;
-	if (FIRST_PART_LOCAL) {
-    while(wh_to_part(home_warehouse = URand(1, g_num_wh)) != home_partition) {}
-  }
-	else
-		home_warehouse = URand(1, g_num_wh);
-  query->w_id =  home_warehouse;
-	query->d_w_id = home_warehouse;
+    query->txn_type = TPCC_PAYMENT;
+    uint64_t home_warehouse;
+    assert(g_part_cnt == g_node_cnt);
+    UInt32 home_part_start_wh = ((g_num_wh/g_part_cnt)*home_partition) + 1;
+    UInt32 home_part_end_wh = (g_num_wh/g_part_cnt)*home_partition + (g_num_wh/g_part_cnt);
+//    DEBUG_Q("home_part=%u,start_wh=%u, end_wh=%u\n",home_partition, home_part_start_wh,home_part_end_wh );
+    if (FIRST_PART_LOCAL) {
+//        while (wh_to_part(home_warehouse = URand(1, g_num_wh)) != home_partition) {}
+        while (wh_to_part(home_warehouse = URand(home_part_start_wh, home_part_end_wh)) != home_partition) {}
+    } else{
+        home_warehouse = URand(1, g_num_wh);
+    }
+//    DEBUG_Q("home_part=%u,w_id=%u\n",home_partition, home_warehouse);
+    query->w_id = home_warehouse;
+    query->d_w_id = home_warehouse;
 
-  partitions_accessed.insert(wh_to_part(query->w_id));
+    partitions_accessed.insert(wh_to_part(query->w_id));
 
-	query->d_id = URand(1, g_dist_per_wh);
-	query->h_amount = URand(1, 5000);
-  query->rbk = false;
-	double x = (double)(rand() % 10000) / 10000;
-	int y = URand(1, 100);
+    query->d_id = URand(1, g_dist_per_wh);
+    query->h_amount = URand(1, 5000);
+    query->rbk = false;
+    double x = (double) (rand() % 10000) / 10000;
+    int y = URand(1, 100);
 
-	if(x >= g_mpr) {
+    if (x >= g_mpr) {
 //	if(x > 0.15) {
-		// home warehouse
-		query->c_d_id = query->d_id;
-		query->c_w_id = query->w_id;
-	} else {	
-		// remote warehouse
+        // home warehouse
+        query->c_d_id = query->d_id;
+        query->c_w_id = query->w_id;
+    } else {
+        // remote warehouse
         query->c_d_id = URand(1, g_dist_per_wh);
-		if(g_num_wh > 1) {
-			while((query->c_w_id = URand(1, g_num_wh)) == query->w_id) {}
-			if (wh_to_part(query->w_id) != wh_to_part(query->c_w_id)) {
-        partitions_accessed.insert(wh_to_part(query->c_w_id));
-			}
-		} else 
-      query->c_w_id = query->w_id;
-	}
-	if(y <= 60) {
-		// by last name
-		query->by_last_name = true;
-		Lastname(NURand(255,0,999),query->c_last);
-	} else {
-		// by cust id
-		query->by_last_name = false;
-		query->c_id = NURand(1023, 1, g_cust_per_dist);
-	}
+        if (g_num_wh > 1) {
+            while ((query->c_w_id = URand(1, g_num_wh)) == query->w_id) {}
+            if (wh_to_part(query->w_id) != wh_to_part(query->c_w_id)) {
+                partitions_accessed.insert(wh_to_part(query->c_w_id));
+            }
+        } else
+            query->c_w_id = query->w_id;
+    }
+    if (y <= 60) {
+        // by last name
+        query->by_last_name = true;
+        Lastname(NURand(255, 0, 999), query->c_last);
+    } else {
+        // by cust id
+        query->by_last_name = false;
+        query->c_id = NURand(1023, 1, g_cust_per_dist);
+    }
 
-  query->partitions.init(partitions_accessed.size());
-  for(auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
-    query->partitions.add(*it);
-  }
-  return query;
+    query->partitions.init(partitions_accessed.size());
+    for (auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
+        query->partitions.add(*it);
+    }
+    return query;
 }
 
 BaseQuery * TPCCQueryGenerator::gen_new_order(uint64_t home_partition) {

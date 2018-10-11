@@ -71,12 +71,12 @@ RC ClientThread::run() {
 			iters = 0;
 #if LOAD_METHOD == LOAD_MAX
 		if ((inf_cnt = client_man.inc_inflight(next_node)) < 0){
-            if (s_cntr % s_bound == 0){
-                DEBUG_Q("Thread_%lu, No sending any more inf=%d\n", _thd_id, inf_cnt);
-                for (UInt32 j = 0; j < g_servers_per_client; ++j) {
-                    DEBUG_Q("inflight txn cnt for node %u = %d\n",(next_node),client_man.get_inflight(next_node))
-                }
-            }
+//            if (s_cntr % s_bound == 0){
+//                DEBUG_Q("Thread_%lu, No sending any more inf=%d\n", _thd_id, inf_cnt);
+//                for (UInt32 j = 0; j < g_servers_per_client; ++j) {
+//                    DEBUG_Q("inflight txn cnt for node %u = %d\n",(next_node),client_man.get_inflight(next_node))
+//                }
+//            }
             s_cntr++;
             continue;
         }

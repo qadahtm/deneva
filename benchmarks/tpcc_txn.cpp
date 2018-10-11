@@ -28,6 +28,7 @@
 #include "transport.h"
 #include "msg_queue.h"
 #include "message.h"
+#include "quecc_thread.h"
 
 #if WORKLOAD == TPCC
 void TPCCTxnManager::init(uint64_t thd_id, Workload * h_wl) {
@@ -1051,6 +1052,800 @@ RC TPCCTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 #endif
     return rc;
 }
+
+RC TPCCTxnManager::plan_payment_update_w(double h_amount, row_t *r_wh_local, exec_queue_entry *&entry) {
+    assert(r_wh_local != NULL);
+
+    entry->rid = r_wh_local->get_row_id();
+#if SINGLE_NODE
+    entry->row = r_wh_local;
+    entry->txn_ctx->h_amount = h_amount;
+#endif
+    entry->type = TPCC_PAYMENT_UPDATE_W;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_update_d(double h_amount, row_t *r_dist_local, exec_queue_entry *&entry) {
+#if SINGLE_NODE
+    assert(r_dist_local != NULL);
+    entry->row = r_dist_local;
+    entry->txn_ctx->h_amount = h_amount;
+    entry->rid = r_dist_local->get_row_id();
+#endif
+    entry->type = TPCC_PAYMENT_UPDATE_D;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_update_c(double h_amount, row_t *r_cust_local, exec_queue_entry *&entry) {
+#if SINGLE_NODE
+    entry->row = r_cust_local;
+    entry->txn_ctx->h_amount = h_amount;
+#else
+    assert(false);
+#endif
+    entry->rid = r_cust_local->get_row_id();
+    entry->type = TPCC_PAYMENT_UPDATE_C;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_insert_h(uint64_t w_id, uint64_t d_id, uint64_t c_id, uint64_t c_w_id, uint64_t c_d_id,
+                                         double h_amount, exec_queue_entry *&entry) {
+//        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+    uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+
+    entry->rid = row_id;
+#if SINGLE_NODE
+    entry->txn_ctx->w_id = w_id;
+    entry->txn_ctx->d_id = d_id;
+    entry->txn_ctx->c_id = c_id;
+    entry->txn_ctx->c_w_id = c_w_id;
+    entry->txn_ctx->c_d_id = c_d_id;
+    entry->txn_ctx->h_amount = h_amount;
+#else
+    assert(false);
+#endif
+    entry->type = TPCC_PAYMENT_INSERT_H;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_read_w(row_t *& r_wh_local, exec_queue_entry * entry){
+#if SINGLE_NODE
+    entry->row = r_wh_local;
+#else
+    assert(false);
+#endif
+    entry->rid = r_wh_local->get_row_id();
+    entry->type = TPCC_NEWORDER_READ_W;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_read_c(row_t *& r_cust_local, exec_queue_entry * entry) {
+#if SINGLE_NODE
+    entry->row = r_cust_local;
+#else
+    assert(false);
+#endif
+    entry->rid = r_cust_local->get_row_id();
+    entry->type = TPCC_NEWORDER_READ_C;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_update_d(row_t *& r_dist_local, exec_queue_entry * entry){
+#if SINGLE_NODE
+    entry->row = r_dist_local;
+#else
+    assert(false);
+#endif
+    entry->rid = r_dist_local->get_row_id();
+    entry->type = TPCC_NEWORDER_UPDATE_D;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t c_id,
+                                          bool remote, uint64_t  ol_cnt,uint64_t  o_entry_d, exec_queue_entry * entry){
+#if PART_CNT == 1
+    uint64_t row_id = rid_man.next_rid(d_id % g_thread_cnt); // collocate with dist rec
+#else
+    uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+#endif
+//        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+    entry->rid = row_id;
+#if SINGLE_NODE
+    entry->txn_ctx->w_id = w_id;
+    entry->txn_ctx->d_id = d_id;
+    entry->txn_ctx->c_id = c_id;
+    entry->txn_ctx->o_entry_d = o_entry_d;
+    entry->txn_ctx->ol_cnt = ol_cnt;
+    entry->txn_ctx->remote = remote;
+#else
+    assert(false);
+#endif
+    entry->type = TPCC_NEWORDER_INSERT_O;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+
+}
+
+RC TPCCTxnManager::plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
+//        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+#if PART_CNT == 1
+    uint64_t row_id = rid_man.next_rid(d_id % g_thread_cnt); // collocate with dist rec
+#else
+    uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+#endif
+#if SINGLE_NODE
+    entry->txn_ctx->w_id = w_id;
+    entry->txn_ctx->d_id = d_id;
+#else
+    assert(false);
+#endif
+    entry->rid = row_id;
+    entry->type = TPCC_NEWORDER_INSERT_NO;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_read_i(row_t *& r_item_local, exec_queue_entry * entry){
+#if SINGLE_NODE
+    entry->row = r_item_local;
+#else
+    assert(false);
+#endif
+    entry->rid = r_item_local->get_row_id();
+    entry->type = TPCC_NEWORDER_READ_I;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_update_s(uint64_t ol_quantity, bool remote, row_t *& r_stock_local, exec_queue_entry * entry){
+    entry->rid = r_stock_local->get_row_id();
+#if SINGLE_NODE
+    entry->row = r_stock_local;
+    entry->txn_ctx->ol_quantity = ol_quantity;
+    entry->txn_ctx->remote = remote;
+#else
+    assert(false);
+#endif
+    entry->type = TPCC_NEWORDER_UPDATE_S;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, uint64_t d_id,
+                                           row_t *& r_ol_local, exec_queue_entry * entry){
+
+//        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+#if PART_CNT == 1
+    uint64_t row_id = rid_man.next_rid(d_id % g_thread_cnt); // collocate with dist rec
+#else
+    uint64_t row_id = rid_man.next_rid(wh_to_part(ol_supply_w_id));
+#endif
+    entry->rid = row_id;
+#if SINGLE_NODE
+    entry->txn_ctx->ol_supply_w_id = ol_supply_w_id;
+    entry->txn_ctx->ol_i_id = ol_i_id;
+    entry->txn_ctx->ol_quantity = ol_quantity;
+    entry->txn_ctx->ol_number = ol_number;
+#else
+    assert(false);
+#endif
+    entry->type = TPCC_NEWORDER_INSERT_OL;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_update_w(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry * entry) {
+    entry->w_id = tpcc_msg->w_id;
+    entry->h_amount = tpcc_msg->h_amount;
+    entry->type = TPCC_PAYMENT_UPDATE_W;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    entry->rid = tpcc_msg->w_id;
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_update_d(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->d_w_id = tpcc_msg->d_w_id;
+    entry->h_amount = tpcc_msg->h_amount;
+    entry->type = TPCC_PAYMENT_UPDATE_D;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    entry->rid = tpcc_msg->w_id;
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_update_c(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->c_id = tpcc_msg->c_id;
+    entry->c_d_id = tpcc_msg->c_d_id;
+    entry->c_w_id = tpcc_msg->c_w_id;
+    memcpy(&entry->c_last, &tpcc_msg->c_last, LASTNAME_LEN);
+    entry->by_last_name = tpcc_msg->by_last_name;
+    entry->type = TPCC_PAYMENT_UPDATE_C;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    entry->rid = tpcc_msg->c_w_id;
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_payment_insert_h(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->c_id = tpcc_msg->c_id;
+    entry->d_w_id = tpcc_msg->d_w_id;
+    entry->c_w_id = tpcc_msg->c_w_id;
+    entry->h_amount = tpcc_msg->h_amount;
+    entry->type = TPCC_PAYMENT_INSERT_H;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    entry->rid = tpcc_msg->w_id;
+    return RCOK;
+}
+
+
+RC TPCCTxnManager::payment_lookup_w(uint64_t w_id, row_t *&r_wh_local) {
+    uint64_t key;
+    itemid_t *item;
+    key = w_id;
+    INDEX *index = _wl->i_warehouse;
+    item = index_read(index, key, wh_to_part(w_id));
+
+    assert(item != NULL);
+    r_wh_local = ((row_t *) item->location);
+    assert(r_wh_local);
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_payment_update_w(exec_queue_entry *entry) {
+    double w_ytd;
+    row_t *r_wh_local;
+#if SINGLE_NODE
+    r_wh_local = entry->row;
+#else
+    payment_lookup_w(entry->w_id,r_wh_local);
+#endif
+    r_wh_local->get_value(W_YTD, w_ytd);
+
+    row_access_backup(entry, WR, r_wh_local, _thd_id);
+
+    if (g_wh_update) {
+#if SINGLE_NODE
+        r_wh_local->set_value(W_YTD, w_ytd + entry->txn_ctx->h_amount);
+#else
+        r_wh_local->set_value(W_YTD, w_ytd + entry->h_amount);
+#endif
+    }
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return RCOK;
+}
+
+RC TPCCTxnManager::payment_lookup_d(uint64_t w_id, uint64_t d_id, uint64_t d_w_id, row_t *&r_dist_local) {
+    uint64_t key;
+    itemid_t *item;
+    key = distKey(d_id, d_w_id);
+    item = index_read(_wl->i_district, key, wh_to_part(w_id)); // TQ: should this be wh_to_part(d_w_id)??
+    assert(item != NULL);
+    r_dist_local = ((row_t *) item->location);
+    // TODO(tq): handle deleted records
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_payment_update_d(exec_queue_entry *entry) {
+    row_t *r_dist_local;
+    double d_ytd;
+
+#if SINGLE_NODE
+    r_dist_local = entry->row;
+#else
+    payment_lookup_d(entry->w_id,entry->d_id,entry->d_w_id, r_dist_local);
+#endif
+    assert(r_dist_local != NULL);
+    r_dist_local->get_value(D_YTD, d_ytd);
+    row_access_backup(entry, WR, r_dist_local, _thd_id);
+#if SINGLE_NODE
+    r_dist_local->set_value(D_YTD, d_ytd + entry->txn_ctx->h_amount);
+#else
+    r_dist_local->set_value(D_YTD, d_ytd + entry->h_amount);
+#endif
+    if (update_context){
+        check_commit_ready(entry);
+    }
+
+    return RCOK;
+}
+
+RC TPCCTxnManager::payment_lookup_c(uint64_t c_id, uint64_t c_w_id, uint64_t c_d_id, char *c_last, bool by_last_name,
+                    row_t *&r_cust_local) {
+
+    itemid_t *item;
+    uint64_t key;
+    if (by_last_name) {
+
+        key = custNPKey(c_last, c_d_id, c_w_id);
+        // XXX: the list is not sorted. But let's assume it's sorted...
+        // The performance won't be much different.
+        INDEX *index = _wl->i_customer_last;
+        item = index_read(index, key, wh_to_part(c_w_id));
+        assert(item != NULL);
+
+        int cnt = 0;
+        itemid_t *it = item;
+        itemid_t *mid = item;
+        while (it != NULL) {
+            cnt++;
+            it = it->next;
+            if (cnt % 2 == 0)
+                mid = mid->next;
+        }
+        r_cust_local = ((row_t *) mid->location);
+    } else { // search customers by cust_id
+        key = custKey(c_id, c_d_id, c_w_id);
+        INDEX *index = _wl->i_customer_id;
+        item = index_read(index, key, wh_to_part(c_w_id));
+        assert(item != NULL);
+        r_cust_local = (row_t *) item->location;
+    }
+
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_payment_update_c(exec_queue_entry *entry) {
+    row_t *r_cust_local;
+#if SINGLE_NODE
+    r_cust_local= entry->row;
+#else
+    payment_lookup_c(entry->c_id,entry->c_w_id,entry->c_d_id,entry->c_last,entry->by_last_name,r_cust_local);
+#endif
+
+    assert(r_cust_local != NULL);
+    double c_balance;
+    double c_ytd_payment;
+    double c_payment_cnt;
+
+    row_access_backup(entry, WR, r_cust_local, _thd_id);
+
+    r_cust_local->get_value(C_BALANCE, c_balance);
+#if SINGLE_NODE
+    r_cust_local->set_value(C_BALANCE, c_balance - entry->txn_ctx->h_amount);
+#else
+    r_cust_local->set_value(C_BALANCE, c_balance - entry->h_amount);
+#endif
+    r_cust_local->get_value(C_YTD_PAYMENT, c_ytd_payment);
+#if SINGLE_NODE
+    r_cust_local->set_value(C_YTD_PAYMENT, c_ytd_payment + entry->txn_ctx->h_amount);
+#else
+    r_cust_local->set_value(C_YTD_PAYMENT, c_ytd_payment + entry->h_amount);
+#endif
+    r_cust_local->get_value(C_PAYMENT_CNT, c_payment_cnt);
+    r_cust_local->set_value(C_PAYMENT_CNT, c_payment_cnt + 1);
+
+    if (update_context){
+        check_commit_ready(entry);
+    }
+
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_payment_insert_h(exec_queue_entry * entry){
+
+    row_t * r_hist;
+    uint64_t w_id;
+
+//    while (!simulation->is_done() && entry->txn_ctx->completion_cnt.load(memory_order_acq_rel) < 3){}
+//    if(simulation->is_done()){
+//        return ERROR;
+//    }
+
+
+#if SINGLE_NODE
+    w_id = entry->txn_ctx->c_w_id;
+#else
+    w_id = entry->c_w_id;
+#endif
+    RC rc = _wl->t_history->get_new_row(r_hist, wh_to_part(w_id), entry->rid);
+    assert(rc == RCOK);
+#if SINGLE_NODE
+    r_hist->set_value(H_C_ID, entry->txn_ctx->c_id);
+    r_hist->set_value(H_C_D_ID, entry->txn_ctx->c_d_id);
+    r_hist->set_value(H_C_W_ID, entry->txn_ctx->c_w_id);
+    r_hist->set_value(H_D_ID, entry->txn_ctx->d_id);
+    r_hist->set_value(H_W_ID, entry->txn_ctx->w_id);
+    r_hist->set_value(H_AMOUNT, entry->txn_ctx->h_amount);
+#else
+    r_hist->set_value(H_C_ID, entry->c_id);
+    r_hist->set_value(H_C_D_ID, entry->c_d_id);
+    r_hist->set_value(H_C_W_ID, entry->c_w_id);
+    r_hist->set_value(H_D_ID, entry->d_id);
+    r_hist->set_value(H_W_ID, entry->w_id);
+    r_hist->set_value(H_AMOUNT, entry->h_amount);
+#endif
+
+    int64_t date = 2017;
+    r_hist->set_value(H_DATE, date);
+
+    // TQ: the following just records the insert into the transaction manager. The actual insert is done above by get_new_row
+    // Since this is a MainMemory-DB, allocating the row is basically an insert.
+//        insert_row(r_hist, _wl->t_history);
+
+    if (update_context){
+        check_commit_ready(entry);
+    }
+
+    return RCOK;
+}
+
+RC TPCCTxnManager::neworder_lookup_w(uint64_t w_id, row_t *& r_wh_local){
+    uint64_t key;
+    itemid_t * item;
+    key = w_id;
+    INDEX * index = _wl->i_warehouse;
+    item = index_read(index, key, wh_to_part(w_id));
+    assert(item != NULL);
+    r_wh_local = ((row_t *)item->location);
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_read_w(exec_queue_entry * entry){
+    double w_tax;
+#if SINGLE_NODE
+    assert(entry->row != NULL);
+    entry->row->get_value(W_TAX, w_tax);
+#else
+    row_t * r_wh_local;
+    neworder_lookup_w(entry->w_id,r_wh_local);
+    r_wh_local->get_value(W_TAX, w_tax);
+#endif
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return RCOK;
+}
+
+RC TPCCTxnManager::neworder_lookup_c(uint64_t w_id, uint64_t d_id, uint64_t c_id, row_t *& r_cust_local){
+    uint64_t key;
+    itemid_t * item;
+    key = custKey(c_id, d_id, w_id);
+    INDEX * index = _wl->i_customer_id;
+    item = index_read(index, key, wh_to_part(w_id));
+    assert(item != NULL);
+    r_cust_local = (row_t *) item->location;
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_read_c(exec_queue_entry * entry){
+
+    uint64_t c_discount;
+    row_t * r_cust_local;
+#if SINGLE_NODE
+    assert(entry->row != NULL);
+    r_cust_local = entry->row;
+#else
+    neworder_lookup_c(entry->c_w_id,entry->c_d_id,entry->c_id,r_cust_local);
+#endif
+    r_cust_local->get_value(C_DISCOUNT, c_discount);
+
+#if SIM_FULL_ROW
+    char * c_last UNUSED = NULL;
+    char * c_credit UNUSED = NULL;
+    c_last = r_cust_local->get_value(C_LAST);
+    c_credit = r_cust_local->get_value(C_CREDIT);
+#endif
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return RCOK;
+};
+
+RC TPCCTxnManager::neworder_lookup_d(uint64_t w_id, uint64_t d_id, row_t *& r_dist_local){
+    uint64_t key;
+    itemid_t * item;
+    key = distKey(d_id, w_id);
+    item = index_read(_wl->i_district, key, wh_to_part(w_id));
+    assert(item != NULL);
+    r_dist_local = ((row_t *)item->location);
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_update_d(exec_queue_entry * entry){
+    row_t * r_dist_local;
+    int64_t * o_id;
+
+#if SINGLE_NODE
+    assert(entry->row != NULL);
+    r_dist_local = entry->row;
+#else
+    neworder_lookup_d(entry->d_w_id,entry->d_id,r_dist_local);
+#endif
+
+#if SIM_FULL_ROW
+    double * d_tax UNUSED;
+    d_tax = (double *) r_dist_local->get_value(D_TAX);
+#endif
+
+    o_id = (int64_t *) r_dist_local->get_value(D_NEXT_O_ID);
+    (*o_id) ++;
+
+    row_access_backup(entry, WR, r_dist_local, _thd_id);
+
+    r_dist_local->set_value(D_NEXT_O_ID, *o_id);
+    int64_t e = -1;
+    int64_t d = *o_id;
+
+    if(!entry->txn_ctx->o_id.compare_exchange_strong(e,d)){
+        M_ASSERT_V(false, "we should have -1 but found %ld\n", entry->txn_ctx->o_id.load());
+    }
+
+    if (update_context){
+        check_commit_ready(entry);
+    }
+//        DEBUG_Q("WT_%ld: finished update dist for txn_id=%lu\n",_thd_id,entry->txn_id);
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
+    row_t * r_order;
+    transaction_context * txn_ctx;
+
+#if SINGLE_NODE
+    txn_ctx = entry->txn_ctx;
+#else
+    //FIXME(tq): need to implementt this proparly
+    // lookup local txn context using planner_id, txn_id
+    assert(false);
+#endif
+
+#if ENABLE_EQ_SWITCH
+
+    if (txn_ctx->o_id.load() == -1){
+//            DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
+        return WAIT;
+    }
+#else
+    // Wait for o_id to become available
+        uint64_t prof_time = get_sys_clock();
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) return Abort;
+        } // spin here until order id for this txn is set
+        INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+#endif
+
+    // insert by allocating memory here
+#if SINGLE_NODE
+    RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
+
+    r_order->set_value(O_C_ID, entry->txn_ctx->c_id);
+    r_order->set_value(O_D_ID, entry->txn_ctx->d_id);
+    r_order->set_value(O_W_ID, entry->txn_ctx->w_id);
+    r_order->set_value(O_ENTRY_D, entry->txn_ctx->o_entry_d);
+    r_order->set_value(O_OL_CNT, entry->txn_ctx->ol_cnt);
+    int64_t all_local = (entry->txn_ctx->remote? 0 : 1);
+    r_order->set_value(O_ALL_LOCAL, all_local);
+    r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
+#else
+    RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->w_id), entry->rid);
+
+    r_order->set_value(O_C_ID, entry->c_id);
+    r_order->set_value(O_D_ID, entry->d_id);
+    r_order->set_value(O_W_ID, entry->w_id);
+    r_order->set_value(O_ENTRY_D, entry->o_entry_d);
+    r_order->set_value(O_OL_CNT, entry->ol_cnt);
+    int64_t all_local = (entry->remote? 0 : 1);
+    r_order->set_value(O_ALL_LOCAL, all_local);
+    r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
+#endif
+
+//        _wl->index_insert(_wl->i_order, orderPrimaryKey(entry->w_id,entry->d_id,entry->txn_ctx->o_id), r_order, wh_to_part(entry->w_id));
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return rc;
+}
+
+RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
+    row_t * r_no;
+    RC rc = RCOK;
+#if ENABLE_EQ_SWITCH
+    if (entry->txn_ctx->o_id.load() == -1){
+//            DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
+        return WAIT;
+    }
+#else
+    // Wait for o_id to become available
+        uint64_t prof_time = get_sys_clock();
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) return Abort;
+        } // spin here until order id for this txn is set
+        INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+#endif
+
+#if SINGLE_NODE
+    rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
+
+    r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
+    r_no->set_value(NO_W_ID, entry->txn_ctx->w_id);
+    r_no->set_value(NO_O_ID, entry->txn_ctx->o_id.load());
+#else
+    assert(false);
+#endif
+    //TQ: do we need to have an index for NewOrder table??
+
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return rc;
+}
+
+RC TPCCTxnManager::neworder_lookup_i(uint64_t ol_i_id, row_t *& r_item_local){
+    uint64_t key;
+    itemid_t * item;
+    key = ol_i_id;
+    item = index_read(_wl->i_item, key, 0);
+    assert(item != NULL);
+    r_item_local = ((row_t *)item->location);
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_read_i(exec_queue_entry * entry){
+    int64_t i_price;
+    row_t * r_item_local;
+#if SINGLE_NODE
+    assert(entry->row != NULL);
+    r_item_local = entry->row;
+#else
+    neworder_lookup_i(entry->ol_i_id,r_item_local);
+#endif
+
+    r_item_local->get_value(I_PRICE, i_price);
+
+#if SIM_FULL_ROW
+    char * i_name UNUSED = NULL;
+    char * i_data UNUSED = NULL;
+    i_name = r_item_local->get_value(I_NAME);
+    i_data = r_item_local->get_value(I_DATA);
+#endif
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return RCOK;
+}
+
+RC TPCCTxnManager::neworder_lookup_s(uint64_t ol_i_id, uint64_t ol_supply_w_id, row_t *& r_stock_local){
+    uint64_t key;
+    itemid_t * item;
+    key = stockKey(ol_i_id, ol_supply_w_id);
+    INDEX * index = _wl->i_stock;
+    item = index_read(index, key, wh_to_part(ol_supply_w_id));
+    assert(item != NULL);
+    r_stock_local = ((row_t *)item->location);
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_update_s(exec_queue_entry * entry){
+    row_t * r_stock_local;
+    // XXX s_dist_xx are not retrieved.
+    UInt64 s_quantity;
+    int64_t s_remote_cnt;
+    bool remote;
+    uint64_t quantity;
+
+#if SINGLE_NODE
+    assert(entry->row != NULL);
+    r_stock_local = entry->row;
+    remote = entry->txn_ctx->remote;
+#else
+    neworder_lookup_s(entry->ol_i_id,entry->ol_supply_w_id,r_stock_local);
+    remote = entry->remote;
+#endif
+
+    s_quantity = *(int64_t *)r_stock_local->get_value(S_QUANTITY);
+
+    row_access_backup(entry, WR, r_stock_local, _thd_id);
+
+#if !TPCC_SMALL
+    int64_t s_ytd;
+        int64_t s_order_cnt;
+        char * s_data __attribute__ ((unused));
+        r_stock_local->get_value(S_YTD, s_ytd);
+        r_stock_local->set_value(S_YTD, s_ytd + entry->txn_ctx->ol_quantity);
+        // In Coordination Avoidance, this record must be protected!
+        r_stock_local->get_value(S_ORDER_CNT, s_order_cnt);
+        r_stock_local->set_value(S_ORDER_CNT, s_order_cnt + 1);
+        s_data = r_stock_local->get_value(S_DATA);
+#endif
+    if (remote) {
+        s_remote_cnt = *(int64_t*)r_stock_local->get_value(S_REMOTE_CNT);
+        s_remote_cnt ++;
+        r_stock_local->set_value(S_REMOTE_CNT, &s_remote_cnt);
+    }
+
+#if SINGLE_NODE
+    if (s_quantity > entry->txn_ctx->ol_quantity + 10) {
+        quantity = s_quantity - entry->txn_ctx->ol_quantity;
+    } else {
+        quantity = s_quantity - entry->txn_ctx->ol_quantity + 91;
+    }
+#else
+    if (s_quantity > entry->ol_quantity + 10) {
+        quantity = s_quantity - entry->ol_quantity;
+    } else {
+        quantity = s_quantity - entry->ol_quantity + 91;
+    }
+#endif
+
+    r_stock_local->set_value(S_QUANTITY, &quantity);
+
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return RCOK;
+}
+
+RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
+    /*====================================================+
+    EXEC SQL INSERT
+        INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number,
+            ol_i_id, ol_supply_w_id,
+            ol_quantity, ol_amount, ol_dist_info)
+        VALUES(:o_id, :d_id, :w_id, :ol_number,
+            :ol_i_id, :ol_supply_w_id,
+            :ol_quantity, :ol_amount, :ol_dist_info);
+    +====================================================*/
+    row_t * r_ol;
+#if ENABLE_EQ_SWITCH
+    if (entry->txn_ctx->o_id.load() == -1){
+//            DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
+        return WAIT;
+    }
+#else
+    // Wait for o_id to become available
+        uint64_t prof_time = get_sys_clock();
+        while (entry->txn_ctx->o_id.load() == 0){
+            if (simulation->is_done()) return Abort;
+        } // spin here until order id for this txn is set
+        INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
+#endif
+
+#if SINGLE_NODE
+    _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->txn_ctx->ol_supply_w_id), entry->rid);
+
+    r_ol->set_value(OL_D_ID, &entry->txn_ctx->d_id);
+    r_ol->set_value(OL_W_ID, &entry->txn_ctx->w_id);
+    r_ol->set_value(OL_NUMBER, &entry->txn_ctx->ol_number);
+    r_ol->set_value(OL_I_ID, &entry->txn_ctx->ol_i_id);
+#else
+    _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->ol_supply_w_id), entry->rid);
+
+    r_ol->set_value(OL_D_ID, &entry->d_id);
+    r_ol->set_value(OL_W_ID, &entry->w_id);
+    r_ol->set_value(OL_NUMBER, &entry->ol_number);
+    r_ol->set_value(OL_I_ID, &entry->ol_i_id);
+#endif
+
+#if !TPCC_SMALL
+    assert(false);
+    r_ol->set_value(OL_SUPPLY_W_ID, &entry->txn_ctx->ol_supply_w_id);
+        r_ol->set_value(OL_QUANTITY, &entry->txn_ctx->ol_quantity);
+        uint64_t ol_amount = URand(1, 10); // TODO(tq): Fix this. Compute OL_AMOUNT proparly
+//        ol_amount = ol_quantity * i_price * (1+w_tax+d_tax) * (1-c_discount);
+//        amt[ol_number-1]=ol_amount;
+//        total += ol_amount;
+        r_ol->set_value(OL_AMOUNT, ol_amount);
+#endif
+    r_ol->set_value(OL_O_ID, entry->txn_ctx->o_id.load());
+
+    if (update_context){
+        check_commit_ready(entry);
+    }
+    return RCOK;
+}
+
 #endif
 
 #if CC_ALG == HSTORE

@@ -1373,6 +1373,7 @@ uint64_t RemoteEQAckMessage::get_size() {
     uint64_t size = Message::mget_size();
     size += sizeof(uint64_t); // for planner_id
     size += sizeof(uint64_t); // for exec_id
+    size += sizeof(bool); // for update_contexts
     return size;
 }
 
@@ -1389,6 +1390,7 @@ void RemoteEQAckMessage::copy_from_buf(char * buf) {
     uint64_t ptr = Message::mget_size();
     COPY_VAL(planner_id,buf,ptr);
     COPY_VAL(exec_id,buf,ptr);
+    COPY_VAL(update_contexts,buf,ptr);
     assert(ptr == get_size());
 }
 
@@ -1397,6 +1399,7 @@ void RemoteEQAckMessage::copy_to_buf(char * buf) {
     uint64_t ptr = Message::mget_size();
     COPY_BUF(buf,planner_id,ptr);
     COPY_BUF(buf,exec_id,ptr);
+    COPY_BUF(buf,update_contexts,ptr);
     assert(ptr == get_size());
 }
 
@@ -1404,6 +1407,8 @@ void RemoteEQAckMessage::copy_to_buf(char * buf) {
 
 uint64_t RemoteOpAckMessage::get_size() {
     uint64_t size = Message::mget_size();
+    size += sizeof(uint64_t); // for planner_id
+    size += sizeof(uint64_t); // for txn_idx
     return size;
 }
 
@@ -1418,12 +1423,16 @@ void RemoteOpAckMessage::copy_to_txn(TxnManager * txn) {
 void RemoteOpAckMessage::copy_from_buf(char * buf) {
     Message::mcopy_from_buf(buf);
     uint64_t ptr = Message::mget_size();
+    COPY_VAL(planner_id,buf,ptr);
+    COPY_VAL(txn_idx,buf,ptr);
     assert(ptr == get_size());
 }
 
 void RemoteOpAckMessage::copy_to_buf(char * buf) {
     Message::mcopy_to_buf(buf);
     uint64_t ptr = Message::mget_size();
+    COPY_BUF(buf,planner_id,ptr);
+    COPY_BUF(buf,txn_idx,ptr);
     assert(ptr == get_size());
 }
 

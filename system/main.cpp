@@ -358,6 +358,7 @@ int main(int argc, char* argv[])
     all_thd_cnt += 2; // sequencer + scheduler thread
 //    all_thd_cnt -= 2; // use fewer worker threads
 //    wthd_cnt = thd_cnt -2; // update worker thread cnt
+    M_ASSERT_V(wthd_cnt >= 1, "For Calvin 2 worker threads are dedicated sequencing and scheduling\n");
 #endif
 
 #if CC_ALG == QUECC

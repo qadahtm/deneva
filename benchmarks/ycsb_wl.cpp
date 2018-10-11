@@ -105,7 +105,7 @@ RC YCSBWorkload::resolve_txn_dependencies(Message* msg, transaction_context * tc
 
 int 
 YCSBWorkload::key_to_part(uint64_t key) {
-#if YCSB_RANGE_PARITIONING
+#if RANGE_PARITIONING
 	uint64_t rows_per_part = g_synth_table_size / g_part_cnt;
 	return (key / rows_per_part) % g_part_cnt;
 #else
@@ -323,7 +323,7 @@ void *YCSBWorkload::init_table_slice() {
 		 key++
 			) {
 #if !SERVER_GENERATE_QUERIES
-#if YCSB_RANGE_PARITIONING
+#if RANGE_PARITIONING
 		if (GET_NODE_ID(key_to_part(key)) != g_node_id) {
 			++key;
 			continue;
@@ -333,7 +333,7 @@ void *YCSBWorkload::init_table_slice() {
 			++key;
 			continue;
 		}
-#endif // #if YCSB_RANGE_PARITIONING
+#endif // #if RANGE_PARITIONING
 #endif
 
 		++key_cnt;

@@ -64,7 +64,6 @@ void InputThread::setup() {
 #endif
 #if CC_ALG == QUECC
 //      DEBUG_Q("Enqueue to planning layer\n")
-#if WORKLOAD == YCSB
                 if (msg->rtype == CL_QRY) {
                     uint64_t dplan_id = planner_msg_cnt % g_plan_thread_cnt;
                     planner_enq_msg_cnt[dplan_id]++;
@@ -73,7 +72,6 @@ void InputThread::setup() {
                     msgs->erase(msgs->begin());
                     continue;
                 }
-#endif
 
 #endif // CC_ALG == QUECC
                 work_queue.enqueue(get_thd_id(), msg, false);
@@ -87,7 +85,7 @@ void InputThread::setup() {
 RC InputThread::run() {
     tsetup();
     printf("Running InputThread %ld\n", _thd_id);
-
+    fflush(stdout);
     if (ISCLIENT) {
         client_recv_loop();
     } else {
@@ -138,7 +136,7 @@ RC InputThread::client_recv_loop() {
 //            stats.totals->quecc_txn_comp_cnt.fetch_add(1);
 //            simulation->inc_txn_cnt(1);
 
-            DEBUG_Q("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
+            DEBUG("Recv %ld from %ld, %ld -- %f\n", ((ClientResponseMessage *) msg)->txn_id, msg->return_node_id, inf,
                   float(timespan)/BILLION);
             assert(inf >= 0);
             // delete message here
@@ -209,7 +207,7 @@ RC InputThread::server_recv_loop() {
 
 #if CC_ALG == QUECC
 //      DEBUG_Q("Enqueue to planning layer\n")
-#if WORKLOAD == YCSB
+
             if (msg->rtype == CL_QRY) {
                 // assume 1 input thread
                 // FIXME(tq): if there are > 1 input threads planner_msg_cnt risks a race condition and must inc atomically
@@ -223,13 +221,25 @@ RC InputThread::server_recv_loop() {
                 msgs->erase(msgs->begin());
                 continue;
             }
-#endif
 
             if( msg->rtype == RDONE) {
                 assert(ISSERVERN(msg->get_return_id()));
                 DEBUG_Q("Received RDONE from node=%lu for batch_id=%lu\n", msg->return_node_id, msg->batch_id);
 //                assert(((uint64_t)quecc_pool.last_commited_batch_id.load(memory_order_acq_rel)+1) == msg->batch_id);
                 quecc_pool.batch_deps[ msg->batch_id % g_batch_map_length].fetch_add(-1,memory_order_acq_rel);
+                Message::release_message(msg);
+                msgs->erase(msgs->begin());
+
+                continue;
+            }
+
+            if( msg->rtype == REMOTE_OP_ACK) {
+                assert(ISSERVERN(msg->get_return_id()));
+                RemoteOpAckMessage * opack_msg = (RemoteOpAckMessage *) msg;
+//                DEBUG_Q("Received REMOTE_OP_ACK from node=%lu for batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+//                        msg->return_node_id, msg->batch_id,opack_msg->planner_id, opack_msg->txn_idx);
+//                uint64_t txn_idx = opack_msg->txn_id-work_queue.batch_pg_map[msg->batch_id % g_batch_map_length][opack_msg->planner_id].batch_starting_txn_id;
+                work_queue.batch_pg_map[msg->batch_id % g_batch_map_length][QueCCPool::map_to_planner_id(opack_msg->planner_id)].txn_ctxs[opack_msg->txn_idx].completion_cnt.fetch_add(1,memory_order_acq_rel);
                 Message::release_message(msg);
                 msgs->erase(msgs->begin());
 
@@ -292,10 +302,20 @@ RC InputThread::server_recv_loop() {
                 assert(batch_part->single_q);
 
                 // update txn contexts 'locally'
+                // For TPC-C, req_ack->update_contexts == false because operations are dependent and messages are sent
+                // as each operation/fragment is executed
+                // This final REQ-ACK is used to indicate that the remote EQ has been fully processed.
+//                if (!batch_part->empty && req_ack->update_contexts){
                 if (!batch_part->empty){
                     for (uint64_t j = 0; j < batch_part->exec_q->size(); ++j) {
-//                        batch_part->exec_q->get_ptr(j)->txn_ctx->completion_cnt.fetch_add(1,memory_order_acq_rel);
+#if WORKLOAD == TPCC
+                        if (batch_part->exec_q->get_ptr(j)->type == TPCC_PAYMENT_UPDATE_C){
+                            TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
+                        }
+#endif
+#if WORKLOAD == YCSB
                         TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
+#endif
                     }
 //                    DEBUG_Q("updated txn_ctx for %lu entries\n",batch_part->exec_q->size());
                 }
@@ -356,7 +376,7 @@ RC OutputThread::run() {
 
     tsetup();
     printf("Running OutputThread %ld\n", _thd_id);
-
+    fflush(stdout);
     while (!simulation->is_done()) {
         heartbeat();
         messager->run();

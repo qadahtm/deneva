@@ -128,7 +128,8 @@ public:
     uint64_t _planner_id;
     uint64_t _worker_cluster_wide_id;
     uint64_t query_cnt =0;
-#if YCSB_RANGE_PARITIONING
+#if WORKLOAD == YCSB
+#if RANGE_PARITIONING
     inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
         for (uint32_t i = 0; i < ranges->size(); i++){
             if (key <= ranges->get(i)){
@@ -143,6 +144,20 @@ public:
 //        return (uint32_t) key % g_cluster_worker_thread_cnt;
         return (uint32_t) (key % g_node_cnt);
     }
+#endif
+#endif
+
+#if WORKLOAD == TPCC
+    inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
+        assert((UInt32)g_num_wh == g_cluster_worker_thread_cnt);
+        uint32_t eq_idx = ((uint32_t) (key-1)) % g_cluster_worker_thread_cnt;
+//        DEBUG_Q("mapping key(w_id)=%lu, wh_to_part=%lu, to EQ_%u\n",key,wh_to_part(key),eq_idx);
+        return eq_idx;
+    }
+#endif
+
+#if WORKLOAD == PPS
+
 #endif
     uint64_t get_key_from_entry(exec_queue_entry * entry);
 

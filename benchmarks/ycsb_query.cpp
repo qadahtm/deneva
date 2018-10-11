@@ -362,7 +362,7 @@ BaseQuery *YCSBQueryGenerator::gen_requests_hot(uint64_t home_partition_id, Work
 
 }
 
-#if !YCSB_RANGE_PARITIONING
+#if !RANGE_PARITIONING
 BaseQuery * YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Workload * h_wl) {
     YCSBQuery * query = (YCSBQuery*) mem_allocator.alloc(sizeof(YCSBQuery));
     new(query) YCSBQuery();
@@ -612,6 +612,6 @@ BaseQuery *YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Wor
     return query;
 
 }
-#endif // if !YCSB_RANGE_PARITIONING
+#endif // if !RANGE_PARITIONING
 
 #endif // #if WORKLOAD == YCSB

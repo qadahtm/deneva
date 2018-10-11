@@ -347,7 +347,10 @@ Client_query_queue::initQueriesParallel() {
 #else
     for ( UInt32 server_id = 0; server_id < g_servers_per_client; server_id ++) {
         for (UInt32 query_id = request_cnt / g_init_parallelism * tid; query_id < final_request; query_id ++) {
-            queries[server_id][query_id] = gen->create_query(_wl,server_id+g_server_start_node);
+            uint64_t home_part = server_id+g_server_start_node;
+//            DEBUG_Q("tid=%lu:query_id=%u, server_id=%u, g_server_start_node=%u, home_part=%lu\n",
+//                    tid,query_id,server_id, g_server_start_node,home_part);
+            queries[server_id][query_id] = gen->create_query(_wl,home_part);
             gq_cnt++;
         }
     }

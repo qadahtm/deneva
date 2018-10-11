@@ -66,8 +66,10 @@ struct transaction_context {
 #else
     uint64_t txn_state;
 #endif
+
 #if WORKLOAD == TPCC
     atomic<int64_t> o_id;
+#if SINGLE_NODE
     double h_amount;
     uint64_t w_id;
     uint64_t d_id;
@@ -82,6 +84,7 @@ struct transaction_context {
     uint64_t ol_supply_w_id;
     uint64_t  ol_number;
 //    uint64_t ol_amount;
+#endif
 #endif
 
 #if ROLL_BACK && ROW_ACCESS_TRACKING
@@ -130,6 +133,9 @@ enum tpcc_txn_frag_t{
 
 struct exec_queue_entry {
     transaction_context * txn_ctx; // 8
+#if SINGLE_NODE
+    row_t * row; // 8 bytes
+#endif
     uint64_t txn_id; //8
 #if WORKLOAD == YCSB
      // 8 bytes for access_type
@@ -140,9 +146,39 @@ struct exec_queue_entry {
 #elif WORKLOAD == TPCC
     tpcc_txn_frag_t type; // 4 bytes
     uint64_t rid; // 8 bytes
+
+#if SINGLE_NODE
     char padding[24]; // 64-(8+8+8+4+8+4)
+#else
+    uint64_t txn_idx; //8
+    uint64_t planner_id;
+
+//FIXME(tq): reduce the size of the entry (e.g., use union)
+    // common txn input for both payment & new-order
+    uint64_t w_id; // also used for d_w_id
+    uint64_t d_w_id;
+    uint64_t c_w_id;
+
+    uint64_t d_id;
+    uint64_t c_d_id;
+
+    uint64_t c_id;
+
+    double h_amount;
+    char c_last[LASTNAME_LEN];
+    bool by_last_name;
+
+    //for neworder
+    bool remote;
+    uint64_t  ol_cnt;
+    uint64_t  o_entry_d;
+    uint64_t ol_quantity;
+    uint64_t ol_i_id;
+    uint64_t ol_supply_w_id;
+    uint64_t  ol_number;
+//    uint64_t ol_amount;
 #endif
-    row_t * row; // 8 bytes
+#endif
 //#if ROW_ACCESS_IN_CTX
     uint64_t req_idx; // 8 bytes
 //#endif

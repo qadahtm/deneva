@@ -155,7 +155,7 @@ UInt64 g_synth_table_size = SYNTH_TABLE_SIZE;
 UInt32 g_req_per_query = REQ_PER_QUERY;
 bool g_strict_ppt = STRICT_PPT;
 UInt32 g_field_per_tuple = FIELD_PER_TUPLE;
-#if CC_ALG == QUECC
+#if CC_ALG == QUECC && SINGLE_NODE
 UInt32 g_init_parallelism = PLAN_THREAD_CNT;
 #else
 UInt32 g_init_parallelism = INIT_PARALLELISM;
