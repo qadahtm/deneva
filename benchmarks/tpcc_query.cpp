@@ -84,6 +84,7 @@ std::set<uint64_t> TPCCQuery::participants(Message * msg, Workload * wl) {
       break;
     case TPCC_NEW_ORDER: 
       for(uint64_t i = 0; i < tpcc_msg->ol_cnt; i++) {
+
         uint64_t req_nid = GET_NODE_ID(wh_to_part(tpcc_msg->items[i]->ol_supply_w_id));
         participant_set.insert(req_nid);
       }
@@ -218,8 +219,10 @@ BaseQuery * TPCCQueryGenerator::gen_new_order(uint64_t home_partition) {
 
     query->txn_type = TPCC_NEW_ORDER;
     query->items.init(g_max_items_per_txn);
+    UInt32 home_part_start_wh = ((g_num_wh/g_part_cnt)*home_partition) + 1;
+    UInt32 home_part_end_wh = (g_num_wh/g_part_cnt)*home_partition + (g_num_wh/g_part_cnt);
     if (FIRST_PART_LOCAL) {
-        while(wh_to_part(query->w_id = URand(1, g_num_wh)) != home_partition) {}
+        while(wh_to_part(query->w_id = URand(home_part_start_wh, home_part_end_wh)) != home_partition) {}
     }
     else
         query->w_id = URand(1, g_num_wh);
@@ -255,14 +258,25 @@ BaseQuery * TPCCQueryGenerator::gen_new_order(uint64_t home_partition) {
             item->ol_supply_w_id = query->w_id;
         } else {
             if(partitions_accessed.size() < part_limit) {
+                // choose a remote warehouse
+//                if (g_num_wh > 1) {
+//                    while ((query->ol_supply_w_id = URand(1, g_num_wh)) == query->w_id) {}
+//                    if (wh_to_part(query->w_id) != wh_to_part(query->ol_supply_w_id)) {
+//                        partitions_accessed.insert(wh_to_part(query->ol_supply_w_id));
+//                    }
+//                }
+//                else{
+//                    query->ol_supply_w_id = query->w_id;
+//                }
                 item->ol_supply_w_id = URand(1, g_num_wh);
                 partitions_accessed.insert(wh_to_part(item->ol_supply_w_id));
-            } else {
+            }
+            else {
                 // select warehouse from among those already selected
                 while( partitions_accessed.count(wh_to_part(item->ol_supply_w_id = URand(1, g_num_wh))) == 0) {}
             }
         }
-
+        assert(item->ol_supply_w_id > 0);
         query->items.add(item);
     }
 

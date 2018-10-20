@@ -1,11 +1,10 @@
 #ifndef _CONFIG_H_
-
 #define _CONFIG_H_
 
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 4
+#define NODE_CNT 2
 //#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
 #define THREAD_CNT 4
 #define REM_THREAD_CNT 2//THREAD_CNT
@@ -18,12 +17,12 @@
 
 
 // TQ: since we have 20 cores per node on halstead
-// With a single node used for client requests, 
+// With a single node used for client requests,
 // it is better to assign 5 threads for each client per node.
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 4
+#define CLIENT_NODE_CNT 1
 #define CLIENT_THREAD_CNT 4
 #define CLIENT_REM_THREAD_CNT 2
 #define CLIENT_SEND_THREAD_CNT 2
@@ -38,8 +37,8 @@
 #define REPL_TYPE AP
 
 // each transaction only accesses only 1 virtual partition. But the lock/ts manager and index are not aware of such partitioning. VIRTUAL_PART_CNT describes the request distribution and is only used to generate queries. For HSTORE, VIRTUAL_PART_CNT should be the same as PART_CNT.
-#define VIRTUAL_PART_CNT    PART_CNT  
-#define PAGE_SIZE         4096 
+#define VIRTUAL_PART_CNT    PART_CNT
+#define PAGE_SIZE         4096
 #define CL_SIZE           64
 //#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
@@ -81,16 +80,16 @@
 //    pool
 // 3. per-partition malloc. each partition has its own memory pool
 //    which is mapped to a unique tile on the chip.
-#define MEM_ALLIGN          8 
+#define MEM_ALLIGN          8
 
 // [THREAD_ALLOC]
 #define THREAD_ALLOC        false
-#define THREAD_ARENA_SIZE     (1UL << 22) 
+#define THREAD_ARENA_SIZE     (1UL << 22)
 #define MEM_PAD           true
 
-// [PART_ALLOC] 
+// [PART_ALLOC]
 #define PART_ALLOC          true
-#define MEM_SIZE          (1UL << 30) 
+#define MEM_SIZE          (1UL << 30)
 #define NO_FREE           false
 
 //#define N_MALLOC
@@ -107,7 +106,7 @@
 
 #define MAX_TPORT_NAME 128
 #define MSG_SIZE 128 // in bytes
-#define HEADER_SIZE sizeof(uint32_t)*2 // in bits 
+#define HEADER_SIZE sizeof(uint32_t)*2 // in bits
 #define MSG_TIMEOUT 5000000000UL // in ns
 #define NETWORK_TEST false
 #define NETWORK_DELAY_TEST false
@@ -125,9 +124,7 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-//#define CC_ALG NO_WAIT
 #define CC_ALG QUECC
-//#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -146,7 +143,6 @@
 #define CENTRAL_INDEX       false
 #define CENTRAL_MANAGER       false
 #define INDEX_STRUCT        IDX_HASH
-//#define INDEX_STRUCT        IDX_HASH_SIMPLE
 #define BTREE_ORDER         16
 
 // [STORAGE]
@@ -168,7 +164,7 @@
 // [OCC]
 #define MAX_WRITE_SET       10
 #define PER_ROW_VALID       false
-// [VLL] 
+// [VLL]
 #define TXN_QUEUE_SIZE_LIMIT    THREAD_CNT
 // [CALVIN]
 #define SEQ_THREAD_CNT 4
@@ -344,9 +340,9 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    500000
+//#define MAX_TXN_PER_PART    500000
 //#define MAX_TXN_PER_PART    15625
-//#define MAX_TXN_PER_PART    32 //debugging
+#define MAX_TXN_PER_PART    32 //debugging
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -355,7 +351,7 @@
 #define MAX_TUPLE_SIZE        1024 // in bytes
 #define GEN_BY_MPR false
 // ==== [YCSB] ====
-// SKEW_METHOD: 
+// SKEW_METHOD:
 //    ZIPF: use ZIPF_THETA distribution
 //    HOT: use ACCESS_PERC of the accesses go to DATA_PERC of the data
 #define SKEW_METHOD ZIPF
@@ -401,31 +397,32 @@
 #define MAX_ITEMS_NORM 100000
 #define CUST_PER_DIST_NORM 3000
 #define MAX_ITEMS_PER_TXN 15
-// Some of the transactions read the data but never use them. 
+// Some of the transactions read the data but never use them.
 // If TPCC_ACCESS_ALL == fales, then these parts of the transactions
 // are not modeled.
-#define TPCC_ACCESS_ALL       false 
+#define TPCC_ACCESS_ALL       false
 #define WH_UPDATE         true
-#define NUM_WH (4*NODE_CNT)
+//#define NUM_WH (4*NODE_CNT)
+#define NUM_WH (THREAD_CNT*NODE_CNT)
 // % of transactions that access multiple partitions
 #define MPR 0.15 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
-enum TPCCTable {TPCC_WAREHOUSE, 
-          TPCC_DISTRICT,
-          TPCC_CUSTOMER,
-          TPCC_HISTORY,
-          TPCC_NEWORDER,
-          TPCC_ORDER,
-          TPCC_ORDERLINE,
-          TPCC_ITEM,
-          TPCC_STOCK};
-enum TPCCTxnType {TPCC_ALL, 
-          TPCC_PAYMENT,
-          TPCC_NEW_ORDER, 
-          TPCC_ORDER_STATUS, 
-          TPCC_DELIVERY, 
-          TPCC_STOCK_LEVEL};
+enum TPCCTable {TPCC_WAREHOUSE,
+	TPCC_DISTRICT,
+	TPCC_CUSTOMER,
+	TPCC_HISTORY,
+	TPCC_NEWORDER,
+	TPCC_ORDER,
+	TPCC_ORDERLINE,
+	TPCC_ITEM,
+	TPCC_STOCK};
+enum TPCCTxnType {TPCC_ALL,
+	TPCC_PAYMENT,
+	TPCC_NEW_ORDER,
+	TPCC_ORDER_STATUS,
+	TPCC_DELIVERY,
+	TPCC_STOCK_LEVEL};
 extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
@@ -445,12 +442,12 @@ extern TPCCTxnType          g_tpcc_txn_type;
 #define MAX_PPS_PRODUCT_KEY 1000
 #define MAX_PPS_SUPPLIER_KEY 1000
 #define MAX_PPS_PART_PER_PRODUCT 10
-#define MAX_PPS_PART_PER_SUPPLIER 10 
-#define MAX_PPS_PART_PER_PRODUCT_KEY 10 
-#define MAX_PPS_PART_PER_SUPPLIER_KEY 10 
+#define MAX_PPS_PART_PER_SUPPLIER 10
+#define MAX_PPS_PART_PER_PRODUCT_KEY 10
+#define MAX_PPS_PART_PER_SUPPLIER_KEY 10
 
 #define PERC_PPS_GETPART 0.00
-#define PERC_PPS_GETSUPPLIER 0.00 
+#define PERC_PPS_GETSUPPLIER 0.00
 #define PERC_PPS_GETPRODUCT 0.0
 #define PERC_PPS_GETPARTBYSUPPLIER 0.0
 #define PERC_PPS_GETPARTBYPRODUCT 0.2
@@ -458,16 +455,16 @@ extern TPCCTxnType          g_tpcc_txn_type;
 #define PERC_PPS_UPDATEPRODUCTPART 0.2
 #define PERC_PPS_UPDATEPART 0.0
 
-enum PPSTxnType {PPS_ALL = 0, 
-          PPS_GETPART, 
-          PPS_GETSUPPLIER, 
-          PPS_GETPRODUCT, 
-          PPS_GETPARTBYSUPPLIER, 
-          PPS_GETPARTBYPRODUCT,
-          PPS_ORDERPRODUCT,
-          PPS_UPDATEPRODUCTPART, 
-          PPS_UPDATEPART 
-          };
+enum PPSTxnType {PPS_ALL = 0,
+	PPS_GETPART,
+	PPS_GETSUPPLIER,
+	PPS_GETPRODUCT,
+	PPS_GETPARTBYSUPPLIER,
+	PPS_GETPARTBYPRODUCT,
+	PPS_ORDERPRODUCT,
+	PPS_UPDATEPRODUCTPART,
+	PPS_UPDATEPART
+};
 
 /***********************************************/
 // DEBUG info
@@ -578,9 +575,9 @@ enum PPSTxnType {PPS_ALL = 0,
 #define IPC 2
 // Isolation levels
 #define SERIALIZABLE 1
-#define READ_COMMITTED 2 
-#define READ_UNCOMMITTED 3 
-#define NOLOCK 4 
+#define READ_COMMITTED 2
+#define READ_UNCOMMITTED 3
+#define NOLOCK 4
 
 // Stats and timeout
 #define BILLION 1000000000UL // in ns => 1 second
@@ -590,7 +587,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 10 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
 //#define DONE_TIMER 1 * 10 * BILLION // debugging
 //#define WARMUP_TIMER 1 * 1 * BILLION // debugging
 
@@ -599,5 +596,3 @@ enum PPSTxnType {PPS_ALL = 0,
 #define ENVIRONMENT_EC2 false
 
 #endif
-
-

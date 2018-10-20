@@ -216,20 +216,20 @@ public:
     RC neworder_lookup_i(uint64_t ol_i_id, row_t *& r_item_local);
 
     RC plan_neworder_read_i(row_t *& r_item_local, exec_queue_entry * entry);
-    RC plan_neworder_read_i(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry);
+    RC plan_neworder_read_i(TPCCClientQueryMessage *tpcc_msg,uint64_t ol_number, exec_queue_entry *entry);
 
     RC run_neworder_read_i(exec_queue_entry * entry);
 
     RC neworder_lookup_s(uint64_t ol_i_id, uint64_t ol_supply_w_id, row_t *& r_stock_local);
 
     RC plan_neworder_update_s(uint64_t ol_quantity, bool remote, row_t *& r_stock_local, exec_queue_entry * entry);
-    RC plan_neworder_update_s(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry);
+    RC plan_neworder_update_s(TPCCClientQueryMessage *tpcc_msg,uint64_t ol_number, exec_queue_entry *entry);
 
     RC run_neworder_update_s(exec_queue_entry * entry);
 
     RC plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_w_id, uint64_t ol_quantity,uint64_t  ol_number, uint64_t d_id,
                                       row_t *& r_ol_local, exec_queue_entry * entry);
-    RC plan_neworder_insert_ol(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry);
+    RC plan_neworder_insert_ol(TPCCClientQueryMessage *tpcc_msg,uint64_t ol_number, exec_queue_entry *entry);
 
     RC run_neworder_insert_ol(exec_queue_entry * entry);
 

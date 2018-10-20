@@ -268,6 +268,7 @@ public:
     void release() {}
     uint64_t planner_id;
     uint64_t txn_idx;
+    int64_t o_id;
 };
 #endif
 
@@ -343,7 +344,7 @@ public:
   uint64_t d_w_id;
   uint64_t c_w_id;
   uint64_t c_d_id;
-	char c_last[LASTNAME_LEN];
+  char c_last[LASTNAME_LEN];
   uint64_t h_amount;
   bool by_last_name;
 

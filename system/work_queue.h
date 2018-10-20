@@ -93,7 +93,7 @@ public:
 #if CC_ALG == QUECC
     // A map for holding arrays of transaction contexts
 #if BATCHING_MODE == SIZE_BASED
-    priority_group batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
+    priority_group batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT*NODE_CNT];
 #else
     volatile atomic<uint64_t> batch_pg_map[BATCH_MAP_LENGTH][PLAN_THREAD_CNT];
 #endif

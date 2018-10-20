@@ -475,7 +475,9 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     row = exec_qe->row;
 #else
     rc = run_ycsb_0(req, row);
+#if SINGLE_NODE
     exec_qe->row = row;
+#endif
     assert(rc == RCOK);
 #endif
 //    INC_STATS(get_thd_id(), exec_txn_index_lookup_time[get_thd_id()], get_sys_clock()-quecc_prof_time);

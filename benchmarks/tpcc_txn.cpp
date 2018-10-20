@@ -413,6 +413,7 @@ void TPCCTxnManager::copy_remote_items(TPCCQueryMessage * msg) {
   msg->items.init(tpcc_query->items.size());
   if(tpcc_query->txn_type == TPCC_PAYMENT)
     return;
+  DEBUG_Q("WT_%lu: (%lu,%lu) copying remote items from txn_man to msg\n",get_thd_id(), get_txn_id(), get_batch_id());
   uint64_t dest_node_id = GET_NODE_ID(wh_to_part(tpcc_query->items[next_item_id]->ol_supply_w_id));
   while(next_item_id < tpcc_query->items.size() && !is_local_item(next_item_id) && GET_NODE_ID(wh_to_part(tpcc_query->items[next_item_id]->ol_supply_w_id)) == dest_node_id) {
     Item_no * req = (Item_no*) mem_allocator.alloc(sizeof(Item_no));
@@ -531,15 +532,14 @@ RC TPCCTxnManager::run_txn_state() {
 			break;
 		case TPCC_NEWORDER8 :
 #if SINGLE_NODE
-        rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
+            rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
             query->partitions_touched.add_unique(wh_to_part(ol_supply_w_id));
 #else
-              if(ol_supply_w_loc) {
-                  rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
-		      }
-		      else {
-                  rc = send_remote_request();
-		      }
+            if (ol_supply_w_loc) {
+                rc = new_order_8(w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity, ol_number, o_id, row);
+            } else {
+                rc = send_remote_request();
+            }
 #endif
               break;
 		case TPCC_NEWORDER9 :
@@ -748,6 +748,7 @@ RC TPCCTxnManager::run_payment_5(uint64_t w_id, uint64_t d_id,uint64_t c_id,uint
 	  history (h_c_d_id, h_c_w_id, h_c_id, h_d_id, h_w_id, h_date, h_amount, h_data)
 	  VALUES (:c_d_id, :c_w_id, :c_id, :d_id, :w_id, :datetime, :h_amount, :h_data);
 	  +=============================================================================*/
+#if PAYMENT_INSERT_ENABLED
 	row_t * r_hist;
 	uint64_t row_id = rid_man.next_rid(wh_to_part(c_w_id));
 	// Which partition should we be inserting into?
@@ -761,7 +762,7 @@ RC TPCCTxnManager::run_payment_5(uint64_t w_id, uint64_t d_id,uint64_t c_id,uint
 	r_hist->set_value(H_DATE, date);
 	r_hist->set_value(H_AMOUNT, h_amount);
 	insert_row(r_hist, _wl->t_history);
-
+#endif
 	return RCOK;
 }
 
@@ -849,6 +850,7 @@ RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool
 	(*o_id) ++;
 	r_dist_local->set_value(D_NEXT_O_ID, *o_id);
 
+#if NEWORDER_INSERT_ENABLED
 	// return o_id
 	/*========================================================================================+
 	EXEC SQL INSERT INTO ORDERS (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
@@ -878,7 +880,7 @@ RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool
 	r_no->set_value(NO_D_ID, d_id);
 	r_no->set_value(NO_W_ID, w_id);
 	insert_row(r_no, _wl->t_neworder);
-
+#endif
 	return RCOK;
 }
 
@@ -976,7 +978,7 @@ RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, uint64_
 			quantity = s_quantity - ol_quantity + 91;
 		}
 		r_stock_local->set_value(S_QUANTITY, &quantity);
-
+#if NEWORDER_INSERT_ENABLED
 		/*====================================================+
 		EXEC SQL INSERT
 			INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number,
@@ -988,7 +990,7 @@ RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, uint64_
 		+====================================================*/
 		row_t * r_ol;
 //		uint64_t row_id = rid_man.next_rid(this->h_thd->_thd_id);
-        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
+        uint64_t row_id = rid_man.next_rid(wh_to_part(ol_supply_w_id));
 		_wl->t_orderline->get_new_row(r_ol, wh_to_part(ol_supply_w_id), row_id);
 		r_ol->set_value(OL_O_ID, &o_id);
 		r_ol->set_value(OL_D_ID, &d_id);
@@ -1001,7 +1003,7 @@ RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, uint64_
 		r_ol->set_value(OL_AMOUNT, &ol_amount);
 #endif		
 		insert_row(r_ol, _wl->t_orderline);
-
+#endif
 	return RCOK;
 }
 
@@ -1156,7 +1158,6 @@ RC TPCCTxnManager::plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t
     uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
 #endif
 //        uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
-    entry->rid = row_id;
 #if SINGLE_NODE
     entry->txn_ctx->w_id = w_id;
     entry->txn_ctx->d_id = d_id;
@@ -1167,10 +1168,10 @@ RC TPCCTxnManager::plan_neworder_insert_o(uint64_t w_id, uint64_t d_id, uint64_t
 #else
     assert(false);
 #endif
+    entry->rid = row_id;
     entry->type = TPCC_NEWORDER_INSERT_O;
     entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
     return RCOK;
-
 }
 
 RC TPCCTxnManager::plan_neworder_insert_no(uint64_t w_id, uint64_t d_id, uint64_t c_id, exec_queue_entry * entry){
@@ -1238,7 +1239,6 @@ RC TPCCTxnManager::plan_neworder_insert_ol(uint64_t ol_i_id, uint64_t ol_supply_
 #endif
     entry->type = TPCC_NEWORDER_INSERT_OL;
     entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
-
     return RCOK;
 }
 
@@ -1435,8 +1435,7 @@ RC TPCCTxnManager::run_payment_update_c(exec_queue_entry *entry) {
 
 RC TPCCTxnManager::run_payment_insert_h(exec_queue_entry * entry){
 
-    row_t * r_hist;
-    uint64_t w_id;
+    uint64_t UNUSED w_id;
 
 //    while (!simulation->is_done() && entry->txn_ctx->completion_cnt.load(memory_order_acq_rel) < 3){}
 //    if(simulation->is_done()){
@@ -1449,6 +1448,8 @@ RC TPCCTxnManager::run_payment_insert_h(exec_queue_entry * entry){
 #else
     w_id = entry->c_w_id;
 #endif
+#if PAYMENT_INSERT_ENABLED
+    row_t * r_hist;
     RC rc = _wl->t_history->get_new_row(r_hist, wh_to_part(w_id), entry->rid);
     assert(rc == RCOK);
 #if SINGLE_NODE
@@ -1469,7 +1470,7 @@ RC TPCCTxnManager::run_payment_insert_h(exec_queue_entry * entry){
 
     int64_t date = 2017;
     r_hist->set_value(H_DATE, date);
-
+#endif
     // TQ: the following just records the insert into the transaction manager. The actual insert is done above by get_new_row
     // Since this is a MainMemory-DB, allocating the row is basically an insert.
 //        insert_row(r_hist, _wl->t_history);
@@ -1480,6 +1481,102 @@ RC TPCCTxnManager::run_payment_insert_h(exec_queue_entry * entry){
 
     return RCOK;
 }
+
+RC TPCCTxnManager::plan_neworder_read_w(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->rid = tpcc_msg->w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->type = TPCC_NEWORDER_READ_W;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_read_c(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->rid = tpcc_msg->w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->c_id = tpcc_msg->c_id;
+    entry->type = TPCC_NEWORDER_READ_C;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_update_d(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->rid = tpcc_msg->w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->type = TPCC_NEWORDER_UPDATE_D;
+
+    // need to compute nodes that depends on this operation
+    for (uint64_t i =0; i < tpcc_msg->ol_cnt; ++i){
+        uint64_t ol_supply_w_id = tpcc_msg->items[i]->ol_supply_w_id;
+        if (ol_supply_w_id != entry->w_id){
+            entry->dep_nodes[wh_to_part(ol_supply_w_id)]++;
+        }
+    }
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_insert_o(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->rid = tpcc_msg->w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->c_id = tpcc_msg->c_id;
+    entry->o_entry_d = tpcc_msg->o_entry_d;
+//    entry->remote = tpcc_msg->remote;
+    entry->ol_cnt = tpcc_msg->ol_cnt;
+
+    entry->type = TPCC_NEWORDER_INSERT_O;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_insert_no(TPCCClientQueryMessage *tpcc_msg, exec_queue_entry *entry) {
+    entry->rid = tpcc_msg->w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->type = TPCC_NEWORDER_INSERT_NO;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_read_i(TPCCClientQueryMessage *tpcc_msg, uint64_t ol_number, exec_queue_entry *entry) {
+    Item_no * item =tpcc_msg->items[ol_number];
+    entry->rid = item->ol_supply_w_id;
+    entry->ol_i_id = item->ol_i_id;
+    entry->type = TPCC_NEWORDER_READ_I;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC TPCCTxnManager::plan_neworder_update_s(TPCCClientQueryMessage *tpcc_msg,uint64_t ol_number, exec_queue_entry *entry) {
+    Item_no * item =tpcc_msg->items[ol_number];
+    entry->rid = item->ol_supply_w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->ol_supply_w_id = item->ol_supply_w_id;
+    entry->ol_i_id = item->ol_i_id;
+    entry->ol_amount = item->ol_amount;
+    entry->ol_quantity = item->ol_quantity;
+//    entry->remote = (tpcc_msg->w_id != item->ol_supply_w_id);
+    entry->type = TPCC_NEWORDER_UPDATE_S;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
+RC
+TPCCTxnManager::plan_neworder_insert_ol(TPCCClientQueryMessage *tpcc_msg, uint64_t ol_number, exec_queue_entry *entry) {
+    Item_no * item =tpcc_msg->items[ol_number];
+    entry->rid = item->ol_supply_w_id;
+    entry->w_id = tpcc_msg->w_id;
+    entry->d_id = tpcc_msg->d_id;
+    entry->ol_supply_w_id =item->ol_supply_w_id;
+    entry->ol_i_id = item->ol_i_id;
+    entry->ol_number = ol_number;
+    entry->type = TPCC_NEWORDER_INSERT_OL;
+    entry->req_idx = entry->txn_ctx->txn_comp_cnt.fetch_add(1);
+    return RCOK;
+}
+
 
 RC TPCCTxnManager::neworder_lookup_w(uint64_t w_id, row_t *& r_wh_local){
     uint64_t key;
@@ -1527,7 +1624,7 @@ RC TPCCTxnManager::run_neworder_read_c(exec_queue_entry * entry){
     assert(entry->row != NULL);
     r_cust_local = entry->row;
 #else
-    neworder_lookup_c(entry->c_w_id,entry->c_d_id,entry->c_id,r_cust_local);
+    neworder_lookup_c(entry->w_id,entry->d_id,entry->c_id,r_cust_local);
 #endif
     r_cust_local->get_value(C_DISCOUNT, c_discount);
 
@@ -1555,13 +1652,13 @@ RC TPCCTxnManager::neworder_lookup_d(uint64_t w_id, uint64_t d_id, row_t *& r_di
 
 RC TPCCTxnManager::run_neworder_update_d(exec_queue_entry * entry){
     row_t * r_dist_local;
-    int64_t * o_id;
+    int64_t o_id;
 
 #if SINGLE_NODE
     assert(entry->row != NULL);
     r_dist_local = entry->row;
 #else
-    neworder_lookup_d(entry->d_w_id,entry->d_id,r_dist_local);
+    neworder_lookup_d(entry->w_id,entry->d_id,r_dist_local);
 #endif
 
 #if SIM_FULL_ROW
@@ -1569,18 +1666,18 @@ RC TPCCTxnManager::run_neworder_update_d(exec_queue_entry * entry){
     d_tax = (double *) r_dist_local->get_value(D_TAX);
 #endif
 
-    o_id = (int64_t *) r_dist_local->get_value(D_NEXT_O_ID);
-    (*o_id) ++;
+    r_dist_local->get_value(D_NEXT_O_ID, o_id);
 
-    row_access_backup(entry, WR, r_dist_local, _thd_id);
-
-    r_dist_local->set_value(D_NEXT_O_ID, *o_id);
     int64_t e = -1;
-    int64_t d = *o_id;
 
-    if(!entry->txn_ctx->o_id.compare_exchange_strong(e,d)){
-        M_ASSERT_V(false, "we should have -1 but found %ld\n", entry->txn_ctx->o_id.load());
+    if(!entry->txn_ctx->o_id.compare_exchange_strong(e,o_id, memory_order_acq_rel)){
+        DEBUG_Q("w_id=%lu,d_id=%lu,o_id=%ld, next o_id=%ld, entry_planner_id=%lu\n",
+                entry->w_id, entry->d_id,(o_id), (o_id)+1, entry->planner_id);
+        M_ASSERT_V(false, "we should have -1 but found %ld\n", entry->txn_ctx->o_id.load(memory_order_acq_rel));
     }
+    (o_id) ++;
+    row_access_backup(entry, WR, r_dist_local, _thd_id);
+    r_dist_local->set_value(D_NEXT_O_ID, o_id);
 
     if (update_context){
         check_commit_ready(entry);
@@ -1590,23 +1687,20 @@ RC TPCCTxnManager::run_neworder_update_d(exec_queue_entry * entry){
 }
 
 RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
-    row_t * r_order;
     transaction_context * txn_ctx;
-
-#if SINGLE_NODE
     txn_ctx = entry->txn_ctx;
-#else
-    //FIXME(tq): need to implementt this proparly
-    // lookup local txn context using planner_id, txn_id
-    assert(false);
-#endif
+    RC rc = RCOK;
 
+    //FIXME(tq): remove this macro
 #if ENABLE_EQ_SWITCH
-
-    if (txn_ctx->o_id.load() == -1){
+#if SINGLE_NODE
+    if (txn_ctx->o_id.load(memory_order_acq_rel) == -1){
 //            DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
         return WAIT;
     }
+#else
+    while (txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+#endif
 #else
     // Wait for o_id to become available
         uint64_t prof_time = get_sys_clock();
@@ -1615,10 +1709,11 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
 #endif
-
+#if NEWORDER_INSERT_ENABLED
     // insert by allocating memory here
+    row_t * r_order;
 #if SINGLE_NODE
-    RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
+    rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->txn_ctx->w_id), entry->rid);
 
     r_order->set_value(O_C_ID, entry->txn_ctx->c_id);
     r_order->set_value(O_D_ID, entry->txn_ctx->d_id);
@@ -1629,7 +1724,7 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
     r_order->set_value(O_ALL_LOCAL, all_local);
     r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
 #else
-    RC rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->w_id), entry->rid);
+    rc = _wl->t_order->get_new_row(r_order, wh_to_part(entry->w_id), entry->rid);
 
     r_order->set_value(O_C_ID, entry->c_id);
     r_order->set_value(O_D_ID, entry->d_id);
@@ -1641,7 +1736,8 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
     r_order->set_value(O_ID, entry->txn_ctx->o_id.load());
 #endif
 
-//        _wl->index_insert(_wl->i_order, orderPrimaryKey(entry->w_id,entry->d_id,entry->txn_ctx->o_id), r_order, wh_to_part(entry->w_id));
+//    _wl->index_insert(_wl->i_order, orderPrimaryKey(entry->w_id,entry->d_id,entry->txn_ctx->o_id), r_order, wh_to_part(entry->w_id));
+#endif
     if (update_context){
         check_commit_ready(entry);
     }
@@ -1651,10 +1747,14 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
 RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
     RC rc = RCOK;
 #if ENABLE_EQ_SWITCH
-    if (entry->txn_ctx->o_id.load() == -1){
+#if SINGLE_NODE
+    if (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){
 //            DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
         return WAIT;
     }
+#else
+    while (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+#endif
 #else
     // Wait for o_id to become available
         uint64_t prof_time = get_sys_clock();
@@ -1664,15 +1764,19 @@ RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
 #endif
 
-#if SINGLE_NODE
+#if NEWORDER_INSERT_ENABLED
     row_t * r_no;
+#if SINGLE_NODE
     rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
-
-    r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
     r_no->set_value(NO_W_ID, entry->txn_ctx->w_id);
+    r_no->set_value(NO_D_ID, entry->txn_ctx->d_id);
     r_no->set_value(NO_O_ID, entry->txn_ctx->o_id.load());
 #else
-    assert(false);
+    rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->w_id), entry->rid);
+    r_no->set_value(NO_W_ID, entry->w_id);
+    r_no->set_value(NO_D_ID, entry->d_id);
+    r_no->set_value(NO_O_ID, entry->txn_ctx->o_id.load());
+#endif
 #endif
     //TQ: do we need to have an index for NewOrder table??
 
@@ -1741,7 +1845,8 @@ RC TPCCTxnManager::run_neworder_update_s(exec_queue_entry * entry){
     remote = entry->txn_ctx->remote;
 #else
     neworder_lookup_s(entry->ol_i_id,entry->ol_supply_w_id,r_stock_local);
-    remote = entry->remote;
+//    remote = entry->remote;
+    remote = (entry->w_id != entry->ol_supply_w_id);
 #endif
 
     s_quantity = *(int64_t *)r_stock_local->get_value(S_QUANTITY);
@@ -1750,14 +1855,14 @@ RC TPCCTxnManager::run_neworder_update_s(exec_queue_entry * entry){
 
 #if !TPCC_SMALL
     int64_t s_ytd;
-        int64_t s_order_cnt;
-        char * s_data __attribute__ ((unused));
-        r_stock_local->get_value(S_YTD, s_ytd);
-        r_stock_local->set_value(S_YTD, s_ytd + entry->txn_ctx->ol_quantity);
-        // In Coordination Avoidance, this record must be protected!
-        r_stock_local->get_value(S_ORDER_CNT, s_order_cnt);
-        r_stock_local->set_value(S_ORDER_CNT, s_order_cnt + 1);
-        s_data = r_stock_local->get_value(S_DATA);
+    int64_t s_order_cnt;
+    char * s_data __attribute__ ((unused));
+    r_stock_local->get_value(S_YTD, s_ytd);
+    r_stock_local->set_value(S_YTD, s_ytd + entry->txn_ctx->ol_quantity);
+    // In Coordination Avoidance, this record must be protected!
+    r_stock_local->get_value(S_ORDER_CNT, s_order_cnt);
+    r_stock_local->set_value(S_ORDER_CNT, s_order_cnt + 1);
+    s_data = r_stock_local->get_value(S_DATA);
 #endif
     if (remote) {
         s_remote_cnt = *(int64_t*)r_stock_local->get_value(S_REMOTE_CNT);
@@ -1797,12 +1902,15 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
             :ol_i_id, :ol_supply_w_id,
             :ol_quantity, :ol_amount, :ol_dist_info);
     +====================================================*/
-    row_t * r_ol;
 #if ENABLE_EQ_SWITCH
-    if (entry->txn_ctx->o_id.load() == -1){
+#if SINGLE_NODE
+    if (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){
 //            DEBUG_Q("o_id is not ready! for txn_id = %ld\n", entry->txn_id);
         return WAIT;
     }
+#else
+    while (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+#endif
 #else
     // Wait for o_id to become available
         uint64_t prof_time = get_sys_clock();
@@ -1811,7 +1919,8 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
 #endif
-
+#if NEWORDER_INSERT_ENABLED
+    row_t * r_ol;
 #if SINGLE_NODE
     _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->txn_ctx->ol_supply_w_id), entry->rid);
 
@@ -1820,8 +1929,7 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
     r_ol->set_value(OL_NUMBER, &entry->txn_ctx->ol_number);
     r_ol->set_value(OL_I_ID, &entry->txn_ctx->ol_i_id);
 #else
-    _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->ol_supply_w_id), entry->rid);
-
+    _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->w_id), entry->rid);
     r_ol->set_value(OL_D_ID, &entry->d_id);
     r_ol->set_value(OL_W_ID, &entry->w_id);
     r_ol->set_value(OL_NUMBER, &entry->ol_number);
@@ -1839,7 +1947,7 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
         r_ol->set_value(OL_AMOUNT, ol_amount);
 #endif
     r_ol->set_value(OL_O_ID, entry->txn_ctx->o_id.load());
-
+#endif
     if (update_context){
         check_commit_ready(entry);
     }
@@ -1943,7 +2051,7 @@ RC TPCCTxnManager::run_calvin_txn() {
   RC rc = RCOK;
   uint64_t starttime = get_sys_clock();
   TPCCQuery* tpcc_query = (TPCCQuery*) query;
-  DEBUG("(%ld,%ld) Run calvin txn, tpcc type = %d\n",txn->txn_id,txn->batch_id, tpcc_query->txn_type);
+  DEBUG_Q("WT_%lu:(%lu,%lu) Run calvin txn, tpcc type = %d\n",this->get_thd_id(),txn->txn_id,txn->batch_id, tpcc_query->txn_type);
   while(!calvin_exec_phase_done() && rc == RCOK) {
     DEBUG("(%ld,%ld) phase %d\n",txn->txn_id,txn->batch_id,this->phase);
     switch(this->phase) {
@@ -1954,13 +2062,14 @@ RC TPCCTxnManager::run_calvin_txn() {
           calvin_expected_rsp_cnt--;
         }
 
-        DEBUG("(%ld,%ld) expects %d responses; %ld participants, %ld active\n",txn->txn_id,txn->batch_id,calvin_expected_rsp_cnt,query->participant_nodes.size(),query->active_nodes.size());
+        DEBUG_Q("WT_%lu:(%ld,%ld) expects %d responses; %ld participants, %ld active\n",
+              this->get_thd_id(),txn->txn_id,txn->batch_id,calvin_expected_rsp_cnt,query->participant_nodes.size(),query->active_nodes.size());
 
         this->phase = CALVIN_LOC_RD;
         break;
       case CALVIN_LOC_RD:
         // Phase 2: Perform local reads
-        DEBUG("(%ld,%ld) local reads\n",txn->txn_id,txn->batch_id);
+        DEBUG_Q("WT_%lu:(%ld,%ld) local reads\n",this->get_thd_id(),txn->txn_id,txn->batch_id);
         rc = run_tpcc_phase2();
         //release_read_locks(tpcc_query);
 
@@ -1977,7 +2086,8 @@ RC TPCCTxnManager::run_calvin_txn() {
             rc = RCOK;
           } else {
             assert(calvin_expected_rsp_cnt > 0);
-            DEBUG("(%ld,%ld) wait in collect phase; %d / %d rfwds received\n",txn->txn_id,txn->batch_id,rsp_cnt,calvin_expected_rsp_cnt);
+            DEBUG_Q("WT_%lu:(%ld,%ld) wait in collect phase; %d / %d rfwds received\n",
+                    this->get_thd_id(),txn->txn_id,txn->batch_id,rsp_cnt,calvin_expected_rsp_cnt);
             rc = WAIT;
           }
         } else { // Done
@@ -1991,7 +2101,7 @@ RC TPCCTxnManager::run_calvin_txn() {
         break;
       case CALVIN_EXEC_WR:
         // Phase 5: Execute transaction / perform local writes
-        DEBUG("(%ld,%ld) execute writes\n",txn->txn_id,txn->batch_id);
+        DEBUG_Q("WT_%lu:(%ld,%ld) execute writes\n",this->get_thd_id(),txn->txn_id,txn->batch_id);
         rc = run_tpcc_phase5();
         this->phase = CALVIN_DONE;
         break;
@@ -2142,8 +2252,10 @@ RC TPCCTxnManager::run_tpcc_phase5() {
 #if !SINGLE_NODE
           bool ol_supply_w_loc = GET_NODE_ID(part_id_ol_supply_w) == g_node_id;
           if(ol_supply_w_loc) {
-            rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row); 
-            rc = new_order_9( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, ol_amount, o_id, row); 
+              DEBUG_Q("WT_%lu:(%lu,%lu) ol_supply_w=%lu,  items[i=%lu],ol_cnt=%lu, tpcc_query ptr=%lu, items ptr=%lu\n", this->get_thd_id(),
+                      this->get_txn_id(),this->get_batch_id(), ol_supply_w_id, i,tpcc_query->ol_cnt,(uint64_t) tpcc_query, (uint64_t) &tpcc_query->items);
+              rc = new_order_8( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, o_id, row);
+            rc = new_order_9( w_id, d_id, remote, ol_i_id, ol_supply_w_id, ol_quantity,  ol_number, ol_amount, o_id, row);
           }
 #else
             query->partitions_touched.add_unique(part_id_w);

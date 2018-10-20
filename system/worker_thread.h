@@ -80,6 +80,9 @@ public:
 
     SRC batch_cleanup(uint64_t batch_slot);
 
+    SRC batch_cleanup_et_oriented(uint64_t batch_slot);
+    SRC batch_cleanup_pt_oriented(uint64_t batch_slot);
+
     SRC wait_for_batch_ready(uint64_t batch_slot, uint64_t wplanner_id,
                                     batch_partition *& batch_part);
     batch_partition * get_batch_part(uint64_t batch_slot, uint64_t wplanner_id);

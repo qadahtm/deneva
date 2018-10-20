@@ -205,7 +205,7 @@ public:
         } while(!entry->txn_ctx->completion_cnt.compare_exchange_strong(e8,d8,memory_order_acq_rel));
 //#if SINGLE_NODE
         if (d8 > (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
-            assert(false);
+            DEBUG_Q("completion_cnt = %lu, txn_comp_cnt=%lu\n",d8,entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel));
 //            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu, txn_ctx_ptr=%lu\n",
 //                    entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel),
 //                    entry->txn_ctx->txn_comp_cnt.load(),(uint64_t)entry->txn_ctx);
@@ -216,6 +216,7 @@ public:
 //                    M_ASSERT_V(false,"ET_%ld: Invalid txn state = %ld, txn_id=%ld, ctx_txn_id=%lu\n",
 //                               _thd_id,entry->txn_ctx->txn_state.load(), entry->txn_id, entry->txn_ctx->txn_id);
 //                }
+            assert(false);
         }
 //#endif
     }

@@ -1946,7 +1946,7 @@ void PlannerThread::plan_client_msg(Message *msg, priority_group * planner_pg) {
 #endif
     // create execution entry, for now it will contain only one request
     // we need to reset the mutable values of tctx
-    entry->txn_id = planner_txn_id;
+//    entry->txn_id = planner_txn_id;
     entry->txn_ctx = tctx;
 #if ROW_ACCESS_TRACKING
 #if ROW_ACCESS_IN_CTX

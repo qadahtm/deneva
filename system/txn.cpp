@@ -635,6 +635,7 @@ int TxnManager::received_response(RC rc) {
         txn->rc = rc;
 #if CC_ALG == CALVIN
     ++rsp_cnt;
+    DEBUG_Q("WT_%lu: recieved a response for (%lu,%lu), rsp_cnt=%d\n",get_thd_id(), get_txn_id(), get_batch_id(), rsp_cnt);
 #else
     --rsp_cnt;
 #endif
@@ -1232,7 +1233,7 @@ TxnManager::send_remote_reads() {
         if (i == g_node_id)
             continue;
         if (query->active_nodes[i] == 1) {
-            DEBUG("(%ld,%ld) send_remote_read to %ld\n", get_txn_id(), get_batch_id(), i);
+            DEBUG_Q("WT_%lu:(%ld,%ld) send_remote_read RFWD to %ld\n",get_thd_id(), get_txn_id(), get_batch_id(), i);
             msg_queue.enqueue(get_thd_id(), Message::create_message(this, RFWD), i);
         }
     }

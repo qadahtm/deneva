@@ -552,6 +552,11 @@ void TPCCClientQueryMessage::copy_to_txn(TxnManager * txn) {
 
   // new order
   tpcc_query->items.append(items);
+//  DEBUG_Q("transport: appending items to tpcc_query ptr: %lu, items ptr: %lu\n", (uint64_t) tpcc_query,(uint64_t) &tpcc_query->items)
+//  for (uint64_t i=0; i < ol_cnt; ++i){
+//      DEBUG_Q("transport: (%lu,%lu) msg.items[%lu].supply_w_id=%lu, tpcc_query->items[%lu] supply_w_id=%lu, ptr=%lu\n",
+//              txn->get_txn_id(),txn->get_batch_id(),i,items[i]->ol_supply_w_id,i,tpcc_query->items[i]->ol_supply_w_id,(uint64_t)items.get_ptr(i));
+//  }
   tpcc_query->rbk = rbk;
   tpcc_query->remote = remote;
   tpcc_query->ol_cnt = ol_cnt;
@@ -1352,7 +1357,8 @@ void RemoteEQMessage::copy_to_buf(char * buf) {
     memcpy(&buf[ptr], exec_q->items,items_size);
     ptr += items_size;
 //    DEBUG_Q("Sending RemoteEQMessage: batch_id=%lu, planner_id=%lu, exec_id=%lu, size=%lu\n",batch_id,planner_id,exec_id,size);
-    assert(ptr == get_size());
+    uint64_t msize = get_size();
+    assert(ptr == msize);
 }
 
 void RemoteEQMessage::copy_from_txn(TxnManager * txn) {
@@ -1409,6 +1415,7 @@ uint64_t RemoteOpAckMessage::get_size() {
     uint64_t size = Message::mget_size();
     size += sizeof(uint64_t); // for planner_id
     size += sizeof(uint64_t); // for txn_idx
+    size += sizeof(int64_t); // for o_id
     return size;
 }
 
@@ -1425,6 +1432,7 @@ void RemoteOpAckMessage::copy_from_buf(char * buf) {
     uint64_t ptr = Message::mget_size();
     COPY_VAL(planner_id,buf,ptr);
     COPY_VAL(txn_idx,buf,ptr);
+    COPY_VAL(o_id,buf,ptr);
     assert(ptr == get_size());
 }
 
@@ -1433,6 +1441,7 @@ void RemoteOpAckMessage::copy_to_buf(char * buf) {
     uint64_t ptr = Message::mget_size();
     COPY_BUF(buf,planner_id,ptr);
     COPY_BUF(buf,txn_idx,ptr);
+    COPY_BUF(buf,o_id,ptr);
     assert(ptr == get_size());
 }
 

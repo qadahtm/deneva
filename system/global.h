@@ -289,36 +289,36 @@ enum SRC { SUCCESS=0, BREAK, BATCH_READY, BATCH_WAIT, FATAL_ERROR };
 
 
 enum RemReqType {INIT_DONE=0,
-    RLK,
-    RULK,
-    CL_QRY, //TQ: Message type for Client Query or transaction
-    RQRY, //TQ: Remote Query
-    RQRY_CONT,
-    RFIN,
-    RLK_RSP,
-    RULK_RSP,
-    RQRY_RSP,
-    RACK,
-    RACK_PREP,
-    RACK_FIN,
-    RTXN,
-    RTXN_CONT,
-    RINIT,
-    RPREPARE,
-    RPASS,
-    RFWD,
-    RDONE,
-    CL_RSP, //TQ: Client response
+    RLK, //1
+    RULK, //2
+    CL_QRY,//3 //TQ: Message type for Client Query or transaction
+    RQRY,//4 //TQ: Remote Query
+    RQRY_CONT,//5
+    RFIN,//6
+    RLK_RSP,//7
+    RULK_RSP,//8
+    RQRY_RSP,//9
+    RACK,//10
+    RACK_PREP,//11
+    RACK_FIN,//12
+    RTXN,//13
+    RTXN_CONT,//14
+    RINIT,//15
+    RPREPARE,//16
+    RPASS,//17
+    RFWD,//18
+    RDONE,//19
+    CL_RSP,//20 //TQ: Client response
 //#if CC_ALG == QUECC
-	REMOTE_EQ,
-	REMOTE_EQ_ACK,
-	REMOTE_OP_ACK,
+	REMOTE_EQ,//21
+	REMOTE_EQ_ACK,//22
+	REMOTE_OP_ACK,//23
 //#endif
-    LOG_MSG,
-    LOG_MSG_RSP,
-    LOG_FLUSHED,
-    CALVIN_ACK,
-    NO_MSG};
+    LOG_MSG,//24
+    LOG_MSG_RSP,//25
+    LOG_FLUSHED,//26
+    CALVIN_ACK,//27
+    NO_MSG};//28
 
 // Calvin
 enum CALVIN_PHASE {CALVIN_RW_ANALYSIS=0,CALVIN_LOC_RD,CALVIN_SERVE_RD,CALVIN_COLLECT_RD,CALVIN_EXEC_WR,CALVIN_DONE};

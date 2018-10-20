@@ -68,7 +68,7 @@ struct transaction_context {
 #endif
 
 #if WORKLOAD == TPCC
-    atomic<int64_t> o_id;
+    volatile atomic<int64_t> o_id;
 #if SINGLE_NODE
     double h_amount;
     uint64_t w_id;
@@ -118,17 +118,17 @@ typedef boost::unordered::unordered_map<uint64_t, boost::lockfree::queue<char *>
 
 enum tpcc_txn_frag_t{
     TPCC_PAYMENT_UPDATE_W=0,
-    TPCC_PAYMENT_UPDATE_D,
-    TPCC_PAYMENT_UPDATE_C,
-    TPCC_PAYMENT_INSERT_H,
-    TPCC_NEWORDER_READ_W,
-    TPCC_NEWORDER_READ_C,
-    TPCC_NEWORDER_UPDATE_D,
-    TPCC_NEWORDER_INSERT_O,
-    TPCC_NEWORDER_INSERT_NO,
-    TPCC_NEWORDER_READ_I,
-    TPCC_NEWORDER_UPDATE_S,
-    TPCC_NEWORDER_INSERT_OL
+    TPCC_PAYMENT_UPDATE_D, //1
+    TPCC_PAYMENT_UPDATE_C,//2
+    TPCC_PAYMENT_INSERT_H,//3
+    TPCC_NEWORDER_READ_W,//4
+    TPCC_NEWORDER_READ_C,//5
+    TPCC_NEWORDER_UPDATE_D,//6
+    TPCC_NEWORDER_INSERT_O,//7
+    TPCC_NEWORDER_INSERT_NO,//8
+    TPCC_NEWORDER_READ_I,//9
+    TPCC_NEWORDER_UPDATE_S,//10
+    TPCC_NEWORDER_INSERT_OL//11
 };
 
 struct exec_queue_entry {
@@ -136,7 +136,7 @@ struct exec_queue_entry {
 #if SINGLE_NODE
     row_t * row; // 8 bytes
 #endif
-    uint64_t txn_id; //8
+//    uint64_t txn_id; //8
 #if WORKLOAD == YCSB
      // 8 bytes for access_type
     // 8 bytes for key
@@ -151,6 +151,7 @@ struct exec_queue_entry {
     char padding[24]; // 64-(8+8+8+4+8+4)
 #else
     uint64_t txn_idx; //8
+    uint64_t batch_id;
     uint64_t planner_id;
 
 //FIXME(tq): reduce the size of the entry (e.g., use union)
@@ -169,16 +170,17 @@ struct exec_queue_entry {
     bool by_last_name;
 
     //for neworder
-    bool remote;
+//    bool remote;
     uint64_t  ol_cnt;
     uint64_t  o_entry_d;
     uint64_t ol_quantity;
     uint64_t ol_i_id;
     uint64_t ol_supply_w_id;
     uint64_t  ol_number;
-//    uint64_t ol_amount;
+    uint64_t ol_amount;
 #endif
 #endif
+    int dep_nodes[NODE_CNT];
 //#if ROW_ACCESS_IN_CTX
     uint64_t req_idx; // 8 bytes
 //#endif

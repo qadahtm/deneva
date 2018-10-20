@@ -224,7 +224,7 @@ RC InputThread::server_recv_loop() {
 
             if( msg->rtype == RDONE) {
                 assert(ISSERVERN(msg->get_return_id()));
-                DEBUG_Q("Received RDONE from node=%lu for batch_id=%lu\n", msg->return_node_id, msg->batch_id);
+                DEBUG_Q("RT_%lu: Received RDONE from node=%lu for batch_id=%lu\n",_thd_id, msg->return_node_id, msg->batch_id);
 //                assert(((uint64_t)quecc_pool.last_commited_batch_id.load(memory_order_acq_rel)+1) == msg->batch_id);
                 quecc_pool.batch_deps[ msg->batch_id % g_batch_map_length].fetch_add(-1,memory_order_acq_rel);
                 Message::release_message(msg);
@@ -233,13 +233,25 @@ RC InputThread::server_recv_loop() {
                 continue;
             }
 
+
             if( msg->rtype == REMOTE_OP_ACK) {
                 assert(ISSERVERN(msg->get_return_id()));
+
+
+#if WORKLOAD == TPCC
                 RemoteOpAckMessage * opack_msg = (RemoteOpAckMessage *) msg;
-//                DEBUG_Q("Received REMOTE_OP_ACK from node=%lu for batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
-//                        msg->return_node_id, msg->batch_id,opack_msg->planner_id, opack_msg->txn_idx);
-//                uint64_t txn_idx = opack_msg->txn_id-work_queue.batch_pg_map[msg->batch_id % g_batch_map_length][opack_msg->planner_id].batch_starting_txn_id;
-                work_queue.batch_pg_map[msg->batch_id % g_batch_map_length][QueCCPool::map_to_planner_id(opack_msg->planner_id)].txn_ctxs[opack_msg->txn_idx].completion_cnt.fetch_add(1,memory_order_acq_rel);
+                DEBUG_Q("RT_%lu: Received REMOTE_OP_ACK from node=%lu for batch_id=%lu, planner_id=%lu, txn_idx=%lu, o_id=%ld\n", _thd_id,
+                        msg->return_node_id, msg->batch_id,opack_msg->planner_id, opack_msg->txn_idx, opack_msg->o_id);
+                transaction_context * txn_ctx = &work_queue.batch_pg_map[msg->batch_id % g_batch_map_length][opack_msg->planner_id].txn_ctxs[opack_msg->txn_idx];
+//                txn_ctx->o_id.store(opack_msg->o_id, memory_order_acq_rel);
+                int64_t e = -1;
+//                while(!txn_ctx->o_id.compare_exchange_strong(e,opack_msg->o_id, memory_order_acq_rel)){}
+                if(!txn_ctx->o_id.compare_exchange_strong(e,opack_msg->o_id, memory_order_acq_rel)){
+                    M_ASSERT_V(false, "Receiver thread: we should have -1 but found %ld, batch_id=%lu, PT_%lu , txn_idx=%lu, recv o_id=%ld\n",
+                               txn_ctx->o_id.load(memory_order_acq_rel), msg->batch_id, opack_msg->planner_id, opack_msg->txn_idx, opack_msg->o_id);
+                }
+//                txn_ctx->completion_cnt.fetch_add(1,memory_order_acq_rel);
+#endif
                 Message::release_message(msg);
                 msgs->erase(msgs->begin());
 
@@ -248,23 +260,30 @@ RC InputThread::server_recv_loop() {
 
             if (msg->rtype == REMOTE_EQ) {
                 RemoteEQMessage * eq_msg = (RemoteEQMessage *) msg;
-                //spin here if other node is ahead of the currently executing batch on this node
-//                while(quecc_pool.last_commited_batch_id.load(memory_order_acq_rel) < (eq_msg->batch_id-1)){}
-
                 uint64_t batch_slot = eq_msg->batch_id % g_batch_map_length;
                 batch_partition * batch_part;
                 quecc_pool.batch_part_get_or_create(batch_part, eq_msg->planner_id, eq_msg->exec_id);
 
                 if (eq_msg->exec_q == nullptr){
                     batch_part->empty = true;
-//                    quecc_pool.exec_queue_release(eq_msg->exec_q, eq_msg->planner_id, eq_msg->exec_id);
-                    DEBUG_Q("Received Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu, EQ_size=%lu\n",
-                            eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id, 0L);
+                    DEBUG_Q("N_%u:RT_%lu: Received Remote EQ from node=%lu, Batch map[%lu][%lu][%lu] , EQ_size=%lu\n",g_node_id,_thd_id,
+                            eq_msg->return_node_id, eq_msg->batch_id, eq_msg->planner_id, eq_msg->exec_id, 0L);
                 }
                 else{
-                    DEBUG_Q("Received Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu, EQ_size=%lu\n",
-                            eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id, eq_msg->exec_q->size());
+                    DEBUG_Q("N_%u:RT_%lu: Received Remote EQ from node=%lu, Batch map[%lu][%lu][%lu] , EQ_size=%lu\n",g_node_id,_thd_id,
+                            eq_msg->return_node_id, eq_msg->batch_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->exec_q->size());
                     batch_part->exec_q = eq_msg->exec_q;
+#if WORKLOAD == TPCC
+                    // setup txn contexts for remote
+                    for (uint64_t i = 0; i < batch_part->exec_q->size(); ++i) {
+                        exec_queue_entry * entry = batch_part->exec_q->get_ptr(i);
+//                        DEBUG_Q("Setting up context for remote EQ from node=%lu, PT_%lu, batch_id=%lu, txn_idx=%lu\n",
+//                                eq_msg->return_node_id, entry->planner_id, entry->batch_id, entry->txn_idx);
+                        transaction_context * txn_ctx = &work_queue.batch_pg_map[entry->batch_id % g_batch_map_length][entry->planner_id].txn_ctxs[entry->txn_idx];
+//                        txn_ctx->o_id.store(-1, memory_order_acq_rel);
+                        entry->txn_ctx = txn_ctx;
+                    }
+#endif
                 }
 
                 batch_part->remote = true;
@@ -272,7 +291,11 @@ RC InputThread::server_recv_loop() {
                 uint64_t expected = 0;
                 uint64_t desired = (uint64_t) batch_part;
                 // neet to spin if batch slot is not ready
+                DEBUG_Q("N_%u:RT_%lu: Going to Spin on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",g_node_id,_thd_id,
+                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
                 while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
+//                DEBUG_Q("RT_%lu: DONE Spinning on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n", _thd_id,
+//                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
 
 //                if(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired)){
 //                    // this should not happen after spinning but can happen if simulation is done
@@ -280,8 +303,8 @@ RC InputThread::server_recv_loop() {
 //                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
 //                }
 
-//                DEBUG_Q("Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu] EQ_size=%lu\n",
-//                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id, eq_msg->exec_q->size());
+                DEBUG_Q("N_%u:RT_%lu: Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu] EQ_size=%lu\n",g_node_id,_thd_id,
+                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id, eq_msg->exec_q->size());
 
                 // cannot release message yet!! relase on cleanup ???
                 //Actually we can release it here since the pointer of exec_q is already set
@@ -309,9 +332,9 @@ RC InputThread::server_recv_loop() {
                 if (!batch_part->empty){
                     for (uint64_t j = 0; j < batch_part->exec_q->size(); ++j) {
 #if WORKLOAD == TPCC
-                        if (batch_part->exec_q->get_ptr(j)->type == TPCC_PAYMENT_UPDATE_C){
+//                        if (batch_part->exec_q->get_ptr(j)->type == TPCC_PAYMENT_UPDATE_C){
                             TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
-                        }
+//                        }
 #endif
 #if WORKLOAD == YCSB
                         TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));

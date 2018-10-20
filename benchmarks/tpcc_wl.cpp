@@ -323,7 +323,8 @@ void TPCCWorkload::init_tab_dist(uint64_t wid) {
         double w_ytd = 30000.00;
         row->set_value(D_TAX, tax);
         row->set_value(D_YTD, w_ytd);
-        row->set_value(D_NEXT_O_ID, 3001);
+        int64_t o_id = 3001;
+        row->set_value(D_NEXT_O_ID, o_id);
 
         index_insert(i_district, distKey(did, wid), row, wh_to_part(wid));
     }
