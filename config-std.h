@@ -62,8 +62,8 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
-//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*2
+//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
+#define MAX_TXN_IN_FLIGHT BATCH_SIZE*4
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -377,7 +377,7 @@
 #define WH_UPDATE         true
 #define NUM_WH 4
 // % of transactions that access multiple partitions
-#define MPR 0.15 // used for TPCC and YCSB
+#define MPR 0.1 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE,

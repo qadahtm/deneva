@@ -291,8 +291,8 @@ RC InputThread::server_recv_loop() {
                 uint64_t expected = 0;
                 uint64_t desired = (uint64_t) batch_part;
                 // neet to spin if batch slot is not ready
-                DEBUG_Q("N_%u:RT_%lu: Going to Spin on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",g_node_id,_thd_id,
-                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
+//                DEBUG_Q("N_%u:RT_%lu: Going to Spin on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",g_node_id,_thd_id,
+//                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
                 while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
 //                DEBUG_Q("RT_%lu: DONE Spinning on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n", _thd_id,
 //                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
@@ -303,8 +303,8 @@ RC InputThread::server_recv_loop() {
 //                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
 //                }
 
-                DEBUG_Q("N_%u:RT_%lu: Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu] EQ_size=%lu\n",g_node_id,_thd_id,
-                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id, eq_msg->exec_q->size());
+//                DEBUG_Q("N_%u:RT_%lu: Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu]\n",g_node_id,_thd_id,
+//                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id);
 
                 // cannot release message yet!! relase on cleanup ???
                 //Actually we can release it here since the pointer of exec_q is already set

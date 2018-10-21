@@ -5,11 +5,11 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 4
+#define NODE_CNT 2
 //#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
-#define THREAD_CNT 4
-#define REM_THREAD_CNT 2//THREAD_CNT
-#define SEND_THREAD_CNT 2//THREAD_CNT
+#define THREAD_CNT 2
+#define REM_THREAD_CNT 1
+#define SEND_THREAD_CNT 1
 #define CORE_CNT 8
 #define NUMA_NODE_CNT 2
 // PART_CNT should be at least NODE_CNT
@@ -23,10 +23,10 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 4
-#define CLIENT_THREAD_CNT 4
-#define CLIENT_REM_THREAD_CNT 2
-#define CLIENT_SEND_THREAD_CNT 2
+#define CLIENT_NODE_CNT 1
+#define CLIENT_THREAD_CNT 2
+#define CLIENT_REM_THREAD_CNT 1
+#define CLIENT_SEND_THREAD_CNT 1
 #define CLIENT_RUNTIME false
 
 #define LOAD_METHOD LOAD_MAX
@@ -51,11 +51,11 @@
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD TPCC
+#define WORKLOAD YCSB
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          false
+#define PROG_STATS          true
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
@@ -63,8 +63,8 @@
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table
-#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
-//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*2
+//#define MAX_TXN_IN_FLIGHT BATCH_SIZE*64 // we need more inflight txns for QueCC
+#define MAX_TXN_IN_FLIGHT BATCH_SIZE*2
 // TQ: this allows servers to generate transactions and avoid client-server communication overhead
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
@@ -344,8 +344,8 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    500000
-//#define MAX_TXN_PER_PART    15625
+//#define MAX_TXN_PER_PART    500000
+#define MAX_TXN_PER_PART    15625
 //#define MAX_TXN_PER_PART    32 //debugging
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
@@ -365,15 +365,15 @@
 #define INIT_PARALLELISM    4//THREAD_CNT
 #define RANGE_PARITIONING true
 //#define SYNTH_TABLE_SIZE 1024
-//#define SYNTH_TABLE_SIZE  65536*NODE_CNT
+#define SYNTH_TABLE_SIZE  65536*NODE_CNT
 //#define SYNTH_TABLE_SIZE   10*1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
 //#define SYNTH_TABLE_SIZE 167771520 // 16GB ~16M with 100B recs so that it is divisiable by different batch sizes values
-#define ZIPF_THETA 0.0//0.3 0.0 -> Uniform
+#define ZIPF_THETA 0.9//0.3 0.0 -> Uniform
 #define WRITE_PERC 0.5
 #define TXN_WRITE_PERC WRITE_PERC
 #define TUP_WRITE_PERC WRITE_PERC
@@ -381,9 +381,9 @@
 #define SCAN_LEN          20
 // We should be able to control multi-partition transactions using this.
 // Setting this to PART_CNT means that all transactions will access all partitions
-#define PART_PER_TXN PART_CNT
+#define PART_PER_TXN 2//PART_CNT
 #define PERC_MULTI_PART MPR // Use MPR config parameter
-#define REQ_PER_QUERY 10
+#define REQ_PER_QUERY 16
 #define FIELD_PER_TUPLE       10
 #define YCSB_DO_OPERATION true
 // Use this to only generate transactions
@@ -406,9 +406,9 @@
 // are not modeled.
 #define TPCC_ACCESS_ALL       false 
 #define WH_UPDATE         true
-#define NUM_WH (4*NODE_CNT)
+#define NUM_WH (128*NODE_CNT)
 // % of transactions that access multiple partitions
-#define MPR 0.15 // used for TPCC and YCSB
+#define MPR 0.0 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -488,7 +488,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -590,7 +590,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
-#define WARMUP_TIMER 1 * 10 * BILLION // ~1 minutes
+#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
 //#define DONE_TIMER 1 * 10 * BILLION // debugging
 //#define WARMUP_TIMER 1 * 1 * BILLION // debugging
 

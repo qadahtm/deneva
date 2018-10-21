@@ -967,7 +967,7 @@ int main(int argc, char* argv[])
 	//tport_man.shutdown();
   m_wl->index_delete_all();
 #if CC_ALG == QUECC
-  quecc_pool.free_all();
+//  quecc_pool.free_all();
 #endif
   /*
   txn_table.delete_all();

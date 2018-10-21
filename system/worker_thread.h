@@ -152,8 +152,10 @@ public:
 
 #if WORKLOAD == TPCC
     inline ALWAYS_INLINE uint32_t get_split(uint64_t key, Array<uint64_t> * ranges){
-        assert((UInt32)g_num_wh == g_cluster_worker_thread_cnt);
-        uint32_t eq_idx = ((uint32_t) (key-1)) % g_cluster_worker_thread_cnt;
+        assert((UInt32)g_num_wh >= g_cluster_worker_thread_cnt);
+//        uint32_t eq_idx = ((uint32_t) (key-1)) % g_cluster_worker_thread_cnt;
+        uint32_t  wh_per_wt = (uint32_t) g_num_wh / g_cluster_worker_thread_cnt;
+        uint32_t eq_idx = ((uint32_t) (key-1)) / wh_per_wt;
 //        DEBUG_Q("mapping key(w_id)=%lu, wh_to_part=%lu, to EQ_%u\n",key,wh_to_part(key),eq_idx);
         return eq_idx;
     }

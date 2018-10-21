@@ -3300,6 +3300,7 @@ SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
 
         // cleanup remote txn context
         // it is safe now since we are at the end of the batch
+#if WORKLOAD == TPCC
         for (uint64_t i = 0; i < g_cluster_worker_thread_cnt; ++i) {
             if (g_node_id != QueCCPool::get_plan_node(i)){
                 transaction_context * pg_tctxs = work_queue.batch_pg_map[batch_slot][i].txn_ctxs;
@@ -3308,6 +3309,7 @@ SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
                 }
             }
         }
+#endif
 
         //TQ: At this point all the local threads are sync'ed and arrived at here
         for (uint32_t i = 0; i < g_node_cnt; ++i) {
@@ -4850,7 +4852,7 @@ RC WorkerThread::run_normal_mode() {
     }
     exec_qs_ranges->add(UINT64_MAX); // last range is the table size
 #else
-    assert(g_cluster_worker_thread_cnt == g_num_wh);
+    assert(g_cluster_worker_thread_cnt <= g_num_wh);
     // there is no need to use RID space partitioing for TPCC
     // NOTE!!!! This breaks the SPLIT algorithm
     for (uint64_t i =0; i<g_cluster_worker_thread_cnt; ++i){

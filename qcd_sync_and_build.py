@@ -128,6 +128,8 @@ def set_threads(conf, thread_count, **kwargs):
 
 def set_mpt(conf, mpr, ppt_cnt, node_cnt , **kwargs):
 	assert(ppt_cnt <= node_cnt)
+	# conf = replace_def(conf, 'PART_PER_TXN', str(ppt_cnt))
+	#standard PPT is 2 as per CALVIN paper
 	conf = replace_def(conf, 'PART_PER_TXN', str(ppt_cnt))
 	conf = replace_def(conf, 'MPR', str(mpr))
 	return conf
@@ -145,11 +147,12 @@ def enum_exps(seq):
 	all_algs = ['NO_WAIT',
 				'CALVIN',
 				'MVCC',
-				#'MAAT',
+				'MAAT',
 				'TIMESTAMP',
 				'WAIT_DIE',
-				'QUECC'
+				#'QUECC'
 				]
+	node_cnt = ec2_nodes.server_cnt 
 	for alg in all_algs:
 		
 		# wtvar
@@ -160,7 +163,7 @@ def enum_exps(seq):
 		# wthreads = [4]
 		# zipftheta = [0.0,0.8]
 		# zipftheta = [0.99] # High Contention
-		zipftheta = [0.0] # Uniform
+		# zipftheta = [0.0] # Uniform
 		# zipftheta = [0.6] # Low contention
 		# zipftheta = [0.8] # Medium contention
 		# zipftheta = [0.99,0.9,0.7,0.5,0.3,0.0] 
@@ -168,6 +171,8 @@ def enum_exps(seq):
 		# zipftheta = [0.99,0.9,0.8,0.4,0.0] 
 		# zipftheta = [0.8,0.6]
 		# zipftheta = [0.99] 
+		zipftheta = [0.0,0.3,0.6,0.8,0.9,0.95,0.99]
+		# zipftheta = [0.0]
 		# read_ratios = [1.0,0.95,0.8,0.5,0.2,0.05]
 		# read_ratios = [0.5,0.2,0.05]
 		# read_ratios = [1.0]
@@ -175,7 +180,8 @@ def enum_exps(seq):
 		# read_ratios = [0.5,0.8]
 		# max_thread_count = 32
 		# total_count = 16 * 1000 * 1000 # 16 Million
-		total_count = 0.05 * 1000 * 1000 # 1 Million
+		# total_count = 0.05 * 1000 * 1000 # 1 Million
+		total_count = 16783200*node_cnt
 		# record_size = 1000
 		record_size = 100
 		# req_per_query_vals = [1,10,16,20,32]
@@ -186,21 +192,26 @@ def enum_exps(seq):
 
 		# batch_size_vals = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
 		# batch_size_vals = [82944]
-		# batch_size_vals = [41472]
-		batch_size_vals = [10368]
-		# batch_size_vals = [1024]
+		# batch_size_vals = [10368]
+		# batch_size_vals = [10368, 40320, 40320*2]
+		# batch_size_vals = [40320*2] # default for QC
+		# batch_size_vals = [10368, 40320, 40320*2, 40320*4, 40320*8]
+		# batch_size_vals = [40320*4, 40320*8]
+		batch_size_vals = [10368] #default for others
 
 		# req_per_query_vals = [20]
 		# req_per_query_vals = [32]
 		tx_count = 500000
 		# tx_count = 50000
 		# print('max_thd_cnt = {}, worker threads:{}\n'.format(str(max_thread_count), str(wthreads)))
-		tag = 'macrobench'
-		node_cnt = ec2_nodes.server_cnt 
+		tag = 'macrobench'		
 		thread_count = wthreads[0]
 
 		# mpr_vals = [0.0,0.15]
-		mpr_vals = [0.15]
+		#standard MPR is 10% as per CALVIN paper
+		mpr_vals = [0.0,1.0]
+		#standard ppt is 2 as per CALVIN paper
+		# ppt_vals = [2]
 		ppt_vals = [node_cnt]
 
 		common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg, 'thread_count': thread_count }			
@@ -208,10 +219,10 @@ def enum_exps(seq):
 		# YCSB
 		ycsb = dict(common)
 		ycsb.update({ 'bench': 'YCSB'})
-		ycsb.update({ 'record_size': record_size, 'tx_count': tx_count })
+		ycsb.update({ 'record_size': record_size, 'tx_count': tx_count, 'total_count':total_count })
 
 
-		if False:
+		if True:
 			# for read_ratio in [0.50, 0.95]:
 			for read_ratio in read_ratios:
 			# for zipf_theta in [0.00, 0.90, 0.99]:
@@ -221,6 +232,7 @@ def enum_exps(seq):
 						for ppt in ppt_vals:
 							for rpq in req_per_query_vals:
 								for bs in batch_size_vals:
+									if bs > 10368 and alg != 'QUECC': continue
 									ycsb.update({ 'read_ratio': read_ratio, 'zipf_theta': zipf_theta, 'req_per_query': rpq, 'batch_size':bs})
 									ycsb.update({'mpr':mpr,'ppt_cnt':ppt})
 									yield dict(ycsb)
@@ -229,12 +241,12 @@ def enum_exps(seq):
 		# warehouses_vars = [1]
 		# warehouses_vars = [4]
 		# warehouses_vars = [16]
-		warehouses_vars = [(node_cnt*4)]
+		warehouses_vars = [(node_cnt*4),(node_cnt*128)]
 		# warehouses_vars = [thread_count,1,4]
 		# warehouses_vars = [8,16]
-		pay_percs = [0.0]
+		pay_percs = [0.0,0.5,1.0]
 
-		if True:
+		if False:
 			tx_count = 500000
 
 			tpcc = dict(common)
@@ -248,6 +260,7 @@ def enum_exps(seq):
 				for mpr in mpr_vals:
 					for ppt in ppt_vals:
 						for bs in batch_size_vals:
+							if bs > 10368 and alg != 'QUECC': continue
 							for warehouse_count in warehouses_vars:
 								tpcc.update({ 'warehouse_count': warehouse_count,'batch_size':bs, 'pay_perc':payp })
 								tpcc.update({'mpr':mpr,'ppt_cnt':ppt})
@@ -297,7 +310,7 @@ def sort_exps(exps):
 def skip_done(exps):
 	for exp in exps:
 		if os.path.exists(dir_name + '/' + gen_filename(exp)): continue
-		if os.path.exists(dir_name + '/' + gen_filename(exp) + '.failed-0'): continue
+		if os.path.exists(dir_name + '/' + gen_filename(exp) + '.failed'): continue
 		# if exp['alg'] == 'MICA': continue
 		yield exp
 
@@ -411,16 +424,15 @@ def live_output(p):
 def wait_for(plist,expds=None, outputFlag=False, liveOutput=False, live_output_node_idx=0):
 	if liveOutput:
 		live_output(plist[live_output_node_idx]);
-	# done observing live output if enabled	
-	if expds:
-		filename = dir_name + '/' + gen_filename(expds)
-		outf = open(filename,'w')
-
+	# done observing live output if enabled		
+	failed = False
+	output = ''
 	for i,p in enumerate(plist):		
 		if p:
-			print("Waiting for node {}".format(i))
+			if verbose:
+				print("Waiting for node {} at {}".format(i,node_list[i]))
 			try:
-				stdout, stderr = p.communicate(timeout=480)
+				stdout, stderr = p.communicate(timeout=360)
 				killed = False
 			except subprocess.TimeoutExpired:
 				kill_all_processes()
@@ -429,27 +441,33 @@ def wait_for(plist,expds=None, outputFlag=False, liveOutput=False, live_output_n
 
 			stdout = stdout.decode('utf-8')
 			stderr = stderr.decode('utf-8')
-			output = stdout + '\n\n' + stderr
+			output =  output + '\n\n' + stdout + '\n\n' + stderr
 
-			# p.wait()
-			# killed = False
-			if expds:
-				outf.write(output + '\n\n' + stderr)
-			elif outputFlag:
-				print('Output of node: {}'.format(i))
-				print(output)
-				# for ol in p.stdout:
-					# print(ol.decode(encoding="utf-8", errors="strict"), end='')
-				print('----- End of output of node {} -----'.format(i))
-			
-			if p.returncode != 0:
-				error_s = 'failed to run exp for %s (status=%s, killed=%s)' % (format_exp(expds), p.returncode, killed)
+			if p.returncode != 0 or killed:
+				error_s = 'Node[{}] at {} '.format(i,node_list[i])
+				if expds:
+					error_s = error_s + ('failed to run exp for %s (status=%s, killed=%s)' % (format_exp(expds), p.returncode, killed))
+				else:
+					error_s = error_s + ('failed to run remote command (status=%s, killed=%s)' % (p.returncode, killed))
+
 				print(COLOR_RED + error_s + COLOR_RESET)
-				# if expds is None and outputFlag:
-				# 	print('Error at node: {}'.format(i))
-				# 	for el in p.stderr:
-				# 		print(el.decode(encoding="utf-8", errors="strict"),end='')
-				# 	print('----- End of Error of node {} -----'.format(i))
+				failed = True
+
+	if expds:				
+		filename = dir_name + '/' + gen_filename(expds)
+		if failed:
+			f_filename = filename + '.failed'
+		else:
+			f_filename = filename
+		outf = open(f_filename,'w')
+		outf.write(output)
+
+	elif outputFlag:
+		print('Output of node: {}'.format(i))
+		print(output)
+		# for ol in p.stdout:
+			# print(ol.decode(encoding="utf-8", errors="strict"), end='')
+		print('----- End of output of node {} -----'.format(i))
 
 
 def prepare_node_list():
@@ -459,10 +477,10 @@ def prepare_node_list():
 	#copy ifconfig.txt to build directories
 	proc_list = []		
 	for nip in node_list:
-		print('working on node (ifconfig sync): {}'.format(nip), end=',')
-		rcmd = 'ssh ubuntu@{} {}'.format(nip,'cp -f /mnt/efs/expodb/ifconfig.txt ~/{}/ifconfig.txt'.format(build_dir))
+		if verbose:
+			print('sending command (ifconfig sync) to node: {}'.format(nip))
+		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} {}'.format(nip,'cp -f /mnt/efs/expodb/ifconfig.txt ~/{}/ifconfig.txt'.format(build_dir))
 		proc_list.append(exec_cmd(rcmd,env,True))
-	print('')
 	wait_for(proc_list)
 	proc_list.clear()
 	print('done (ifconfig sync)!')
@@ -471,10 +489,10 @@ def sync_source_code_efs():
 	#sync sources from EFS
 	proc_list = []
 	for nip in node_list:
-		print('working on node (EFS sync): {}'.format(nip), end=',')
-		rcmd = 'ssh ubuntu@{} {}'.format(nip,'rsync -axvP {} ~/'.format(src_dir))
+		if verbose:
+			print('sending command (EFS sync) to node: {}'.format(nip))
+		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} {}'.format(nip,'rsync -axvP {} ~/'.format(src_dir))
 		proc_list.append(exec_cmd(rcmd,env,True))
-	print('')
 	wait_for(proc_list)
 	proc_list.clear()
 	print('done (EFS sync)!')
@@ -483,10 +501,10 @@ def build_executables():
 	#build and compile on each node
 	proc_list = []
 	for nip in node_list:
-		print('working on node (building): {}'.format(nip), end=',')
-		rcmd = 'ssh ubuntu@{} "{}"'.format(nip,'cd ~/{}; make clean; make -j8'.format(build_dir))
+		if verbose: 
+			print('sending command (build from source) to node: {}'.format(nip))
+		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}"'.format(nip,'cd ~/{}; make clean; make -j8'.format(build_dir))
 		proc_list.append(exec_cmd(rcmd,env,True))
-	print('')
 	wait_for(proc_list)
 	proc_list.clear()
 	print('done (building)!')
@@ -494,10 +512,10 @@ def build_executables():
 def kill_all_processes():
 	proc_list = []
 	for nip in node_list:
-		print('working on node (kill all): {}'.format(nip), end=',')
-		rcmd = 'ssh ubuntu@{} "{}"'.format(nip,'pkill -9 rundb; pkill -9 runcl')
+		if verbose:
+			print('sending command (kill all) to node: {}'.format(nip))
+		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}"'.format(nip,'pkill -9 rundb; pkill -9 runcl')
 		proc_list.append(exec_cmd(rcmd,env,True))
-	print('')
 	wait_for(proc_list)
 	proc_list.clear()
 	print('done (kill-all)!')
@@ -511,7 +529,7 @@ def run_dist_exp(exp,_run_exp):
 				#start server process
 				tag = "{} as a server #{}, i={}".format(nip,i,i)						
 				if i not in skip_nodes:
-					rcmd = 'ssh ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/rundb -nid'.format(build_dir),i)
+					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/rundb -nid'.format(build_dir),i)
 					proc_list.append(exec_cmd(rcmd,env,True))
 					print("Run server {}: {}".format(tag,i))
 				else:
@@ -521,7 +539,7 @@ def run_dist_exp(exp,_run_exp):
 				#start client process
 				tag = "{} as a client #{}, i={}".format(nip,i-server_cnt,i)
 				if i not in skip_nodes:
-					rcmd = 'ssh ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/runcl -nid'.format(build_dir),i)
+					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/runcl -nid'.format(build_dir),i)
 					proc_list.append(exec_cmd(rcmd,env,True))
 					print("Run client {}: {}".format(tag,i))
 				else:
@@ -541,7 +559,7 @@ def run_dist_exp_single(_run_exp):
 				#start server process
 				tag = "{} as a server #{}, i={}".format(nip,i,i)						
 				if i not in skip_nodes:
-					rcmd = 'ssh ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/rundb -nid'.format(build_dir),i)
+					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/rundb -nid'.format(build_dir),i)
 					proc_list.append(exec_cmd(rcmd,env,True))
 					print("Run server {}: {}".format(tag,i))
 				else:
@@ -551,7 +569,7 @@ def run_dist_exp_single(_run_exp):
 				#start client process
 				tag = "{} as a client #{}, i={}".format(nip,i-server_cnt,i)
 				if i not in skip_nodes:
-					rcmd = 'ssh ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/runcl -nid'.format(build_dir),i)
+					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/runcl -nid'.format(build_dir),i)
 					proc_list.append(exec_cmd(rcmd,env,True))
 					print("Run client {}: {}".format(tag,i))
 				else:
@@ -599,20 +617,22 @@ with open('/home/ubuntu/secrets.json') as data_file:
 run_exp = True
 liveOutput_enabled = False #print live output for S0
 liveOutput_node = 0
-single_exp = True
+single_exp = False
+verbose = False
 
 prefix = ''
 suffix = ''
-total_seqs = 1
+total_seqs = 2
 max_retries = 1
 
-# skip_nodes = set([0,1,2,3])
+#nodes to be skipped from running
+# skip_nodes = set([0,1])
 skip_nodes = set()
 
 src_dir = '/mnt/efs/expodb/deneva'
 build_dir = 'qcd-build'
 
-res_dir_name = '/mnt/efs/expodb/exp_results'
+res_dir_name = '/mnt/efs/expodb/exp_results2'
 dir_name = res_dir_name
 if not os.path.exists(res_dir_name):
 	os.mkdir(res_dir_name)
@@ -624,7 +644,7 @@ else:
 	stime = time.time()
 	#generates and run multiple experiments
 	note = run_all_seq(None, False)
-
+	print('Sending email notifications')
 	eltime = time.time() - stime
 	odirname = dir_name
 	subject = 'Experiment done in {}, results at {}'.format(str(timedelta(seconds=eltime)), odirname)
