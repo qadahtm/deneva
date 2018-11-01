@@ -2498,7 +2498,8 @@ void QueCCPool::free_all() {
         for (uint64_t j=0; j < g_cluster_worker_thread_cnt; ++j){
             Array<exec_queue_entry> * eq;
             while(exec_queue_free_list[i][j]->pop(eq)){
-                mem_allocator.free(eq,sizeof(batch_partition));
+                eq->release();
+                mem_allocator.free(eq,sizeof(Array<exec_queue_entry>));
             }
 
             batch_partition * bp;

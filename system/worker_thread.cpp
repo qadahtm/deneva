@@ -1388,6 +1388,7 @@ void WorkerThread::plan_client_msg(Message *msg, transaction_context *txn_ctxs, 
     // create execution entry, for now it will contain only one request
     // we need to reset the mutable values of tctx
 //    entry->txn_id = planner_txn_id;
+    entry->batch_id = wbatch_id;
     entry->txn_ctx = tctx;
     memset(entry->dep_nodes,0, sizeof(int)*g_node_cnt);
 #if ROW_ACCESS_TRACKING
@@ -1721,6 +1722,25 @@ void WorkerThread::plan_client_msg(Message *msg, transaction_context *txn_ctxs, 
     pbatch_cnt++;
 
 #if !INIT_QUERY_MSGS
+#if WORKLOAD == YCSB
+    YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
+#if !SINGLE_NODE
+    for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+        mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+    }
+#endif
+#elif WORKLOAD == TPCC
+    TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
+#if !SINGLE_NODE
+            if(cl_msg->txn_type == TPCC_NEW_ORDER) {
+                for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
+                    mem_allocator.free(cl_msg->items[i],sizeof(Item_no));
+                }
+            }
+#endif
+#elif WORKLOAD == PPS
+            PPSClientQueryMessage* cl_msg = (PPSClientQueryMessage*)msg;
+#endif
     // Free message, as there is no need for it anymore
     msg->release();
     Message::release_message(msg);
@@ -1812,7 +1832,7 @@ void WorkerThread::do_batch_delivery_mpt(uint64_t batch_slot, priority_group * p
             // create remote message and send it
             Message * req_msg = (RemoteEQMessage *) Message::create_message(REMOTE_EQ);
             req_msg->batch_id = wbatch_id;
-            req_msg->return_node_id = get_node_id();
+            req_msg->return_node_id = g_node_id;
             ((RemoteEQMessage *) req_msg)->planner_id = planner_cwid;
             ((RemoteEQMessage *) req_msg)->exec_id = i;
             ((RemoteEQMessage *) req_msg)->exec_q = exec_q_tmp;
@@ -3299,17 +3319,6 @@ SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
 //                DEBUG_Q("ET_%ld: all other ETs has finished their commit\n", _thd_id);
 
         // cleanup remote txn context
-        // it is safe now since we are at the end of the batch
-#if WORKLOAD == TPCC
-        for (uint64_t i = 0; i < g_cluster_worker_thread_cnt; ++i) {
-            if (g_node_id != QueCCPool::get_plan_node(i)){
-                transaction_context * pg_tctxs = work_queue.batch_pg_map[batch_slot][i].txn_ctxs;
-                for (uint64_t j = 0; j < planner_batch_size; ++j) {
-                    pg_tctxs[j].o_id.store(-1,memory_order_acq_rel);
-                }
-            }
-        }
-#endif
 
         //TQ: At this point all the local threads are sync'ed and arrived at here
         for (uint32_t i = 0; i < g_node_cnt; ++i) {
@@ -3363,6 +3372,20 @@ SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
 #endif
             }
 #endif // -- #if SYNC_MASTER_BATCH_CLEANUP
+
+        // it is safe now since we are at the end of the batch
+#if WORKLOAD == TPCC
+        for (uint64_t i = 0; i < g_cluster_worker_thread_cnt; ++i) {
+            if (g_node_id != QueCCPool::get_plan_node(i)){
+                transaction_context * pg_tctxs = work_queue.batch_pg_map[batch_slot][i].txn_ctxs;
+                for (uint64_t j = 0; j < planner_batch_size; ++j) {
+//                    DEBUG_Q("N_%u:WT_%lu: RESET O_ID for batch_map[%lu][%lu], txn_idx=%lu\n",
+//                            g_node_id,_worker_cluster_wide_id,wbatch_id,i,j);
+                    pg_tctxs[j].o_id.store(-1,memory_order_acq_rel);
+                }
+            }
+        }
+#endif
 
         // allow other ETs to proceed
 #if WT_SYNC_METHOD == CNT_ALWAYS_FETCH_ADD_SC
@@ -3780,7 +3803,7 @@ SRC WorkerThread::commit_batch(uint64_t batch_slot){
 
         if(_thd_id == 0){
             DEBUG_Q("N_%u:WT_%lu: going to commit for PG[%lu], pg_index=%lu, batch_id=%lu\n",
-                    g_node_id, _thd_id, QueCCPool::map_to_cwplanner_id(i),i,wbatch_id);
+                    g_node_id, _worker_cluster_wide_id, QueCCPool::map_to_cwplanner_id(i),i,wbatch_id);
         }
 
 
@@ -4058,7 +4081,7 @@ void WorkerThread::cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id,
             DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
         }
 #else
-    DEBUG_Q("N_%u:ET_%ld: RESET batch map slot=%ld, PG=%ld, batch_id=%ld \n", g_node_id, _worker_cluster_wide_id, batch_slot, wplanner_id, wbatch_id);
+//    DEBUG_Q("N_%u:ET_%ld: RESET batch map slot=%ld, PG=%ld, batch_id=%ld \n", g_node_id, _worker_cluster_wide_id, batch_slot, wplanner_id, wbatch_id);
     if(!work_queue.batch_map[batch_slot][wplanner_id][et_id].compare_exchange_strong(expected, desired)){
         M_ASSERT_V(false, "ET_%ld: failing to RESET map slot \n", et_id);
     }
@@ -4074,7 +4097,11 @@ batch_partition * WorkerThread::get_curr_batch_part(uint64_t batch_slot){
 #else
     do{
         batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][wplanner_id][_worker_cluster_wide_id].load();
-        if (simulation->is_done()) return batch_part;
+        if (simulation->is_done()){
+            DEBUG_Q("N_%u:WT_%lu: SIM_DONE while waiting on %s batch part Batch_map[%lu][%lu][%lu] for execution\n",
+                    g_node_id,_worker_cluster_wide_id, (g_node_id == QueCCPool::get_plan_node(wplanner_id))? "local" : "remote", wbatch_id, wplanner_id, _worker_cluster_wide_id);
+            return batch_part;
+        }
     } while(batch_part == 0);
 #endif
     M_ASSERT_V(batch_part, "N_%u:WT_%ld: batch part pointer is zero, PG=%ld, batch_slot = %ld, batch_id = %ld!!\n",
@@ -4308,7 +4335,7 @@ end_proc:
 #if PROFILE_EXEC_TIMING
             quecc_prof_time = get_sys_clock();
 #endif
-            quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
+            quecc_pool.exec_queue_release(exec_q, wplanner_id, _worker_cluster_wide_id);
 #if PROFILE_EXEC_TIMING
             INC_STATS(_thd_id,exec_mem_free_time[_thd_id],get_sys_clock() - quecc_prof_time);
 #endif
@@ -4331,7 +4358,7 @@ end_proc:
 //            exec_qe_ptr->txn_ctx = &work_queue.batch_pg_map[batch_slot][wplanner_id].txn_ctxs[exec_qe_ptr->txn_idx];
         }
         rc = my_txn_man->run_quecc_txn(exec_qe_ptr);
-        assert(rc == RCOK);
+//        assert(rc == RCOK);
         capture_txn_deps(batch_slot, exec_qe_ptr, rc);
 #if PROFILE_EXEC_TIMING
         INC_STATS(_thd_id,exec_txn_proc_time[_thd_id],get_sys_clock() - quecc_prof_time);
@@ -4339,24 +4366,24 @@ end_proc:
 
         while (rc == RCOK){
 
-#if WORKLOAD == TPCC
-            if (exec_qe_ptr->type == TPCC_NEWORDER_UPDATE_D){
-                // need to resolve data dependency
-                for (UInt32 i = 0; i < g_node_cnt; ++i) {
-                    if (i != g_node_id && exec_qe_ptr->dep_nodes[i]>0){
-                        int64_t oid = exec_qe_ptr->txn_ctx->o_id.load(memory_order_acq_rel);
-//                        DEBUG_Q("N_%u:ET_%lu: Sending OP_ACK, Execution of dependency operation is done: batch_id=%lu, planner_id=%lu, et_id=%lu,txn_idx=%lu, remote node=%u, entry_type=%d, oid=%ld, dep_cnt=%d\n",
-//                                g_node_id,_worker_cluster_wide_id, wbatch_id,wplanner_id,_worker_cluster_wide_id,exec_qe_ptr->txn_idx,i, exec_qe_ptr->type, oid, exec_qe_ptr->dep_nodes[i]);
-                        RemoteOpAckMessage * ack = (RemoteOpAckMessage *) Message::create_message(REMOTE_OP_ACK);
-                        ack->batch_id = wbatch_id;
-                        ack->planner_id = wplanner_id;
-                        ack->txn_idx = exec_qe_ptr->txn_idx;
-                        ack->o_id = oid;
-                        msg_queue.enqueue(_thd_id,ack,i);
-                    }
-                }
-            }
-#endif
+//#if WORKLOAD == TPCC
+//            if (exec_qe_ptr->type == TPCC_NEWORDER_UPDATE_D){
+//                // need to resolve data dependency
+//                for (UInt32 i = 0; i < g_node_cnt; ++i) {
+//                    if (i != g_node_id && exec_qe_ptr->dep_nodes[i]>0){
+//                        int64_t oid = exec_qe_ptr->txn_ctx->o_id.load(memory_order_acq_rel);
+////                        DEBUG_Q("N_%u:ET_%lu: Sending OP_ACK, Execution of dependency operation is done: batch_id=%lu, planner_id=%lu, et_id=%lu,txn_idx=%lu, remote node=%u, entry_type=%d, oid=%ld, dep_cnt=%d\n",
+////                                g_node_id,_worker_cluster_wide_id, wbatch_id,wplanner_id,_worker_cluster_wide_id,exec_qe_ptr->txn_idx,i, exec_qe_ptr->type, oid, exec_qe_ptr->dep_nodes[i]);
+//                        RemoteOpAckMessage * ack = (RemoteOpAckMessage *) Message::create_message(REMOTE_OP_ACK);
+//                        ack->batch_id = wbatch_id;
+//                        ack->planner_id = wplanner_id;
+//                        ack->txn_idx = exec_qe_ptr->txn_idx;
+//                        ack->o_id = oid;
+//                        msg_queue.enqueue(_thd_id,ack,i);
+//                    }
+//                }
+//            }
+//#endif
 
 
             INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
@@ -4382,7 +4409,7 @@ end_proc:
 #if PROFILE_EXEC_TIMING
                 quecc_prof_time = get_sys_clock();
 #endif
-                quecc_pool.exec_queue_release(exec_q, wplanner_id, _thd_id);
+                quecc_pool.exec_queue_release(exec_q, wplanner_id, _worker_cluster_wide_id);
 #if PROFILE_EXEC_TIMING
                 INC_STATS(_thd_id,exec_mem_free_time[_thd_id],get_sys_clock() - quecc_prof_time);
 #endif
@@ -4496,8 +4523,8 @@ end_proc:
 
     end_remote_eq:
     if (batch_part->remote){
-        DEBUG_Q("N_%u:ET_%lu: Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, remote node=%lu\n",
-                g_node_id, _worker_cluster_wide_id, wbatch_id,wplanner_id,QueCCPool::get_plan_node(wplanner_id));
+//        DEBUG_Q("N_%u:ET_%lu: Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, remote node=%lu\n",
+//                g_node_id, _worker_cluster_wide_id, wbatch_id,wplanner_id,QueCCPool::get_plan_node(wplanner_id));
         RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) Message::create_message(REMOTE_EQ_ACK);
         req_ack->batch_id = wbatch_id;
         req_ack->planner_id = wplanner_id;
@@ -4891,9 +4918,9 @@ RC WorkerThread::run_normal_mode() {
         }
     }
 #else
-    for (uint64_t i = 0; i < total_eq_cnt; i++) {
+    for (uint64_t i = 0; i < g_cluster_worker_thread_cnt; i++) {
         Array<exec_queue_entry> * exec_q;
-        quecc_pool.exec_queue_get_or_create(exec_q, QueCCPool::map_to_cwplanner_id(_planner_id), i);
+        quecc_pool.exec_queue_get_or_create(exec_q, _worker_cluster_wide_id, i);
         exec_queues->add(exec_q);
     }
 #endif
@@ -4914,6 +4941,7 @@ RC WorkerThread::run_normal_mode() {
     _wl->get_txn_man(my_txn_man);
     my_txn_man->init(_thd_id, _wl);
     my_txn_man->register_thread(this);
+    my_txn_man->_wt_id = _worker_cluster_wide_id;
 
 //#if NUMA_ENABLED
 //    uint64_t * eq_comp_cnts = (uint64_t *) mem_allocator.alloc_local(sizeof(uint64_t)*g_exec_qs_max_size);
@@ -5300,7 +5328,7 @@ RC WorkerThread::run_normal_mode() {
 #endif
 
                 // indicate that I am done with all commit phase
-                DEBUG_Q("N_%u:ET_%ld: is done with commit task, going to cleanup and sync for commit\n",g_node_id, _thd_id);
+                DEBUG_Q("N_%u:ET_%ld: is done with commit task, going to cleanup and sync for commit\n",g_node_id, _worker_cluster_wide_id);
 
                 // Cleanup my parts of the batch
 #if PROFILE_EXEC_TIMING
@@ -5484,6 +5512,13 @@ RC WorkerThread::run_normal_mode() {
 
 #if CC_ALG == QUECC
     end_et:
+    for (uint64_t j = 0; j < exec_queues->size(); ++j) {
+        Array<exec_queue_entry> * eq = exec_queues->get(j);
+        quecc_pool.exec_queue_release(eq,0,0);
+    }
+    exec_queues->clear();
+    exec_queues->release();
+
 #endif
 
     printf("FINISH WT %ld:%ld\n", _node_id, _thd_id);
@@ -5859,6 +5894,7 @@ RC WorkerThread::process_calvin_rtxn(Message *msg) {
             DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
             mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
         }
+//        Message::release_message(cl_msg);
 #endif
 #elif WORKLOAD == TPCC
             TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;

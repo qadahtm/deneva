@@ -9,6 +9,7 @@ import shlex, subprocess
 import smtplib
 import shutil
 import pprint
+import threading
 # import matplotlib
 # import numpy as np
 # import matplotlib.pyplot as plt
@@ -28,9 +29,6 @@ COLOR_BLUE = '\x1b[34m'
 COLOR_MAGENTA = '\x1b[35m'
 COLOR_CYAN ='\x1b[36m'
 COLOR_RESET = '\x1b[0m'
-
-def format_exp(exp):
-  return pprint.pformat(exp).replace('\n', '')
 
 
 def send_email(subject, msg):
@@ -65,8 +63,13 @@ def set_alg(conf, alg, **kwargs):
 	conf = replace_def(conf, 'ISOLATION_LEVEL', 'SERIALIZABLE')
 	return conf
 
-def set_quecc_batch_size(conf, batch_size, thread_count , **kwargs):
+def set_quecc_conf(conf, batch_size, bmap_len , **kwargs):
 	conf = replace_def(conf, 'BATCH_SIZE', str(batch_size))  
+	conf = replace_def(conf, 'BATCH_MAP_LENGTH', str(bmap_len))  
+	return conf
+
+def set_calvin_conf(conf, seq_btimer, thread_count , **kwargs):
+	conf = replace_def(conf, 'SEQ_BATCH_TIMER', '{} * 1 * MILLION'.format(seq_btimer))
 	return conf
 
 def set_cluster(conf, node_cnt, thread_count, alg , **kwargs):
@@ -83,7 +86,11 @@ def set_cluster(conf, node_cnt, thread_count, alg , **kwargs):
 	conf = replace_def(conf, 'CLIENT_THREAD_CNT', str(4))
 	conf = replace_def(conf, 'CLIENT_REM_THREAD_CNT', str(2))
 	conf = replace_def(conf, 'CLIENT_SEND_THREAD_CNT', str(2))
-
+	if alg == 'QUECC':
+		conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE*4')
+	else:
+		conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE')
+	
 	return conf
 
 def set_ycsb(conf, thread_count, total_count, record_size, req_per_query, read_ratio, zipf_theta, tx_count, **kwargs):
@@ -117,9 +124,12 @@ def set_tpcc(conf, thread_count, bench, warehouse_count, tx_count, pay_perc, **k
 	conf = replace_def(conf, 'INIT_PARALLELISM', str(4))
 	# conf = replace_def(conf, 'PART_CNT', str(warehouse_count))
 	# conf = replace_def(conf, 'PART_CNT', 'NODE_CNT')
-
-	conf = replace_def(conf, 'NEWORDER_INSERT_ENABLED', 'false')
+	
 	conf = replace_def(conf, 'PAYMENT_INSERT_ENABLED', 'false')
+	conf = replace_def(conf, 'NEWORDER_INSERT_ENABLED', 'false')
+	conf = replace_def(conf, 'NEWORDER_O_INSERT_ENABLED', 'false')
+	conf = replace_def(conf, 'NEWORDER_NO_INSERT_ENABLED', 'false')
+	conf = replace_def(conf, 'NEWORDER_OL_INSERT_ENABLED', 'false')
 
 	return conf
 
@@ -144,13 +154,13 @@ def gen_filename(exp):
 	return prefix + s.rstrip('__') + suffix
 
 def enum_exps(seq):
-	all_algs = ['NO_WAIT',
-				'CALVIN',
-				'MVCC',
-				'MAAT',
-				'TIMESTAMP',
-				'WAIT_DIE',
-				#'QUECC'
+	all_algs = [#'NO_WAIT',
+				#'CALVIN',
+				#'MVCC',
+				#'MAAT',
+				#'TIMESTAMP',
+				#'WAIT_DIE',
+				'QUECC'
 				]
 	node_cnt = ec2_nodes.server_cnt 
 	for alg in all_algs:
@@ -163,20 +173,21 @@ def enum_exps(seq):
 		# wthreads = [4]
 		# zipftheta = [0.0,0.8]
 		# zipftheta = [0.99] # High Contention
-		# zipftheta = [0.0] # Uniform
+		zipftheta = [0.0] # Uniform
+		# zipftheta = [0.95] 
 		# zipftheta = [0.6] # Low contention
 		# zipftheta = [0.8] # Medium contention
 		# zipftheta = [0.99,0.9,0.7,0.5,0.3,0.0] 
 		# zipftheta = [0.99,0.7,0.5,0.3,0.0] 
 		# zipftheta = [0.99,0.9,0.8,0.4,0.0] 
 		# zipftheta = [0.8,0.6]
-		# zipftheta = [0.99] 
-		zipftheta = [0.0,0.3,0.6,0.8,0.9,0.95,0.99]
-		# zipftheta = [0.0]
+		
+		# zipftheta = [0.0,0.3,0.6,0.8,0.9,0.95,0.99]
+		# zipftheta = [0.0,0.95]
 		# read_ratios = [1.0,0.95,0.8,0.5,0.2,0.05]
 		# read_ratios = [0.5,0.2,0.05]
 		# read_ratios = [1.0]
-		read_ratios = [0.5] # 
+		read_ratios = [0.5] # default
 		# read_ratios = [0.5,0.8]
 		# max_thread_count = 32
 		# total_count = 16 * 1000 * 1000 # 16 Million
@@ -186,18 +197,28 @@ def enum_exps(seq):
 		record_size = 100
 		# req_per_query_vals = [1,10,16,20,32]
 		# req_per_query_vals = [10,16,20,32]
+		# req_per_query_vals = [10,4]
 		# req_per_query_vals = [1]
 		# req_per_query_vals = [10]
-		req_per_query_vals = [16]
+		req_per_query_vals = [16] # default
+		# req_per_query_vals = [1,2,4,8,10,16]
+
 
 		# batch_size_vals = [1024,2048,4096,5184,8192,10368,20736,41472,82944]
-		# batch_size_vals = [82944]
-		# batch_size_vals = [10368]
+		# batch_size_vals = [82944]		
 		# batch_size_vals = [10368, 40320, 40320*2]
 		# batch_size_vals = [40320*2] # default for QC
 		# batch_size_vals = [10368, 40320, 40320*2, 40320*4, 40320*8]
 		# batch_size_vals = [40320*4, 40320*8]
-		batch_size_vals = [10368] #default for others
+		if node_cnt > 2:
+			# batch_size_vals = [10368, 5040*node_cnt, 5040*node_cnt*2, 5040*node_cnt*4] # 10K default for others, 80K default for QC
+			batch_size_vals = [10368, 5040*node_cnt, 5040*node_cnt*2] # 10K default for others, 80K default for QC
+			# batch_size_vals = [10368, 5040*node_cnt*2] # 10K default for others, 80K default for QC
+		else:
+			batch_size_vals = [10368] # default
+
+		# batch_size_vals = [256] # CALVIN has issues with large batch sizes
+		# batch_size_vals = [5040*node_cnt] # default - testing 10K with 100% new order workload for Q-Store
 
 		# req_per_query_vals = [20]
 		# req_per_query_vals = [32]
@@ -207,14 +228,30 @@ def enum_exps(seq):
 		tag = 'macrobench'		
 		thread_count = wthreads[0]
 
-		# mpr_vals = [0.0,0.15]
+		# mpr_vals = [0.0,0.5]
+		# mpr_vals = [0.5] #default for YCSB
+		# mpr_vals = [0.15] #default for TPCC
+		# mpr_vals = [0.1] #default for TPCC
+		mpr_vals = [1.0]
 		#standard MPR is 10% as per CALVIN paper
-		mpr_vals = [0.0,1.0]
+		# mpr_vals = [0.0,1.0]
+		# mpr_vals = [0.0, 0.1, 0.15, 0.5, 0.75, 1.0]
 		#standard ppt is 2 as per CALVIN paper
 		# ppt_vals = [2]
-		ppt_vals = [node_cnt]
+		ppt_vals = [16] # default
+		# ppt_vals = [node_cnt] # default
+		# ppt_vals = [8] # default
+		# ppt_vals = [2,4,8,12,16]
 
-		common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg, 'thread_count': thread_count }			
+		bm_len_vals = [16]
+		# bm_len_vals = [1]
+
+		common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg, 'thread_count': thread_count, 'bmap_len':bm_len_vals[0] }
+
+		#create a batch for every 200ms
+		# calvin_batch_timer = 200
+		# if alg == 'CALVIN':
+			# common.update({'seq_btimer':calvin_batch_timer})			
 
 		# YCSB
 		ycsb = dict(common)
@@ -222,7 +259,7 @@ def enum_exps(seq):
 		ycsb.update({ 'record_size': record_size, 'tx_count': tx_count, 'total_count':total_count })
 
 
-		if True:
+		if False:
 			# for read_ratio in [0.50, 0.95]:
 			for read_ratio in read_ratios:
 			# for zipf_theta in [0.00, 0.90, 0.99]:
@@ -233,34 +270,39 @@ def enum_exps(seq):
 							for rpq in req_per_query_vals:
 								for bs in batch_size_vals:
 									if bs > 10368 and alg != 'QUECC': continue
+									if bs > 10368 and alg == 'QUECC' and node_cnt == 2: continue
+									if bs == 10368 and alg == 'QUECC' and node_cnt > 2: continue
 									ycsb.update({ 'read_ratio': read_ratio, 'zipf_theta': zipf_theta, 'req_per_query': rpq, 'batch_size':bs})
 									ycsb.update({'mpr':mpr,'ppt_cnt':ppt})
+									# ycsb.update({'mpr':mpr,'ppt_cnt':rpq}) # use req_cnt == ppt_cnt
 									yield dict(ycsb)
 		# TPCC
 		#whvar
 		# warehouses_vars = [1]
 		# warehouses_vars = [4]
 		# warehouses_vars = [16]
-		warehouses_vars = [(node_cnt*4),(node_cnt*128)]
+		# warehouses_vars = [(node_cnt*4),(node_cnt*128)]
+		warehouses_vars = [(node_cnt*4)]
 		# warehouses_vars = [thread_count,1,4]
 		# warehouses_vars = [8,16]
-		pay_percs = [0.0,0.5,1.0]
+		# pay_percs = [0.0,0.5,1.0]
+		# pay_percs = [0.0,0.5]
+		# pay_percs = [0.0]
+		# pay_percs = [0.5]
+		pay_percs = [1.0]
+		tx_count = 500000
 
-		if False:
-			tx_count = 500000
+		tpcc = dict(common)
+		# tx_count = 200000          
+		tpcc.update({ 'bench': 'TPCC', 'tx_count': tx_count })
 
-			tpcc = dict(common)
-			# tx_count = 200000          
-			tpcc.update({ 'bench': 'TPCC', 'tx_count': tx_count })
-
-			# # for warehouse_count in [1, 4, 16, max_thread_count]:
-			# # warehouses_vars = [1, 4, max_thread_count]
-			
+		if True:
 			for payp in pay_percs:
 				for mpr in mpr_vals:
 					for ppt in ppt_vals:
 						for bs in batch_size_vals:
 							if bs > 10368 and alg != 'QUECC': continue
+							# if bs == 10368 and alg == 'QUECC' and node_cnt > 2: continue
 							for warehouse_count in warehouses_vars:
 								tpcc.update({ 'warehouse_count': warehouse_count,'batch_size':bs, 'pay_perc':payp })
 								tpcc.update({'mpr':mpr,'ppt_cnt':ppt})
@@ -277,11 +319,10 @@ def update_conf(conf, exp):
 		conf = set_tpcc(conf, **exp)
 	else: assert False
 	
-	if exp['alg'].startswith('QUECC'):
-		if exp['bench'] == 'YCSB':
-			conf = set_quecc_batch_size(conf, **exp)
-		# if exp['thread_count'] == 4:
-			# conf = replace_def(conf, 'COMMIT_THREAD_CNT', str(4))
+	conf = set_quecc_conf(conf, **exp)
+
+	# conf = set_calvin_conf(conf, **exp)
+
 	return conf
 
 def sort_exps(exps):
@@ -389,10 +430,9 @@ def run_all_seq(pats, prepare_only):
 
 		kill_all_processes()
 
+		# run_dist_exp_mt(exp,True)
 		run_dist_exp(exp,True)
-		# run(exp, prepare_only)
-
-
+		
 		if prepare_only: break
 
 		now = time.time()
@@ -425,14 +465,14 @@ def wait_for(plist,expds=None, outputFlag=False, liveOutput=False, live_output_n
 	if liveOutput:
 		live_output(plist[live_output_node_idx]);
 	# done observing live output if enabled		
-	failed = False
+	failed = False	
 	output = ''
-	for i,p in enumerate(plist):		
+	for i,p in enumerate(plist):
 		if p:
 			if verbose:
 				print("Waiting for node {} at {}".format(i,node_list[i]))
 			try:
-				stdout, stderr = p.communicate(timeout=360)
+				stdout, stderr = p.communicate(timeout=400)
 				killed = False
 			except subprocess.TimeoutExpired:
 				kill_all_processes()
@@ -530,6 +570,8 @@ def run_dist_exp(exp,_run_exp):
 				tag = "{} as a server #{}, i={}".format(nip,i,i)						
 				if i not in skip_nodes:
 					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/rundb -nid'.format(build_dir),i)
+					#debug - with coredump
+					# rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{};ulimit -c unlimited; echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern; bin/rundb -nid'.format(build_dir),i)
 					proc_list.append(exec_cmd(rcmd,env,True))
 					print("Run server {}: {}".format(tag,i))
 				else:
@@ -548,6 +590,94 @@ def run_dist_exp(exp,_run_exp):
 
 		wait_for(proc_list,exp,True, liveOutput_enabled,0)
 		proc_list.clear()
+		print('done (experiment)!')
+
+class expThread (threading.Thread):
+	def __init__(self, node_idx, nip, rcmd, exp):
+		threading.Thread.__init__(self)
+		self.node_idx = node_idx
+		self.rcmd = rcmd
+		self.output = ''
+		self.killed = False
+		self.stdout = ''
+		self.stderr = ''
+		self.returncode = 0
+
+	def run(self):
+		p = exec_cmd(self.rcmd,env,True)
+		try:
+			stdout, stderr = p.communicate(timeout=400)
+			self.killed = False
+		except subprocess.TimeoutExpired:
+			kill_all_processes()
+			stdout, stderr = p.communicate(timeout=10)
+			self.killed = True
+
+		stdout = stdout.decode('utf-8')
+		stderr = stderr.decode('utf-8')
+		self.output =  stdout + '\n\n' + stderr
+		self.returncode = p.returncode
+      
+
+def format_exp(exp):
+  return pprint.pformat(exp).replace('\n', '')
+
+def run_dist_exp_mt(exp,_run_exp):
+	proc_list = []
+	thd_list = []	
+	if _run_exp:
+		server_cnt = ec2_nodes.server_cnt
+		for i,nip in enumerate(node_list):
+			if i < server_cnt:
+				#start server process
+				tag = "{} as a server #{}, i={}".format(nip,i,i)						
+				if i not in skip_nodes:
+					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/rundb -nid'.format(build_dir),i)					
+					thd_list.append(expThread(i,nip, rcmd, exp))
+					print("Run server {}: {}".format(tag,i))
+				else:
+					thd_list.append(None) # append empty
+					print("Skipped server {}: {}".format(tag,i))				
+			else:
+				#start client process
+				tag = "{} as a client #{}, i={}".format(nip,i-server_cnt,i)
+				if i not in skip_nodes:
+					rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}{}"'.format(nip,'cd ~/{}; bin/runcl -nid'.format(build_dir),i)
+					thd_list.append(expThread(i,nip, rcmd, exp))
+					print("Run client {}: {}".format(tag,i))
+				else:
+					thd_list.append(None) # append empty
+					print("Skipped client {}: {}".format(tag,i))
+
+		for thd in thd_list:
+			if thd:
+				thd.start()
+
+		for thd in thd_list:
+			if thd:
+				thd.join()
+
+		f_output = ''
+		failed = False
+		for thd in thd_list:
+			if thd:
+				f_output = f_output+ '\n\n' + thd.output + '\n\n'
+			
+				if thd.returncode != 0 or thd.killed:
+					error_s = 'Node[{}] at {} '.format(thd.node_idx,node_list[thd.node_idx])
+					error_s = error_s + ('failed to run exp for %s (status=%s, killed=%s)' % (format_exp(exp), thd.returncode, thd.killed))
+					print(COLOR_RED + error_s + COLOR_RESET)
+					failed = True
+
+		filename = dir_name + '/' + gen_filename(exp)
+		if failed:
+			f_filename = filename + '.failed'
+		else:
+			f_filename = filename
+
+		outf = open(f_filename,'w')
+		outf.write(f_output)
+
 		print('done (experiment)!')
 
 def run_dist_exp_single(_run_exp):
@@ -632,7 +762,10 @@ skip_nodes = set()
 src_dir = '/mnt/efs/expodb/deneva'
 build_dir = 'qcd-build'
 
-res_dir_name = '/mnt/efs/expodb/exp_results2'
+# res_dir_name = '/mnt/efs/expodb/exp_results2'
+res_dir_name = '/mnt/efs/expodb/exp_results_qc_tpcc'
+# res_dir_name = '/mnt/efs/expodb/exp_results_su'
+# res_dir_name = '/mnt/efs/expodb/exp_results-test'
 dir_name = res_dir_name
 if not os.path.exists(res_dir_name):
 	os.mkdir(res_dir_name)

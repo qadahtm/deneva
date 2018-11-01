@@ -160,6 +160,7 @@ public:
     void release();
     Thread * h_thd;
     uint64_t _thd_id;
+    uint64_t _wt_id;
     Workload * h_wl;
 
     virtual RC      run_txn() = 0;

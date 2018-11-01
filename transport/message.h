@@ -269,6 +269,7 @@ public:
     uint64_t planner_id;
     uint64_t txn_idx;
     int64_t o_id;
+    uint64_t et_id;
 };
 #endif
 

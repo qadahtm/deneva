@@ -40,6 +40,16 @@ void Sequencer::init(Workload * wl) {
   fill_queue = new boost::lockfree::queue<Message*, boost::lockfree::capacity<65526> > [g_node_cnt];
 }
 
+void Sequencer::free(){
+//    delete [] fill_queue;
+//    qlite_ll * en = wl_head;
+//    while (en){
+//        LIST_REMOVE_HT(en,wl_head,wl_tail);
+//        mem_allocator.free(en->list,sizeof(qlite) * en->max_size);
+//        mem_allocator.free(en,sizeof(qlite_ll));
+//    }
+}
+
 // Assumes 1 thread does sequencer work
 void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
     qlite_ll * en = wl_head;
@@ -69,8 +79,8 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
         // free msg, queries
 #if WORKLOAD == YCSB
         YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)wait_list[id].msg;
-#if !SINGLE_NODE
-        // we should not clear query request pointers because they will be reused by transactions
+#if !SINGLE_NODE && !SERVER_GENERATE_QUERIES
+        // if SERVER_GENERATE_QUERIES: we should not clear query request pointers because they will be reused by transactions
         for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
             DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
             mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
@@ -78,7 +88,7 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
 #endif
 #elif WORKLOAD == TPCC
         TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)wait_list[id].msg;
-#if !SINGLE_NODE
+#if !SINGLE_NODE && !SERVER_GENERATE_QUERIES
       if(cl_msg->txn_type == TPCC_NEW_ORDER) {
           for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
               DEBUG_M("Sequencer::process_ack() items free\n");

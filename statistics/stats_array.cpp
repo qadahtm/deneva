@@ -63,6 +63,10 @@ void StatsArr::init(uint64_t size,StatsArrType type) {
   pthread_mutex_init(&mtx,NULL);
 }
 
+void StatsArr::free() {
+  mem_allocator.free(arr, size);
+}
+
 void StatsArr::clear() {
     cnt = 0;
 }

@@ -56,6 +56,7 @@ class Sequencer {
 	void process_ack(Message * msg, uint64_t thd_id);
 	void process_txn(Message * msg,uint64_t thd_id, uint64_t early_start, uint64_t last_start, uint64_t wait_time, uint32_t abort_cnt);
 	void send_next_batch(uint64_t thd_id);
+	void free();
 
  private:
 	void reset_participating_nodes(bool * part_nodes);
@@ -76,6 +77,7 @@ class Sequencer {
 	qlite_ll * wl_tail;		// list of txns in batch being executed
 	volatile uint64_t next_txn_id;
 	Workload * _wl;
+	int seq_batch_acc_cnt;
 };
 
 class Seq_thread_t {

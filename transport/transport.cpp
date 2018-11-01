@@ -78,6 +78,10 @@ Socket * Transport::get_socket() {
   int opt = 0;
   socket->sock.setsockopt(NN_SOL_SOCKET,NN_RCVTIMEO,&timeo,sizeof(timeo));
   socket->sock.setsockopt(NN_SOL_SOCKET,NN_SNDTIMEO,&stimeo,sizeof(stimeo));
+  //TQ: all large recieve buffers
+    // See: https://nanomsg.org/v1.0.0/nn_setsockopt.3.html
+    int buf_size=-1;
+    socket->sock.setsockopt(NN_SOL_SOCKET,NN_RCVMAXSIZE,&buf_size,sizeof(buf_size));
   // NN_TCP_NODELAY doesn't cause TCP_NODELAY to be set -- nanomsg issue #118
   socket->sock.setsockopt(NN_SOL_SOCKET,NN_TCP_NODELAY,&opt,sizeof(opt));
   return socket;

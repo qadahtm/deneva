@@ -30,6 +30,11 @@
     fprintf(stdout,__VA_ARGS__); \
     fflush(stdout); \
   }
+
+#define DEBUG_FORCED(...) \
+  fprintf(stdout,__VA_ARGS__); \
+  fflush(stdout); \
+
 #define DEBUG_FLUSH() \
   if(DEBUG_DISTR) { \
     fflush(stdout); \

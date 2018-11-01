@@ -349,7 +349,8 @@ void TxnTablePool::free_all() {
   DEBUG_M("txn_table_pool free\n");
   for(uint64_t thd_id = 0; thd_id < g_total_thread_cnt; thd_id++) {
     while(pool[thd_id]->pop(item)) {
-      mem_allocator.free(item,sizeof(item));
+//      mem_allocator.free(item,sizeof(item));
+      mem_allocator.free(item,sizeof(txn_node));
     }
   }
 }

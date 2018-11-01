@@ -240,16 +240,16 @@ RC InputThread::server_recv_loop() {
 
 #if WORKLOAD == TPCC
                 RemoteOpAckMessage * opack_msg = (RemoteOpAckMessage *) msg;
-                DEBUG_Q("RT_%lu: Received REMOTE_OP_ACK from node=%lu for batch_id=%lu, planner_id=%lu, txn_idx=%lu, o_id=%ld\n", _thd_id,
-                        msg->return_node_id, msg->batch_id,opack_msg->planner_id, opack_msg->txn_idx, opack_msg->o_id);
+                DEBUG_Q("RT_%lu: Received REMOTE_OP_ACK from node=%lu for batch_id=%lu, planner_id=%lu, remote_et_id=%lu, txn_idx=%lu, o_id=%ld\n", _thd_id,
+                        msg->return_node_id, msg->batch_id,opack_msg->planner_id,opack_msg->et_id, opack_msg->txn_idx, opack_msg->o_id);
                 transaction_context * txn_ctx = &work_queue.batch_pg_map[msg->batch_id % g_batch_map_length][opack_msg->planner_id].txn_ctxs[opack_msg->txn_idx];
 //                txn_ctx->o_id.store(opack_msg->o_id, memory_order_acq_rel);
                 int64_t e = -1;
-//                while(!txn_ctx->o_id.compare_exchange_strong(e,opack_msg->o_id, memory_order_acq_rel)){}
-                if(!txn_ctx->o_id.compare_exchange_strong(e,opack_msg->o_id, memory_order_acq_rel)){
-                    M_ASSERT_V(false, "Receiver thread: we should have -1 but found %ld, batch_id=%lu, PT_%lu , txn_idx=%lu, recv o_id=%ld\n",
-                               txn_ctx->o_id.load(memory_order_acq_rel), msg->batch_id, opack_msg->planner_id, opack_msg->txn_idx, opack_msg->o_id);
-                }
+                while(!simulation->is_done() && !txn_ctx->o_id.compare_exchange_strong(e,opack_msg->o_id, memory_order_acq_rel)){}
+//                if(!txn_ctx->o_id.compare_exchange_strong(e,opack_msg->o_id, memory_order_acq_rel)){
+//                    M_ASSERT_V(false, "Receiver thread: we should have -1 but found %ld, batch_id=%lu, PT_%lu , txn_idx=%lu, recv o_id=%ld\n",
+//                               txn_ctx->o_id.load(memory_order_acq_rel), msg->batch_id, opack_msg->planner_id, opack_msg->txn_idx, opack_msg->o_id);
+//                }
 //                txn_ctx->completion_cnt.fetch_add(1,memory_order_acq_rel);
 #endif
                 Message::release_message(msg);
@@ -293,15 +293,15 @@ RC InputThread::server_recv_loop() {
                 // neet to spin if batch slot is not ready
 //                DEBUG_Q("N_%u:RT_%lu: Going to Spin on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",g_node_id,_thd_id,
 //                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
-                while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
+//                while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
 //                DEBUG_Q("RT_%lu: DONE Spinning on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n", _thd_id,
 //                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
 
-//                if(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired)){
-//                    // this should not happen after spinning but can happen if simulation is done
-//                    M_ASSERT_V(false, "Node_%u: For batch %lu : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
-//                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
-//                }
+                if(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired)){
+                    // this should not happen after spinning but can happen if simulation is done
+                    M_ASSERT_V(false, "Node_%u: For batch %lu : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
+                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
+                }
 
 //                DEBUG_Q("N_%u:RT_%lu: Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu]\n",g_node_id,_thd_id,
 //                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id);

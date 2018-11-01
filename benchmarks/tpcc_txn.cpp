@@ -852,6 +852,7 @@ RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool
 
 #if NEWORDER_INSERT_ENABLED
 	// return o_id
+#if NEWORDER_O_INSERT_ENABLED
 	/*========================================================================================+
 	EXEC SQL INSERT INTO ORDERS (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
 		VALUES (:o_id, :d_id, :w_id, :c_id, :datetime, :o_ol_cnt, :o_all_local);
@@ -869,6 +870,9 @@ RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool
 	int64_t all_local = (remote? 0 : 1);
 	r_order->set_value(O_ALL_LOCAL, all_local);
 	insert_row(r_order, _wl->t_order);
+#endif
+
+#if NEWORDER_NO_INSERT_ENABLED
 	/*=======================================================+
     EXEC SQL INSERT INTO NEW_ORDER (no_o_id, no_d_id, no_w_id)
         VALUES (:o_id, :d_id, :w_id);
@@ -880,6 +884,7 @@ RC TPCCTxnManager::new_order_5(uint64_t w_id, uint64_t d_id, uint64_t c_id, bool
 	r_no->set_value(NO_D_ID, d_id);
 	r_no->set_value(NO_W_ID, w_id);
 	insert_row(r_no, _wl->t_neworder);
+#endif
 #endif
 	return RCOK;
 }
@@ -978,7 +983,7 @@ RC TPCCTxnManager::new_order_9(uint64_t w_id,uint64_t  d_id,bool remote, uint64_
 			quantity = s_quantity - ol_quantity + 91;
 		}
 		r_stock_local->set_value(S_QUANTITY, &quantity);
-#if NEWORDER_INSERT_ENABLED
+#if NEWORDER_INSERT_ENABLED && NEWORDER_OL_INSERT_ENABLED
 		/*====================================================+
 		EXEC SQL INSERT
 			INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number,
@@ -1096,7 +1101,7 @@ RC TPCCTxnManager::plan_payment_update_c(double h_amount, row_t *r_cust_local, e
 RC TPCCTxnManager::plan_payment_insert_h(uint64_t w_id, uint64_t d_id, uint64_t c_id, uint64_t c_w_id, uint64_t c_d_id,
                                          double h_amount, exec_queue_entry *&entry) {
 //        uint64_t row_id = rid_man.next_rid(wh_to_part(w_id));
-    uint64_t row_id = rid_man.next_rid(_thd_id % g_thread_cnt);
+    uint64_t row_id = rid_man.next_rid(_wt_id % g_thread_cnt);
 
     entry->rid = row_id;
 #if SINGLE_NODE
@@ -1311,7 +1316,7 @@ RC TPCCTxnManager::run_payment_update_w(exec_queue_entry *entry) {
 #endif
     r_wh_local->get_value(W_YTD, w_ytd);
 
-    row_access_backup(entry, WR, r_wh_local, _thd_id);
+    row_access_backup(entry, WR, r_wh_local, _wt_id);
 
     if (g_wh_update) {
 #if SINGLE_NODE
@@ -1348,7 +1353,7 @@ RC TPCCTxnManager::run_payment_update_d(exec_queue_entry *entry) {
 #endif
     assert(r_dist_local != NULL);
     r_dist_local->get_value(D_YTD, d_ytd);
-    row_access_backup(entry, WR, r_dist_local, _thd_id);
+    row_access_backup(entry, WR, r_dist_local, _wt_id);
 #if SINGLE_NODE
     r_dist_local->set_value(D_YTD, d_ytd + entry->txn_ctx->h_amount);
 #else
@@ -1409,7 +1414,7 @@ RC TPCCTxnManager::run_payment_update_c(exec_queue_entry *entry) {
     double c_ytd_payment;
     double c_payment_cnt;
 
-    row_access_backup(entry, WR, r_cust_local, _thd_id);
+    row_access_backup(entry, WR, r_cust_local, _wt_id);
 
     r_cust_local->get_value(C_BALANCE, c_balance);
 #if SINGLE_NODE
@@ -1436,6 +1441,8 @@ RC TPCCTxnManager::run_payment_update_c(exec_queue_entry *entry) {
 RC TPCCTxnManager::run_payment_insert_h(exec_queue_entry * entry){
 
     uint64_t UNUSED w_id;
+//    DEBUG_Q("N_%u:WT_%lu: Running Insert_H, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+//            g_node_id, _thd_id,entry->batch_id, entry->planner_id, entry->txn_idx);
 
 //    while (!simulation->is_done() && entry->txn_ctx->completion_cnt.load(memory_order_acq_rel) < 3){}
 //    if(simulation->is_done()){
@@ -1591,6 +1598,8 @@ RC TPCCTxnManager::neworder_lookup_w(uint64_t w_id, row_t *& r_wh_local){
 
 RC TPCCTxnManager::run_neworder_read_w(exec_queue_entry * entry){
     double w_tax;
+    DEBUG_Q("N_%u:WT_%lu: Running Read_W, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id,entry->batch_id, entry->planner_id, entry->txn_idx);
 #if SINGLE_NODE
     assert(entry->row != NULL);
     entry->row->get_value(W_TAX, w_tax);
@@ -1620,6 +1629,9 @@ RC TPCCTxnManager::run_neworder_read_c(exec_queue_entry * entry){
 
     uint64_t c_discount;
     row_t * r_cust_local;
+
+    DEBUG_Q("N_%u:WT_%lu: Running Read_C, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id,entry->batch_id, entry->planner_id, entry->txn_idx);
 #if SINGLE_NODE
     assert(entry->row != NULL);
     r_cust_local = entry->row;
@@ -1654,6 +1666,9 @@ RC TPCCTxnManager::run_neworder_update_d(exec_queue_entry * entry){
     row_t * r_dist_local;
     int64_t o_id;
 
+    DEBUG_Q("N_%u:WT_%lu: Running Update_D, w_id=%lu, d_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id, entry->w_id, entry->d_id,entry->batch_id, entry->planner_id, entry->txn_idx);
+
 #if SINGLE_NODE
     assert(entry->row != NULL);
     r_dist_local = entry->row;
@@ -1675,14 +1690,32 @@ RC TPCCTxnManager::run_neworder_update_d(exec_queue_entry * entry){
                 entry->w_id, entry->d_id,(o_id), (o_id)+1, entry->planner_id);
         M_ASSERT_V(false, "we should have -1 but found %ld\n", entry->txn_ctx->o_id.load(memory_order_acq_rel));
     }
+
+    for (UInt32 i = 0; i < g_node_cnt; ++i) {
+        if (i != g_node_id && entry->dep_nodes[i]>0){
+            int64_t oid = entry->txn_ctx->o_id.load(memory_order_acq_rel);
+            DEBUG_Q("N_%u:ET_%lu: Sending OP_ACK, Execution of dependency operation is done: batch_id=%lu, planner_id=%lu, et_id=%lu,txn_idx=%lu, remote node=%u, entry_type=%d, oid=%ld, dep_cnt=%d\n",
+                    g_node_id,_wt_id, entry->batch_id,entry->planner_id,_thd_id,entry->txn_idx,i, entry->type, oid, entry->dep_nodes[i]);
+            RemoteOpAckMessage * ack = (RemoteOpAckMessage *) Message::create_message(REMOTE_OP_ACK);
+            ack->batch_id = entry->batch_id;
+            ack->planner_id = entry->planner_id;
+            ack->txn_idx = entry->txn_idx;
+            ack->o_id = oid;
+            ack->et_id = _wt_id;
+            msg_queue.enqueue(_thd_id,ack,i);
+        }
+    }
+
     (o_id) ++;
-    row_access_backup(entry, WR, r_dist_local, _thd_id);
+    row_access_backup(entry, WR, r_dist_local, _wt_id);
     r_dist_local->set_value(D_NEXT_O_ID, o_id);
 
     if (update_context){
         check_commit_ready(entry);
     }
 //        DEBUG_Q("WT_%ld: finished update dist for txn_id=%lu\n",_thd_id,entry->txn_id);
+    DEBUG_Q("N_%u:WT_%lu: Done Update_D, w_id=%lu, d_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id, entry->w_id, entry->d_id,entry->batch_id, entry->planner_id, entry->txn_idx);
     return RCOK;
 }
 
@@ -1690,7 +1723,8 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
     transaction_context * txn_ctx;
     txn_ctx = entry->txn_ctx;
     RC rc = RCOK;
-
+    DEBUG_Q("N_%u:WT_%lu: Running Insert_O, w_id=%lu, d_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id, entry->w_id, entry->d_id, entry->batch_id, entry->planner_id, entry->txn_idx);
     //FIXME(tq): remove this macro
 #if ENABLE_EQ_SWITCH
 #if SINGLE_NODE
@@ -1699,7 +1733,12 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
         return WAIT;
     }
 #else
-    while (txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+    while (!simulation->is_done() && txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+    if (simulation->is_done()){
+        DEBUG_Q("N_%u:WT_%lu: SIM done waiting for O_ID for Insert_O, w_id=%lu, d_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+                g_node_id, _wt_id, entry->w_id, entry->d_id,entry->batch_id, entry->planner_id, entry->txn_idx);
+        return ERROR;
+    }
 #endif
 #else
     // Wait for o_id to become available
@@ -1709,7 +1748,7 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
 #endif
-#if NEWORDER_INSERT_ENABLED
+#if NEWORDER_INSERT_ENABLED && NEWORDER_O_INSERT_ENABLED
     // insert by allocating memory here
     row_t * r_order;
 #if SINGLE_NODE
@@ -1746,6 +1785,8 @@ RC TPCCTxnManager::run_neworder_insert_o(exec_queue_entry * entry){
 
 RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
     RC rc = RCOK;
+//    DEBUG_Q("N_%u:WT_%lu: Running Insert_NO, w_id=%lu, d_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+//            g_node_id, _thd_id, entry->w_id, entry->d_id, entry->batch_id, entry->planner_id, entry->txn_idx);
 #if ENABLE_EQ_SWITCH
 #if SINGLE_NODE
     if (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){
@@ -1753,7 +1794,13 @@ RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
         return WAIT;
     }
 #else
-    while (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+//    while (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+    while (!simulation->is_done() && entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+    if (simulation->is_done()){
+        DEBUG_Q("N_%u:WT_%lu: SIM done waiting for O_ID for Insert_NO, w_id=%lu, d_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+                g_node_id, _wt_id, entry->w_id, entry->d_id,entry->batch_id, entry->planner_id, entry->txn_idx);
+        return ERROR;
+    }
 #endif
 #else
     // Wait for o_id to become available
@@ -1764,7 +1811,7 @@ RC TPCCTxnManager::run_neworder_insert_no(exec_queue_entry * entry){
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
 #endif
 
-#if NEWORDER_INSERT_ENABLED
+#if NEWORDER_INSERT_ENABLED && NEWORDER_NO_INSERT_ENABLED
     row_t * r_no;
 #if SINGLE_NODE
     rc = _wl->t_neworder->get_new_row(r_no, wh_to_part(entry->txn_ctx->w_id), entry->rid);
@@ -1799,6 +1846,9 @@ RC TPCCTxnManager::neworder_lookup_i(uint64_t ol_i_id, row_t *& r_item_local){
 RC TPCCTxnManager::run_neworder_read_i(exec_queue_entry * entry){
     int64_t i_price;
     row_t * r_item_local;
+
+//    DEBUG_Q("N_%u:WT_%lu: Running Read_I, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+//            g_node_id, _thd_id,entry->batch_id, entry->planner_id, entry->txn_idx);
 #if SINGLE_NODE
     assert(entry->row != NULL);
     r_item_local = entry->row;
@@ -1839,6 +1889,9 @@ RC TPCCTxnManager::run_neworder_update_s(exec_queue_entry * entry){
     bool remote;
     uint64_t quantity;
 
+//    DEBUG_Q("N_%u:WT_%lu: Running Update_S, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+//            g_node_id, _thd_id,entry->batch_id, entry->planner_id, entry->txn_idx);
+
 #if SINGLE_NODE
     assert(entry->row != NULL);
     r_stock_local = entry->row;
@@ -1851,7 +1904,7 @@ RC TPCCTxnManager::run_neworder_update_s(exec_queue_entry * entry){
 
     s_quantity = *(int64_t *)r_stock_local->get_value(S_QUANTITY);
 
-    row_access_backup(entry, WR, r_stock_local, _thd_id);
+    row_access_backup(entry, WR, r_stock_local, _wt_id);
 
 #if !TPCC_SMALL
     int64_t s_ytd;
@@ -1909,7 +1962,17 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
         return WAIT;
     }
 #else
-    while (entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+
+    DEBUG_Q("N_%u:WT_%lu: Running Insert_OL, w_id=%lu, d_id=%lu, supp_w_id=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id, entry->w_id, entry->d_id, entry->ol_supply_w_id, entry->batch_id, entry->planner_id, entry->txn_idx);
+    while (!simulation->is_done() && entry->txn_ctx->o_id.load(memory_order_acq_rel) == -1){}
+    if (simulation->is_done()){
+        DEBUG_Q("N_%u:WT_%lu: SIM done waiting for O_ID for Insert_OL, w_id=%lu, d_id=%lu, supp_w_wid=%lu, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+                g_node_id, _wt_id, entry->w_id, entry->d_id, entry->ol_supply_w_id, entry->batch_id, entry->planner_id, entry->txn_idx);
+        return ERROR;
+    }
+    DEBUG_Q("N_%u:WT_%lu: Got oid, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id,entry->batch_id, entry->planner_id, entry->txn_idx);
 #endif
 #else
     // Wait for o_id to become available
@@ -1919,7 +1982,7 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
         } // spin here until order id for this txn is set
         INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - prof_time);
 #endif
-#if NEWORDER_INSERT_ENABLED
+#if NEWORDER_INSERT_ENABLED && NEWORDER_OL_INSERT_ENABLED
     row_t * r_ol;
 #if SINGLE_NODE
     _wl->t_orderline->get_new_row(r_ol, wh_to_part(entry->txn_ctx->ol_supply_w_id), entry->rid);
@@ -1951,6 +2014,8 @@ RC TPCCTxnManager::run_neworder_insert_ol(exec_queue_entry * entry){
     if (update_context){
         check_commit_ready(entry);
     }
+    DEBUG_Q("N_%u:WT_%lu: Done Insert_OL, going to wait for oid, batch_id=%lu, planner_id=%lu, txn_idx=%lu\n",
+            g_node_id, _wt_id,entry->batch_id, entry->planner_id, entry->txn_idx);
     return RCOK;
 }
 

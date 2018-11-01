@@ -234,6 +234,7 @@ int main(int argc, char* argv[])
   if (STATS_ENABLE)
     stats.print_client(false);
   fflush(stdout);
+    stats.free(g_total_client_thread_cnt);
 	return 0;
 }
 

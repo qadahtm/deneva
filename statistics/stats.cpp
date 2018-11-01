@@ -105,6 +105,24 @@ void Stats_thd::init(uint64_t thd_id) {
 
 }
 
+void Stats_thd::free() {
+
+  mem_allocator.free(part_cnt,sizeof(uint64_t)*g_part_cnt);
+  mem_allocator.free(part_acc,sizeof(uint64_t)*g_part_cnt);
+  mem_allocator.free(worker_process_cnt_by_type,sizeof(uint64_t) * NO_MSG);
+  mem_allocator.free(worker_process_time_by_type,sizeof(double) * NO_MSG);
+
+  mem_allocator.free(record_copy_time,sizeof(double) * g_thread_cnt);
+  mem_allocator.free(record_copy_cnt,sizeof(uint64_t) * g_thread_cnt);
+  mem_allocator.free(record_recov_cnt,sizeof(uint64_t) * g_thread_cnt);
+  mem_allocator.free(mtx,sizeof(double) * 40);
+
+  client_client_latency.free();
+  last_start_commit_latency.free();
+  first_start_commit_latency.free();
+  start_abort_commit_latency.free();
+}
+
 void Stats_thd::clear() {
 
   total_runtime=0;
@@ -1916,10 +1934,6 @@ void Stats_thd::combine(Stats_thd * stats) {
   lat_s_rem_cc_block_time+=stats->lat_s_rem_cc_block_time;
   lat_s_rem_cc_time+=stats->lat_s_rem_cc_time;
   lat_s_rem_process_time+=stats->lat_s_rem_process_time;
-}
-
-void Stats_thd::free() {
-
 }
 
 

@@ -1330,8 +1330,8 @@ void RemoteEQMessage::copy_from_buf(char * buf) {
     COPY_VAL(exec_id,buf,ptr);
     size_t size;
     COPY_VAL(size,buf,ptr);
-//    DEBUG_Q("1RemoteEQMessage %lu, batch_id=%lu, planner_id=%lu, exec_id=%lu, op_cnt=%lu\n",
-//            ptr,batch_id,planner_id,exec_id,size);
+    DEBUG_Q("1RemoteEQMessage %lu, Batch map[%lu][%lu][%lu], op_cnt=%lu\n",
+            ptr,batch_id,planner_id,exec_id,size);
     if (size > 0){
         quecc_pool.exec_queue_get_or_create(exec_q,planner_id,exec_id);
         size_t items_size = sizeof(exec_queue_entry)*size;
@@ -1356,8 +1356,8 @@ void RemoteEQMessage::copy_to_buf(char * buf) {
     size_t items_size = sizeof(exec_queue_entry)*size;
     memcpy(&buf[ptr], exec_q->items,items_size);
     ptr += items_size;
-//    DEBUG_Q("Sending RemoteEQMessage: batch_id=%lu, planner_id=%lu, exec_id=%lu, size=%lu\n",batch_id,planner_id,exec_id,size);
     uint64_t msize = get_size();
+    DEBUG_Q("Sending RemoteEQMessage: Batch map[%lu][%lu][%lu], size=%lu\n",batch_id,planner_id,exec_id,msize);
     assert(ptr == msize);
 }
 
@@ -1416,6 +1416,7 @@ uint64_t RemoteOpAckMessage::get_size() {
     size += sizeof(uint64_t); // for planner_id
     size += sizeof(uint64_t); // for txn_idx
     size += sizeof(int64_t); // for o_id
+    size += sizeof(int64_t); // for et_id
     return size;
 }
 
@@ -1433,6 +1434,7 @@ void RemoteOpAckMessage::copy_from_buf(char * buf) {
     COPY_VAL(planner_id,buf,ptr);
     COPY_VAL(txn_idx,buf,ptr);
     COPY_VAL(o_id,buf,ptr);
+    COPY_VAL(et_id,buf,ptr);
     assert(ptr == get_size());
 }
 
@@ -1442,6 +1444,7 @@ void RemoteOpAckMessage::copy_to_buf(char * buf) {
     COPY_BUF(buf,planner_id,ptr);
     COPY_BUF(buf,txn_idx,ptr);
     COPY_BUF(buf,o_id,ptr);
+    COPY_BUF(buf,et_id,ptr);
     assert(ptr == get_size());
 }
 

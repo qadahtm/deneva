@@ -22,7 +22,7 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 1
+#define CLIENT_NODE_CNT 2
 #define CLIENT_THREAD_CNT 4
 #define CLIENT_REM_THREAD_CNT 2
 #define CLIENT_SEND_THREAD_CNT 2
@@ -43,7 +43,7 @@
 //#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
 //#define CPU_FREQ            2.5// FOR m4.2xlarge
-#define CPU_FREQ            3.0// FOR c4.2xlarge
+#define CPU_FREQ            3.0// FOR c5.2xlarge
 // enable hardware migration.
 #define HW_MIGRATE          false
 
@@ -116,8 +116,7 @@
 
 #define PRIORITY_WORK_QUEUE false
 #define PRIORITY PRIORITY_ACTIVE
-#define MSG_SIZE_MAX 4096*128
-//#define MSG_SIZE_MAX 4096*16
+#define MSG_SIZE_MAX 4096*512 // up to 2MB messages allowed to be sent
 #define MSG_TIME_LIMIT 0
 
 /***********************************************/
@@ -188,7 +187,7 @@
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 #define BATCH_SIZE 10368
-#define BATCH_MAP_LENGTH 1//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 16//2//16//100//300//1024 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
 #define BATCH_PT_ET     2
@@ -399,14 +398,17 @@ extern TPCCTxnType          g_tpcc_txn_type;
 
 //#define TXN_TYPE          TPCC_ALL
 #define PERC_PAYMENT 0.0 // percentage of payment transactions in the workload
-#define TPCC_PAYMENT_H_INSERT_ENABLED true
+#define PAYMENT_INSERT_ENABLED false
+#define NEWORDER_INSERT_ENABLED false
+#define NEWORDER_O_INSERT_ENABLED false
+#define NEWORDER_NO_INSERT_ENABLED false
+#define NEWORDER_OL_INSERT_ENABLED false
+
 #define FIRSTNAME_MINLEN      8
 #define FIRSTNAME_LEN         16
 #define LASTNAME_LEN        16
 
 #define DIST_PER_WH       10
-#define NEWORDER_INSERT_ENABLED false
-#define PAYMENT_INSERT_ENABLED false
 
 // PPS (Product-Part-Supplier)
 #define MAX_PPS_PARTS_PER 10
@@ -551,7 +553,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define STAT_ARR_SIZE 1024
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
-#define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
+#define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper, 200ms gives ~5K txn/batch/sequencer
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 #define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
 
