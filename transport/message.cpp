@@ -1330,8 +1330,8 @@ void RemoteEQMessage::copy_from_buf(char * buf) {
     COPY_VAL(exec_id,buf,ptr);
     size_t size;
     COPY_VAL(size,buf,ptr);
-    DEBUG_Q("1RemoteEQMessage %lu, Batch map[%lu][%lu][%lu], op_cnt=%lu\n",
-            ptr,batch_id,planner_id,exec_id,size);
+//    DEBUG_Q("1RemoteEQMessage %lu, Batch map[%lu][%lu][%lu], op_cnt=%lu\n",
+//            ptr,batch_id,planner_id,exec_id,size);
     if (size > 0){
         quecc_pool.exec_queue_get_or_create(exec_q,planner_id,exec_id);
         size_t items_size = sizeof(exec_queue_entry)*size;
@@ -1834,6 +1834,8 @@ void YCSBClientQueryMessage::copy_from_txn(TxnManager * txn) {
       YCSBQuery::copy_request_to_msg(((YCSBQuery*)(txn->query)),this,i);
   }
 */
+if (rtype == RTXN && CC_ALG == CALVIN) return;
+
   requests.copy(((YCSBQuery*)(txn->query))->requests);
 }
 

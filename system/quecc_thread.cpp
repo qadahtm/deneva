@@ -1725,7 +1725,7 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
 //                    M_ASSERT_V(false, "For batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
                 }
 #else
-            if(!work_queue.batch_map[slot_num][_planner_id][i].compare_exchange_strong(expected, desired)){
+            if(!work_queue.batch_map[slot_num][_planner_id][i].compare_exchange_strong(expected, desired, memory_order_acq_rel)){
                 // this should not happen after spinning but can happen if simulation is done
                     M_ASSERT_V(false, "For batch %ld : failing to SET batch map slot [%ld][%ld][%ld]\n", batch_id, slot_num, i, _planner_id);
 //                SAMPLED_DEBUG_Q("PT_%ld: for batch %ld : failing to SET map slot [%ld][%ld][%ld]\n", _planner_id, batch_id, slot_num, i, _planner_id)
@@ -1859,7 +1859,7 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
                 }
             }
 #else
-            while(work_queue.batch_map[slot_num][_planner_id][i].load() != 0) {
+            while(work_queue.batch_map[slot_num][_planner_id][i].load(memory_order_acq_rel) != 0) {
 #if PROFILE_EXEC_TIMING
                 if(idle_starttime == 0){
                     idle_starttime = get_sys_clock();
@@ -2271,7 +2271,7 @@ void PlannerThread::checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key,
 
 void QueCCPool::init(Workload * wl, uint64_t size){
 
-    planner_batch_size = g_batch_size/g_cluster_worker_thread_cnt;
+    planner_batch_size = g_batch_size/(g_plan_thread_cnt*g_node_cnt);
     for (UInt32 i = 0; i < g_thread_cnt; ++i) {
         ts_req[i].tv_sec = 0;
         ts_req[i].tv_nsec = 100; // hundred nano seconds
@@ -2288,7 +2288,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 //#if NUMA_ENABLED
 //    numa_set_preferred(0);
 //#endif
-    uint64_t tuple_size = 0;
+    uint64_t tuple_size UNUSED = 0;
 #if WORKLOAD == YCSB || WORKLOAD == TPCC
 //    exec_queue_capacity = std::ceil((double)planner_batch_size/g_thread_cnt) * EXECQ_CAP_FACTOR;
 //#elif WORKLOAD == TPCC
@@ -2335,20 +2335,20 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     }
 #endif
 
-    boost::lockfree::queue<char *> * pool = new boost::lockfree::queue<char *> (FREE_LIST_INITIAL_SIZE);
+//    boost::lockfree::queue<char *> * pool = new boost::lockfree::queue<char *> (FREE_LIST_INITIAL_SIZE);
     /// Preallocate may mess up NUMA locality. Since, we have a warmup phase, it may not incure overhead during
     // measure phase
-    for (uint64_t i = 0; i < g_thread_cnt; ++i){
-        row_data_pool[i].insert({size,pool});
-        for (uint64_t j=0; j < (g_batch_size)/g_thread_cnt; ++j){
-////#if NUMA_ENABLED
-////            char * tmp = (char *) mem_allocator.align_alloc_onnode(sizeof(char)*tuple_size, i);
-////#else
-            char * tmp = (char *) mem_allocator.alloc(sizeof(char)*tuple_size);
-////#endif
-            pool->push(tmp);
-        }
-    }
+//    for (uint64_t i = 0; i < g_thread_cnt; ++i){
+//        row_data_pool[i].insert({tuple_size,pool});
+//        for (uint64_t j=0; j < (g_batch_size)/g_thread_cnt; ++j){
+//////#if NUMA_ENABLED
+//////            char * tmp = (char *) mem_allocator.align_alloc_onnode(sizeof(char)*tuple_size, i);
+//////#else
+//            char * tmp = (char *) mem_allocator.alloc(sizeof(char)*tuple_size);
+//////#endif
+//            pool->push(tmp);
+//        }
+//    }
 
 
 //#elif WORKLOAD == TPCC
@@ -2367,7 +2367,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
     // FIXME(tq): do we need this for batch partitions
 
     for (uint64_t i=0; i < g_cluster_worker_thread_cnt; ++i){
-        for (uint64_t j=0; j < g_cluster_worker_thread_cnt; ++j){
+        for (uint64_t j=0; j < g_cluster_planner_thread_cnt; ++j){
             exec_queue_free_list[i][j]     = new boost::lockfree::queue<Array<exec_queue_entry> *> (FREE_LIST_INITIAL_SIZE);
             batch_part_free_list[i][j]     = new boost::lockfree::queue<batch_partition *> (FREE_LIST_INITIAL_SIZE);
             exec_qs_status_free_list[i][j] = new boost::lockfree::queue<atomic<uint8_t> *>(FREE_LIST_INITIAL_SIZE);
@@ -2425,7 +2425,11 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 }
 
 uint64_t QueCCPool::get_exec_node(uint64_t i) {
+#if PIPELINED2
+    return i/g_et_thd_cnt;
+#else
     return i/g_thread_cnt;
+#endif
 }
 
 uint64_t QueCCPool::get_plan_node(uint64_t i) {
@@ -2435,6 +2439,27 @@ uint64_t QueCCPool::get_plan_node(uint64_t i) {
 uint64_t QueCCPool::map_to_planner_id(uint64_t cwid){
     return cwid-(g_node_id*g_plan_thread_cnt);
 }
+
+uint64_t QueCCPool::map_to_et_id(uint64_t cwid){
+#if PIPELINED2
+//    return cwid-(((cwid/g_thread_cnt)+1)*g_plan_thread_cnt)-((cwid/(g_thread_cnt))*g_et_thd_cnt);
+    return cwid-(((cwid/g_thread_cnt)+1)*g_plan_thread_cnt);
+#else
+    return cwid;
+#endif
+
+}
+
+uint64_t QueCCPool::map_g_et_to_et_id(uint64_t g_etid){
+#if PIPELINED2
+    return g_etid - ((g_etid/g_et_thd_cnt)*g_plan_thread_cnt);
+#else
+    return g_etid;
+#endif
+
+}
+
+
 
 uint64_t QueCCPool::map_to_cwplanner_id(uint64_t planner_id){
     return planner_id + (g_node_id*g_plan_thread_cnt);
@@ -2494,7 +2519,7 @@ void QueCCPool::free_all() {
 //    assert(false);
 //#endif
 
-    for (uint64_t i=0; i < g_cluster_worker_thread_cnt; ++i){
+    for (uint64_t i=0; i < g_cluster_planner_thread_cnt; ++i){
         for (uint64_t j=0; j < g_cluster_worker_thread_cnt; ++j){
             Array<exec_queue_entry> * eq;
             while(exec_queue_free_list[i][j]->pop(eq)){
@@ -2628,7 +2653,7 @@ void QueCCPool::batch_part_get_or_create(batch_partition *&batch_part, uint64_t 
 //#else
         batch_part = (batch_partition *) mem_allocator.alloc(sizeof(batch_partition));
 //#endif
-#if DEBUG_QUECC & false
+#if DEBUG_QUECC
 //        DEBUG_Q("Allocating batch_p, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
         batch_part_alloc_cnts[et_id][planner_id].fetch_add(1);
 

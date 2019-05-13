@@ -137,6 +137,7 @@ struct exec_queue_entry {
     row_t * row; // 8 bytes
 #endif
 //    uint64_t txn_id; //8
+    uint64_t batch_id;
 #if WORKLOAD == YCSB
      // 8 bytes for access_type
     // 8 bytes for key
@@ -151,7 +152,6 @@ struct exec_queue_entry {
     char padding[24]; // 64-(8+8+8+4+8+4)
 #else
     uint64_t txn_idx; //8
-    uint64_t batch_id;
     uint64_t planner_id;
 
 //FIXME(tq): reduce the size of the entry (e.g., use union)
@@ -199,6 +199,7 @@ struct priority_group{
 struct batch_partition{
     atomic<uint64_t> status;
     priority_group * planner_pg;
+    uint64_t batch_id;
     bool empty;
     bool remote;
     // A small optimization in case there is only a single exec_q
@@ -354,7 +355,10 @@ public:
     static uint64_t get_plan_node(uint64_t i);
 
     static uint64_t map_to_planner_id(uint64_t cwid);
+    static uint64_t map_to_et_id(uint64_t cwid);
+    static uint64_t map_g_et_to_et_id(uint64_t getid);
     static uint64_t map_to_cwplanner_id(uint64_t planner_id);
+    static uint64_t map_to_cwexec_id(uint64_t et_id);
 
     struct timespec ts_req[THREAD_CNT];
     struct timespec ts_rem[THREAD_CNT];
@@ -367,15 +371,30 @@ private:
     row_data_pool_t row_data_pool[THREAD_CNT*NODE_CNT];
     spinlock * row_data_pool_lock;
     boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> ** exec_qs_free_list;
+#if PIPELINED2
+    boost::lockfree::queue<Array<exec_queue_entry> *> * exec_queue_free_list[(THREAD_CNT-PLAN_THREAD_CNT)*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    boost::lockfree::queue<batch_partition *> * batch_part_free_list[(THREAD_CNT-PLAN_THREAD_CNT)*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+    boost::lockfree::queue<atomic<uint8_t> *> * exec_qs_status_free_list[(THREAD_CNT-PLAN_THREAD_CNT)*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+#if TDG_ENTRY_TYPE == VECTOR_ENTRY
+    boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
+#elif TDG_ENTRY_TYPE == ARRAY_ENTRY
+    boost::lockfree::queue<Array<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
+    boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[(THREAD_CNT-PLAN_THREAD_CNT)*NODE_CNT];
+#endif
+#else
     boost::lockfree::queue<Array<exec_queue_entry> *> * exec_queue_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
     boost::lockfree::queue<batch_partition *> * batch_part_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
     boost::lockfree::queue<atomic<uint8_t> *> * exec_qs_status_free_list[THREAD_CNT*NODE_CNT][PLAN_THREAD_CNT*NODE_CNT];
+
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
     boost::lockfree::queue<std::vector<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
     boost::lockfree::queue<Array<uint64_t> *> * vector_free_list[PLAN_THREAD_CNT];
     boost::lockfree::queue<Array<transaction_context *> *> * tctx_ptr_free_list[THREAD_CNT*NODE_CNT];
 #endif
+#endif
+
+
 
     boost::lockfree::queue<transaction_context *> ** txn_ctxs_free_list;
     boost::lockfree::queue<priority_group *> ** pg_free_list;
@@ -739,7 +758,12 @@ public:
 #endif
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
+#if PIPELINED2
+    uint64_t bucket_size = g_synth_table_size / (g_et_thd_cnt);
+#else
     uint64_t bucket_size = g_synth_table_size / g_thread_cnt;
+#endif
+
 #elif WORKLOAD == TPCC
     // 9223372036854775807 = 2^63
     // FIXME(tq): Use a parameter to determine the maximum database size
@@ -769,8 +793,11 @@ private:
     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.align_alloc(sizeof(exec_queue_entry));
     uint64_t et_id = 0;
     boost::random::mt19937 plan_rng;
+#if PIPELINED2
+    boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_et_thd_cnt-1);
+#else
     boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
-
+#endif
     // measurements
 #if PROFILE_EXEC_TIMING
     uint64_t idle_starttime = 0;
@@ -815,7 +842,11 @@ private:
     assign_ptr_min_heap_t assignment;
 #elif MERGE_STRATEGY == RR
 #endif
+#if PIPELINED2
+    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_et_thd_cnt);
+#else
     uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
+#endif
     boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
             new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
 

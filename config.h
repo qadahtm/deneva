@@ -44,18 +44,18 @@
 //#define CPU_FREQ          2.0 // FOR GS32
 //#define CPU_FREQ          2.5 //2.4//2.6 // FOR M64/M128
 //#define CPU_FREQ            2.5// FOR m4.2xlarge
-#define CPU_FREQ            3.0// FOR c4.2xlarge
+#define CPU_FREQ            3.0// FOR c5.2xlarge
 // enable hardware migration.
 #define HW_MIGRATE          false
 
 // # of transactions to run for warmup
 #define WARMUP            0
 // YCSB or TPCC or PPS
-#define WORKLOAD TPCC
+#define WORKLOAD YCSB
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          false
+#define PROG_STATS          true
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
@@ -69,8 +69,9 @@
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
 #define SERVER_GENERATE_QUERIES false
-
-
+#define EARLY_CL_RESPONSE true
+#define SYNC_ON_COMMIT false
+#define SPT_WORKLOAD false
 
 /***********************************************/
 // Memory System
@@ -100,7 +101,7 @@
 /***********************************************/
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
-#define SET_AFFINITY true
+#define SET_AFFINITY false
 #define SET_AFFINITY_AFTER_INIT false
 #define TPORT_TYPE TCP
 #define TPORT_PORT 17000
@@ -126,8 +127,9 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
 //#define CC_ALG NO_WAIT
-#define CC_ALG QUECC
-//#define CC_ALG CALVIN
+//#define CC_ALG QUECC
+//#define CC_ALG MAAT
+#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
 
@@ -186,15 +188,16 @@
 // [QUECC]
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // Planner thread cnt should be greater than or equal to part_cnt
-#define PLAN_THREAD_CNT THREAD_CNT
+//#define PLAN_THREAD_CNT THREAD_CNT
+#define PLAN_THREAD_CNT 2
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-//#define BATCH_SIZE 128 // testing
-#define BATCH_SIZE 10368
+#define BATCH_SIZE 60 // testing
+//#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10368*(4*NODE_CNT)
 //#define BATCH_SIZE 10080
 //#define BATCH_SIZE 5040
@@ -204,7 +207,7 @@
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 1//100//300//1024 // width of map is PLAN_THREAD_CNT
 //#define BATCH_MAP_LENGTH 4 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
@@ -221,6 +224,7 @@
 #define PLAN_NO_DIST_UPDATE_FIRST false
 #define PLAN_NO_DIST_DEPS_LAST false
 #define PIPELINED false
+#define PIPELINED2 false
 
 #define INIT_QUERY_MSGS false
 
@@ -344,9 +348,9 @@
  * During the run phase, client worker threads will take one transaction at a time and send it to the server
  * If this number is exhausted during the run, client threads will loop over from the start.
  */
-#define MAX_TXN_PER_PART    500000
+//#define MAX_TXN_PER_PART    500000
 //#define MAX_TXN_PER_PART    15625
-//#define MAX_TXN_PER_PART    32 //debugging
+#define MAX_TXN_PER_PART    512 //debugging
 //#define MAX_TXN_PER_PART    (100000/PART_CNT)
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PLAN_THREAD_CNT) // ensures that batch_size == tital number of transactions
 //#define MAX_TXN_PER_PART    (BATCH_SIZE/PART_CNT) // ensures that batch_size == tital number of transactions
@@ -364,11 +368,11 @@
 #define ACCESS_PERC 100
 #define INIT_PARALLELISM    4//THREAD_CNT
 #define RANGE_PARITIONING true
-//#define SYNTH_TABLE_SIZE 1024*NODE_CNT
+#define SYNTH_TABLE_SIZE 1200*NODE_CNT
 //#define SYNTH_TABLE_SIZE  65536*NODE_CNT
 //#define SYNTH_TABLE_SIZE   10*1048576
 //#define SYNTH_TABLE_SIZE 16777216 // 16M recs
-#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
+//#define SYNTH_TABLE_SIZE 16783200*NODE_CNT // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 1191*13440 // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 416*BATCH_SIZE // ~16M recs so that it is divisiable by different part_cnt values
 //#define SYNTH_TABLE_SIZE 16777152 // 16GB ~16M with 1K recs so that it is divisiable by different batch sizes values
@@ -593,11 +597,12 @@ enum PPSTxnType {PPS_ALL = 0,
 #define PROG_TIMER 5 * BILLION // in s
 #define BATCH_TIMER 0
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper
+#define CALVIN_TIME_BASED true
 //#define SEQ_BATCH_TIMER 200 * 1 * MILLION // ~5ms -- same as CALVIN paper
 //#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 //#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 10 * BILLION // debugging
-#define WARMUP_TIMER 1 * 10 * BILLION // debugging
+#define DONE_TIMER 1 * 30 * BILLION // debugging
+#define WARMUP_TIMER 1 * 30 * BILLION // debugging
 
 #define SEED 0
 #define SHMEM_ENV false

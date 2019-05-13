@@ -142,7 +142,13 @@ UInt32 g_send_thread_cnt = SEND_THREAD_CNT;
 // sequencer + scheduler thread
 UInt32 g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_abort_thread_cnt + g_logger_thread_cnt + 2;
 #elif CC_ALG == QUECC || CC_ALG == LADS
+#if PIPELINED2
+UInt32 g_et_thd_cnt = (THREAD_CNT-PLAN_THREAD_CNT);
+UInt32 g_cluster_worker_thread_cnt = NODE_CNT*(THREAD_CNT-PLAN_THREAD_CNT);
+#else
 UInt32 g_cluster_worker_thread_cnt = NODE_CNT*THREAD_CNT;
+#endif
+UInt32 g_cluster_planner_thread_cnt = NODE_CNT*PLAN_THREAD_CNT;
 UInt32 g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt + g_plan_thread_cnt;
 #elif CC_ALG == DUMMY_CC
 UInt32 g_total_thread_cnt = g_thread_cnt + g_rem_thread_cnt + g_send_thread_cnt;
@@ -198,7 +204,7 @@ UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 #if PIPELINED
 const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
 #else
-const UInt32 g_plan_thread_cnt = THREAD_CNT;
+const UInt32 g_plan_thread_cnt = PLAN_THREAD_CNT;
 #endif
 UInt32 g_batch_size = BATCH_SIZE;
 UInt32 g_exec_qs_max_size = EXEC_QS_MAX_SIZE;

@@ -60,7 +60,7 @@ void QWorkQueue::init() {
   }
 #else
   for (uint64_t i=0; i < g_batch_map_length ; i++){
-    for (uint64_t j=0; j < g_cluster_worker_thread_cnt; j++){
+    for (uint64_t j=0; j < g_cluster_planner_thread_cnt; j++){
       for (uint64_t k=0; k< g_cluster_worker_thread_cnt ; k++){
         (batch_map[i][j][k]).store(0);
       }

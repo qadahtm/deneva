@@ -91,6 +91,18 @@ RC CalvinLockThread::run() {
         if(rc == RCOK) {
             work_queue.enqueue(_thd_id,msg,false);
         }
+        else{
+            //TQ: at this point, the following is True:
+            // 1. we have not been able to acquire all locks on all keys
+            // 2. Message rquest pointers are copied to TxnManager
+            // 3. The txn will be restarted on lock release
+            // 4. when a transaction is restarted, a new RTXN message will be created and enqueued.
+            // Therefore, we should free the memory allocated for this message
+#if WORKLOAD == YCSB
+
+#endif
+
+        }
         txn_man->set_ready();
 
         INC_STATS(_thd_id,mtx[33],get_sys_clock() - prof_starttime);
@@ -106,13 +118,21 @@ void CalvinSequencerThread::setup() {
 }
 
 bool CalvinSequencerThread::is_batch_ready() {
+
+#if CALVIN_TIME_BASED
     bool ready = get_wall_clock() - simulation->last_seq_epoch_time >= g_seq_batch_time_limit;
+#else
+    if (cl_txn_cnt == 0){
+        return false;
+    }
+    bool ready = ((cl_txn_cnt % (per_node_batch_part)) == 0);
+#endif
     return ready;
 }
 
 RC CalvinSequencerThread::run() {
     tsetup();
-    printf("Running CalvinSequencerThread %ld\n",_thd_id);
+    printf("N_%u: Running CalvinSequencerThread %ld\n",g_node_id,_thd_id);
     fflush(stdout);
     Message * msg;
     uint64_t idle_starttime = 0;
@@ -123,7 +143,7 @@ RC CalvinSequencerThread::run() {
         prof_starttime = get_sys_clock();
 
         if(is_batch_ready()) {
-          simulation->advance_seq_epoch();
+            simulation->advance_seq_epoch();
           //last_batchtime = get_wall_clock();
           seq_man.send_next_batch(_thd_id);
         }
@@ -151,6 +171,9 @@ RC CalvinSequencerThread::run() {
             // Query from client
             DEBUG("SEQ process_txn\n");
             seq_man.process_txn(msg,get_thd_id(),0,0,0,0);
+#if !CALVIN_TIME_BASED
+            cl_txn_cnt++;
+#endif
             // Don't free message yet
             break;
           case CALVIN_ACK:

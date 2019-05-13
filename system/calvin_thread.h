@@ -47,6 +47,10 @@ public:
 private:
     bool is_batch_ready();
 	uint64_t last_batchtime;
+#if !CALVIN_TIME_BASED
+	uint64_t per_node_batch_part = BATCH_SIZE;
+	uint64_t cl_txn_cnt;
+#endif
 };
 
 #endif

@@ -41,6 +41,23 @@ void Sequencer::init(Workload * wl) {
 }
 
 void Sequencer::free(){
+//    Message * msg;
+//    for(uint64_t j = 0; j < g_node_cnt; j++) {
+//        while (fill_queue[j].pop(msg)) {
+//#if WORKLOAD == YCSB
+//            YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
+//#if !SINGLE_NODE
+//            for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+//                DEBUG_M("Sequencer::free() ycsb_request free\n");
+//                mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+//            }
+//#endif
+//#endif
+//
+//            Message::release_message(msg);
+//        }
+//    }
+
 //    delete [] fill_queue;
 //    qlite_ll * en = wl_head;
 //    while (en){
@@ -153,6 +170,8 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
         INC_STATS(0,lat_short_cc_time,msg->lat_cc_time);
         INC_STATS(0,lat_short_process_time,msg->lat_process_time);
 
+        cl_msg->release();
+
 #if !SINGLE_NODE // no need to prepare/send message to client as there is no client
         if (msg->return_node_id != g_node_id) {
             /*
@@ -179,7 +198,7 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
         rsp_msg->client_startts = wait_list[id].client_startts;
         msg_queue.enqueue(thd_id,rsp_msg,wait_list[id].client_id);
 #endif
-        cl_msg->release();
+
 #if WORKLOAD == PPS
         }
 #endif
@@ -212,7 +231,10 @@ void Sequencer::process_txn( Message * msg,uint64_t thd_id, uint64_t early_start
       // First txn of new wait list
       en = (qlite_ll *) mem_allocator.alloc(sizeof(qlite_ll));
       en->epoch = simulation->get_seq_epoch()+1;
-      en->max_size = 1000;
+      //TQ: this may cause the sequencer to allocate a lot of memory and the process get killed due to OOM
+//      en->max_size = 1000;
+//      en->max_size = 200;
+      en->max_size = 100;
       en->size = 0;
       en->txns_left = 0;
       en->list = (qlite *) mem_allocator.alloc(sizeof(qlite) * en->max_size);

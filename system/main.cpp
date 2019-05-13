@@ -92,8 +92,13 @@ int main(int argc, char* argv[])
 	printf("Random seed: %ld\n",seed);
 
 #if CC_ALG == QUECC && BATCHING_MODE == SIZE_BASED
-    M_ASSERT_V(g_batch_size % g_cluster_worker_thread_cnt == 0, "(BATCH_SIZE) remainder PLAN_THREAD_CNT != 0,"
-            " please configure them proparly, remainder = %d", g_batch_size % g_cluster_worker_thread_cnt)
+    M_ASSERT_V(g_batch_size % g_cluster_planner_thread_cnt == 0, "(BATCH_SIZE) remainder PLAN_THREAD_CNT != 0,"
+            " please configure them proparly, remainder = %d", g_batch_size % g_cluster_planner_thread_cnt)
+
+#if PIPELINED2
+    M_ASSERT_V(((THREAD_CNT-PLAN_THREAD_CNT) > 0), "Planner thread count is more than execution threads, PT_CNT=%d, ET_CNT=%d, reconfigure please.", g_plan_thread_cnt, g_thread_cnt);
+#endif
+
 #endif
 	int64_t starttime;
 	int64_t endtime;

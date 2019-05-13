@@ -365,7 +365,13 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
     INC_STATS(get_thd_id(), mtx[16], get_sys_clock() - prof_starttime);
 #endif
 //    query->init();
-    reset();
+    //FIXME: calvin
+    // this reset() call is commented out in the original Deneva code
+    // However, if commented out, Calvin may consume more memory which leads it to be killed.
+    // Current hack, uncomment for some calvin experiments
+    // For Maat, to work, this needs to be commented out!!
+    // TQ: this seems to be a bug but not sure how to resolve it
+//    reset();
     sem_init(&rsp_mutex, 0, 1);
     return_id = UINT64_MAX;
 
@@ -927,6 +933,50 @@ RC TxnManager::get_lock(row_t *row, access_t type) {
 }
 
 #if CC_ALG == QUECC
+void TxnManager::check_commit_ready(exec_queue_entry *entry) {
+    uint64_t e8;
+    uint64_t d8;
+    do{
+        e8 = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
+        d8 = e8 + 1;
+    } while(!entry->txn_ctx->completion_cnt.compare_exchange_strong(e8,d8,memory_order_acq_rel));
+//#if SINGLE_NODE
+    if (d8 > (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
+        DEBUG_Q("completion_cnt = %lu, txn_comp_cnt=%lu\n",d8,entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel));
+//            DEBUG_Q("Last entry in etxn_id=%ld, ctx_txn_id=%ld transaction comp_cnt = %lu, ctx txn_comp_cnt %lu, txn_ctx_ptr=%lu\n",
+//                    entry->txn_id, entry->txn_ctx->txn_id, entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel),
+//                    entry->txn_ctx->txn_comp_cnt.load(),(uint64_t)entry->txn_ctx);
+        // this is the last entry to be executed, we should be ready to commit
+//                e8 = TXN_STARTED;
+//                d8 = TXN_READY_TO_COMMIT;
+//                if (!entry->txn_ctx->txn_state.compare_exchange_strong(e8, d8,memory_order_acq_rel)) {
+//                    M_ASSERT_V(false,"ET_%ld: Invalid txn state = %ld, txn_id=%ld, ctx_txn_id=%lu\n",
+//                               _thd_id,entry->txn_ctx->txn_state.load(), entry->txn_id, entry->txn_ctx->txn_id);
+//                }
+        assert(false);
+    }
+    else if (d8 == (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))){
+#if !SERVER_GENERATE_QUERIES && EARLY_CL_RESPONSE
+        Message * rsp_msg = Message::create_message(CL_RSP);
+        rsp_msg->txn_id = entry->txn_ctx->txn_id;
+        rsp_msg->batch_id = entry->batch_id; // using batch_id from local, we can also use the one in the context
+        ((ClientResponseMessage *) rsp_msg)->client_startts = entry->txn_ctx->client_startts;
+        rsp_msg->lat_work_queue_time = 0;
+        rsp_msg->lat_msg_queue_time = 0;
+        rsp_msg->lat_cc_block_time = 0;
+        rsp_msg->lat_cc_time = 0;
+        rsp_msg->lat_process_time = 0;
+        rsp_msg->lat_network_time = 0;
+        rsp_msg->lat_other_time = 0;
+
+        msg_queue.enqueue(0, rsp_msg, entry->txn_ctx->return_node_id);
+
+        INC_STATS(0, txn_cnt, 1);
+#endif
+    }
+//#endif
+}
+
 void TxnManager::row_access_backup(exec_queue_entry * entry, access_t type, row_t * row, uint64_t ctid){
 #if ROW_ACCESS_TRACKING
 #if ROLL_BACK

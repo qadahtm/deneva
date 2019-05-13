@@ -68,8 +68,9 @@
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
 #define SERVER_GENERATE_QUERIES false
-
-
+#define EARLY_CL_RESPONSE false
+#define SYNC_ON_COMMIT false
+#define SPT_WORKLOAD false
 
 /***********************************************/
 // Memory System
@@ -203,6 +204,7 @@
 #define PLAN_NO_DIST_UPDATE_FIRST false
 #define PLAN_NO_DIST_DEPS_LAST false
 #define PIPELINED false
+#define PIPELINED2 false
 
 #define INIT_QUERY_MSGS false
 
@@ -553,6 +555,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define STAT_ARR_SIZE 1024
 #define PROG_TIMER 10 * BILLION // in s
 #define BATCH_TIMER 0
+#define CALVIN_TIME_BASED true
 #define SEQ_BATCH_TIMER 5 * 1 * MILLION // ~5ms -- same as CALVIN paper, 200ms gives ~5K txn/batch/sequencer
 #define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 #define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes

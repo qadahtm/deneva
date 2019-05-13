@@ -61,33 +61,75 @@ def replace_def(conf, name, value):
 def set_alg(conf, alg, **kwargs):
 	conf = replace_def(conf, 'CC_ALG', alg.partition('-')[0].partition('+')[0])
 	conf = replace_def(conf, 'ISOLATION_LEVEL', 'SERIALIZABLE')
+	conf = replace_def(conf, 'SET_AFFINITY', 'true') # ensures that SET_AFFINITY is true
 	return conf
 
-def set_quecc_conf(conf, batch_size, bmap_len , **kwargs):
-	conf = replace_def(conf, 'BATCH_SIZE', str(batch_size))  
+def set_quecc_common_conf(conf, **kwargs):
+	
+	#Optimization configuration
+	#Allow response to be sent as soon as possible for local EQs
+	conf = replace_def(conf, 'EARLY_CL_RESPONSE', 'false')
+	conf = replace_def(conf, 'SYNC_ON_COMMIT', 'false')
+	# conf = replace_def(conf, 'SYNC_ON_COMMIT', 'true')
+	conf = replace_def(conf, 'PIPELINED2', 'false')
+	conf = replace_def(conf, 'SPT_WORKLOAD', 'false')
+
+	if 'pt_count' in kwargs:
+		print('Setting PT count!')
+		conf = replace_def(conf, 'PLAN_THREAD_CNT', str(kwargs['pt_count']))
+	else:
+		print('Did not set PT count!!')
+		conf = replace_def(conf, 'PLAN_THREAD_CNT', 'THREAD_CNT')	
+	return conf
+
+def set_quecc_conf(conf, batch_size, bmap_len, **kwargs):
+	conf = replace_def(conf, 'BATCH_SIZE', str(batch_size))
 	conf = replace_def(conf, 'BATCH_MAP_LENGTH', str(bmap_len))  
+
+	return conf; 
+	
+
+def set_bsize_conf(conf, batch_size , **kwargs):
+	conf = replace_def(conf, 'BATCH_SIZE', str(batch_size))  	
 	return conf
 
-def set_calvin_conf(conf, seq_btimer, thread_count , **kwargs):
-	conf = replace_def(conf, 'SEQ_BATCH_TIMER', '{} * 1 * MILLION'.format(seq_btimer))
+def set_calvin_conf(conf, thread_count, **kwargs):
+	seq_btimer = 5 # default timer
+	if 'seq_btimer' in kwargs:
+		seq_btimer = kwargs['seq_btimer'];
+
+	if seq_btimer > 200:
+		conf = replace_def(conf, 'CALVIN_TIME_BASED', 'false')
+	else:
+		conf = replace_def(conf, 'SEQ_BATCH_TIMER', '{} * 1 * MILLION'.format(seq_btimer))
+		conf = replace_def(conf, 'CALVIN_TIME_BASED', 'true')
 	return conf
 
 def set_cluster(conf, node_cnt, thread_count, alg , **kwargs):
 	conf = replace_def(conf, 'NODE_CNT', str(node_cnt))
-	assert(thread_count == 4)
+
+	conf = replace_def(conf, 'PROG_STATS', 'false')
+
+	assert(thread_count >= 4)
 	if alg == 'CALVIN':
 		conf = replace_def(conf, 'THREAD_CNT', str(thread_count-2))
 	else:	
 		conf = replace_def(conf, 'THREAD_CNT', str(thread_count))
-	conf = replace_def(conf, 'REM_THREAD_CNT', str(2))
-	conf = replace_def(conf, 'SEND_THREAD_CNT', str(2))
+
+	cthd_cnt = 2
+	conf = replace_def(conf, 'REM_THREAD_CNT', str(cthd_cnt))
+	conf = replace_def(conf, 'SEND_THREAD_CNT', str(cthd_cnt))
+
 	conf = replace_def(conf, 'PART_CNT', str(node_cnt))
 	conf = replace_def(conf, 'CLIENT_NODE_CNT', str(node_cnt))
 	conf = replace_def(conf, 'CLIENT_THREAD_CNT', str(4))
 	conf = replace_def(conf, 'CLIENT_REM_THREAD_CNT', str(2))
 	conf = replace_def(conf, 'CLIENT_SEND_THREAD_CNT', str(2))
 	if alg == 'QUECC':
-		conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE*4')
+		# conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE*4')
+		conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE')
+	elif alg == 'CALVIN': #used for size-based batching for CALVIN
+		conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE')
 	else:
 		conf = replace_def(conf, 'MAX_TXN_IN_FLIGHT', 'BATCH_SIZE')
 	
@@ -153,14 +195,17 @@ def gen_filename(exp):
 		s += '__'
 	return prefix + s.rstrip('__') + suffix
 
+def batch_based_alg(alg, calvin_bsize):
+	return (alg == 'QUECC' or (calvin_bsize and alg == 'CALVIN'))
+
 def enum_exps(seq):
 	all_algs = [#'NO_WAIT',
-				#'CALVIN',
+				'CALVIN',
 				#'MVCC',
 				#'MAAT',
 				#'TIMESTAMP',
 				#'WAIT_DIE',
-				'QUECC'
+				#'QUECC'
 				]
 	node_cnt = ec2_nodes.server_cnt 
 	for alg in all_algs:
@@ -169,21 +214,27 @@ def enum_exps(seq):
 		# wthreads =  [1, 2] + list(range(4, max_thread_count + 1, 4))
 		# wthreads =  list(range(4, max_thread_count + 1, 4))
 		# wthreads = [4,8,16,24,32]
+		# wthreads = [4,8,16,32]
+		# wthreads = [4,8,16]
+		# wthreads = [8,16,32]
 		wthreads = [4]
-		# wthreads = [4]
+		pthreads = [1,2,4]
+		# pthreads = [1,2]
 		# zipftheta = [0.0,0.8]
-		# zipftheta = [0.99] # High Contention
-		zipftheta = [0.0] # Uniform
+		zipftheta = [0.0] # High Contention
+		# zipftheta = [0.0] # Uniform
 		# zipftheta = [0.95] 
 		# zipftheta = [0.6] # Low contention
 		# zipftheta = [0.8] # Medium contention
 		# zipftheta = [0.99,0.9,0.7,0.5,0.3,0.0] 
 		# zipftheta = [0.99,0.7,0.5,0.3,0.0] 
 		# zipftheta = [0.99,0.9,0.8,0.4,0.0] 
-		# zipftheta = [0.8,0.6]
-		
+		# zipftheta = [0.8,0.6]		
 		# zipftheta = [0.0,0.3,0.6,0.8,0.9,0.95,0.99]
+		# zipftheta = [0.0,0.6,0.8,0.9,0.99]
 		# zipftheta = [0.0,0.95]
+
+
 		# read_ratios = [1.0,0.95,0.8,0.5,0.2,0.05]
 		# read_ratios = [0.5,0.2,0.05]
 		# read_ratios = [1.0]
@@ -199,7 +250,8 @@ def enum_exps(seq):
 		# req_per_query_vals = [10,16,20,32]
 		# req_per_query_vals = [10,4]
 		# req_per_query_vals = [1]
-		# req_per_query_vals = [10]
+		# req_per_query_vals = [8]
+		# req_per_query_vals = [10]		
 		req_per_query_vals = [16] # default
 		# req_per_query_vals = [1,2,4,8,10,16]
 
@@ -210,13 +262,20 @@ def enum_exps(seq):
 		# batch_size_vals = [40320*2] # default for QC
 		# batch_size_vals = [10368, 40320, 40320*2, 40320*4, 40320*8]
 		# batch_size_vals = [40320*4, 40320*8]
-		if node_cnt > 2:
-			# batch_size_vals = [10368, 5040*node_cnt, 5040*node_cnt*2, 5040*node_cnt*4] # 10K default for others, 80K default for QC
-			batch_size_vals = [10368, 5040*node_cnt, 5040*node_cnt*2] # 10K default for others, 80K default for QC
-			# batch_size_vals = [10368, 5040*node_cnt*2] # 10K default for others, 80K default for QC
+		# if node_cnt > 2:
+		# 	# batch_size_vals = [10368, 5040*node_cnt, 5040*node_cnt*2, 5040*node_cnt*4] # 10K default for others, 80K default for QC
+		# 	# batch_size_vals = [10368, 5040*node_cnt, 5040*node_cnt*2] # 10K default for others, 80K default for QC
+		# 	# batch_size_vals = [10368, 5040*node_cnt] # 10K default for others, 80K default for QC
+		# 	batch_size_vals = [10368, 5056*node_cnt] # use for 32 core exps
+			
+		# 	# batch_size_vals = [10368, 5040*node_cnt*2] # 10K default for others, 80K default for QC
+		# else:
+		if alg == 'QUECC':
+			# batch_size_vals = [5056*8,5040*node_cnt]
+			batch_size_vals = [5040*node_cnt]
 		else:
-			batch_size_vals = [10368] # default
-
+			batch_size_vals = [10368] # default for others
+		
 		# batch_size_vals = [256] # CALVIN has issues with large batch sizes
 		# batch_size_vals = [5040*node_cnt] # default - testing 10K with 100% new order workload for Q-Store
 
@@ -230,71 +289,116 @@ def enum_exps(seq):
 
 		# mpr_vals = [0.0,0.5]
 		# mpr_vals = [0.5] #default for YCSB
-		# mpr_vals = [0.15] #default for TPCC
+		mpr_vals = [0.15] #default for TPCC
 		# mpr_vals = [0.1] #default for TPCC
-		mpr_vals = [1.0]
+		# mpr_vals = [1.0]
+		# mpr_vals = [0.0]
 		#standard MPR is 10% as per CALVIN paper
 		# mpr_vals = [0.0,1.0]
 		# mpr_vals = [0.0, 0.1, 0.15, 0.5, 0.75, 1.0]
+		# mpr_vals = [0.1, 0.15, 0.5, 0.75, 1.0]
 		#standard ppt is 2 as per CALVIN paper
-		# ppt_vals = [2]
-		ppt_vals = [16] # default
-		# ppt_vals = [node_cnt] # default
-		# ppt_vals = [8] # default
+		ppt_vals = [2] #default for TPCC
+		# ppt_vals = [16] # default
+		# ppt_vals = [8] # default	
 		# ppt_vals = [2,4,8,12,16]
+		# ppt_vals = [8,16]
+		# ppt_vals = [node_cnt] # testing
 
-		bm_len_vals = [16]
-		# bm_len_vals = [1]
+		# bm_len_vals = [16]
+		bm_len_vals = [1]
+		if alg == 'QUECC' and bm_len_vals[0] > 1:
+			common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg, 'bmap_len':bm_len_vals[0] }
+		else:
+			common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg }
 
-		common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg, 'thread_count': thread_count, 'bmap_len':bm_len_vals[0] }
+		#for YCSB
+		# common = { 'seq': seq, 'tag': tag, 'node_cnt':node_cnt, 'alg': alg }
 
 		#create a batch for every 200ms
 		# calvin_batch_timer = 200
-		# if alg == 'CALVIN':
-			# common.update({'seq_btimer':calvin_batch_timer})			
+		#any value > 200 will use batch size
+		# calvin_batch_timer = 1000 
+		calvin_batch_timer = 5 
+		calvin_bsize = False
+		if calvin_bsize and alg == 'CALVIN':
+			common.update({'seq_btimer':calvin_batch_timer})			
 
 		# YCSB
 		ycsb = dict(common)
 		ycsb.update({ 'bench': 'YCSB'})
 		ycsb.update({ 'record_size': record_size, 'tx_count': tx_count, 'total_count':total_count })
 
-
+		
 		if False:
-			# for read_ratio in [0.50, 0.95]:
-			for read_ratio in read_ratios:
-			# for zipf_theta in [0.00, 0.90, 0.99]:
-			# for zipf_theta in [0.00, 0.99]:
-				for zipf_theta in zipftheta:
-					for mpr in mpr_vals:
-						for ppt in ppt_vals:
-							for rpq in req_per_query_vals:
-								for bs in batch_size_vals:
-									if bs > 10368 and alg != 'QUECC': continue
-									if bs > 10368 and alg == 'QUECC' and node_cnt == 2: continue
-									if bs == 10368 and alg == 'QUECC' and node_cnt > 2: continue
-									ycsb.update({ 'read_ratio': read_ratio, 'zipf_theta': zipf_theta, 'req_per_query': rpq, 'batch_size':bs})
-									ycsb.update({'mpr':mpr,'ppt_cnt':ppt})
-									# ycsb.update({'mpr':mpr,'ppt_cnt':rpq}) # use req_cnt == ppt_cnt
-									yield dict(ycsb)
+			for thread_count in wthreads:
+				for read_ratio in read_ratios:
+					for zipf_theta in zipftheta:
+						for mpr in mpr_vals:
+							for ppt in ppt_vals:
+								for rpq in req_per_query_vals:
+									
+									if not batch_based_alg(alg, calvin_bsize):
+										batch_size_vals = [10368] 
+									else:
+										if thread_count > 4:
+											# bu = 1264*thread_count*node_cnt;
+											bu = 1264*64; #80K 
+											# batch_size_vals = [bu,bu*2,bu*3,bu*4]
+											batch_size_vals = [bu]
+										else:
+											assert(thread_count == 4)
+											# batch_size_vals = [5056,10368,5056*4,(5056*8),5056*node_cnt]
+											# batch_size_vals = [5056,10368,5056*4,(5056*8),5040*node_cnt, (5056*node_cnt)*2, (5056*node_cnt)*4]
+											batch_size_vals = [5056*8,5040*node_cnt] #40K, 80K
+											# batch_size_vals = [5056*8] #40K
+											# batch_size_vals = [10368] #40K
+											# batch_size_vals = [5040*node_cnt] #80K default
+									for bs in batch_size_vals:
+										# if bs > 10368 and not batch_based_alg(alg, calvin_bsize) : continue
+										# if bs > 10368 and batch_based_alg(alg, calvin_bsize) and node_cnt == 2: continue
+										# if bs == 10368 and batch_based_alg(alg, calvin_bsize) and node_cnt > 2: continue
+
+										# set ppt to rpq - only for optvar exps
+										# assert(len(ppt_vals) == 1)
+										# ppt = rpq
+
+										ycsb.update({ 'read_ratio': read_ratio, 'zipf_theta': zipf_theta, 'req_per_query': rpq, 'batch_size':bs})
+										ycsb.update({'mpr':mpr,'ppt_cnt':ppt})
+										ycsb.update({'thread_count': thread_count})
+										# ycsb.update({'mpr':mpr,'ppt_cnt':rpq}) # use req_cnt == ppt_cnt
+
+										# if alg == 'QUECC':
+										# 	for ptc in pthreads:
+										# 		if ptc < thread_count:
+										# 			ycsb.update({'pt_count': ptc})
+										# 		# print('yield ptc = {}'.format(ptc))
+										# 		yield dict(ycsb)
+										# else:		
+										# 	yield dict(ycsb)	
+
+										yield dict(ycsb)				
 		# TPCC
 		#whvar
 		# warehouses_vars = [1]
 		# warehouses_vars = [4]
 		# warehouses_vars = [16]
-		# warehouses_vars = [(node_cnt*4),(node_cnt*128)]
+		# warehouses_vars = [node_cnt]
 		warehouses_vars = [(node_cnt*4)]
+		# warehouses_vars = [(node_cnt*4),(node_cnt*8),(node_cnt*16),(node_cnt*32),(node_cnt*64),(node_cnt*128)]
+		# warehouses_vars = [(node_cnt*128)]
 		# warehouses_vars = [thread_count,1,4]
 		# warehouses_vars = [8,16]
+		# pay_percs = [0.0,0.2,0.5,0.8,1.0]
 		# pay_percs = [0.0,0.5,1.0]
-		# pay_percs = [0.0,0.5]
 		# pay_percs = [0.0]
-		# pay_percs = [0.5]
+		# pay_percs = [0.5] #default
 		pay_percs = [1.0]
 		tx_count = 500000
 
 		tpcc = dict(common)
 		# tx_count = 200000          
-		tpcc.update({ 'bench': 'TPCC', 'tx_count': tx_count })
+		tpcc.update({ 'bench': 'TPCC', 'tx_count': tx_count,'thread_count': thread_count })
 
 		if True:
 			for payp in pay_percs:
@@ -302,7 +406,7 @@ def enum_exps(seq):
 					for ppt in ppt_vals:
 						for bs in batch_size_vals:
 							if bs > 10368 and alg != 'QUECC': continue
-							# if bs == 10368 and alg == 'QUECC' and node_cnt > 2: continue
+							if bs == 10368 and alg == 'QUECC' and node_cnt > 2: continue
 							for warehouse_count in warehouses_vars:
 								tpcc.update({ 'warehouse_count': warehouse_count,'batch_size':bs, 'pay_perc':payp })
 								tpcc.update({'mpr':mpr,'ppt_cnt':ppt})
@@ -319,9 +423,16 @@ def update_conf(conf, exp):
 		conf = set_tpcc(conf, **exp)
 	else: assert False
 	
-	conf = set_quecc_conf(conf, **exp)
+	if exp['alg'] == 'QUECC':
+		conf = set_quecc_common_conf(conf,**exp);
 
-	# conf = set_calvin_conf(conf, **exp)
+	# if exp['alg'] == 'QUECC' and exp['bench'] in ('TPCC'):		
+		# conf = set_quecc_conf(conf, **exp)
+	# else:
+	conf = set_bsize_conf(conf,**exp)
+
+	if exp['alg'] == 'CALVIN':
+		conf = set_calvin_conf(conf, **exp)
 
 	return conf
 
@@ -519,7 +630,8 @@ def prepare_node_list():
 	for nip in node_list:
 		if verbose:
 			print('sending command (ifconfig sync) to node: {}'.format(nip))
-		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} {}'.format(nip,'cp -f /mnt/efs/expodb/ifconfig.txt ~/{}/ifconfig.txt'.format(build_dir))
+		# rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} {}'.format(nip,'cp -f /mnt/efs/expodb/ifconfig.txt ~/{}/ifconfig.txt'.format(build_dir))
+		rcmd = 'scp -o StrictHostKeyChecking=no /mnt/efs/expodb/ifconfig.txt ubuntu@{}:~/{}/ifconfig.txt'.format(nip,build_dir)		
 		proc_list.append(exec_cmd(rcmd,env,True))
 	wait_for(proc_list)
 	proc_list.clear()
@@ -531,7 +643,10 @@ def sync_source_code_efs():
 	for nip in node_list:
 		if verbose:
 			print('sending command (EFS sync) to node: {}'.format(nip))
-		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} {}'.format(nip,'rsync -axvP {} ~/'.format(src_dir))
+		
+		# rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} {}'.format(nip,'rsync -axvP {} ~/'.format(src_dir))
+		rcmd = 'rsync -e "ssh -o StrictHostKeyChecking=no" -axvP {} ubuntu@{}:~/'.format(src_dir,nip);
+
 		proc_list.append(exec_cmd(rcmd,env,True))
 	wait_for(proc_list)
 	proc_list.clear()
@@ -543,7 +658,7 @@ def build_executables():
 	for nip in node_list:
 		if verbose: 
 			print('sending command (build from source) to node: {}'.format(nip))
-		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}"'.format(nip,'cd ~/{}; make clean; make -j8'.format(build_dir))
+		rcmd = 'ssh -oStrictHostKeyChecking=no ubuntu@{} "{}"'.format(nip,'cd ~/{}; make clean; make -j8'.format(build_dir))		
 		proc_list.append(exec_cmd(rcmd,env,True))
 	wait_for(proc_list)
 	proc_list.clear()
@@ -724,22 +839,6 @@ def run_exiting_config():
 global env
 env = dict(os.environ)
 
-# 9 nodes total
-# node_list = ['172.31.7.156','172.31.12.138','172.31.11.228',
-# '172.31.13.62','172.31.2.208','172.31.1.29','172.31.8.5', '172.31.7.183','172.31.6.241']
-
-# 3 nodes qcd-0 to qcd-3
-# node_list = ['172.31.7.156','172.31.2.208','172.31.12.138']
-
-# 4 nodes qcd-0 to qcd-3
-# node_list = ['172.31.7.156','172.31.2.208','172.31.12.138','172.31.13.62']
-
-# 5 nodes qcd-0 to qcd-4
-# node_list = ['172.31.7.156','172.31.2.208','172.31.12.138','172.31.13.62','172.31.11.228']
-
-# 6 nodes qcd-0 to qcd-5
-# node_list = ['172.31.7.156','172.31.2.208','172.31.12.138','172.31.13.62','172.31.11.228','172.31.1.29']
-
 node_list = ec2_nodes.node_list
 with open('/home/ubuntu/secrets.json') as data_file:
     secrets = json.load(data_file)
@@ -752,20 +851,41 @@ verbose = False
 
 prefix = ''
 suffix = ''
-total_seqs = 2
+total_seqs = 3
 max_retries = 1
 
 #nodes to be skipped from running
-# skip_nodes = set([0,1])
+# skip_nodes = set([0])
 skip_nodes = set()
 
-src_dir = '/mnt/efs/expodb/deneva'
+src_dir = '/mnt/efs/expodb/ExpoDB-BC'
+# src_dir = '/mnt/efs/expodb/deneva'
+# build_dir = 'qcd-build'
 build_dir = 'qcd-build'
 
 # res_dir_name = '/mnt/efs/expodb/exp_results2'
-res_dir_name = '/mnt/efs/expodb/exp_results_qc_tpcc'
+# res_dir_name = '/mnt/efs/expodb/exp_optvar_rerun'
+# res_dir_name = '/mnt/efs/expodb/exp_pptvar_rerun'
+# res_dir_name = '/mnt/efs/expodb/exp_results3' # no commitsync - low txn inflight
+# res_dir_name = '/mnt/efs/expodb/exp_qs_spt' # SPT- no commitsync - low txn inflight
+# res_dir_name = '/mnt/efs/expodb/exp_results4' #with commitsync - low txn inflight
+# res_dir_name = '/mnt/efs/expodb/exp_qs_earlyresp'
+# res_dir_name = '/mnt/efs/expodb/exp_qs_test'
+# res_dir_name = '/mnt/efs/expodb/exp_qs_nocommitsync'
+# res_dir_name = '/mnt/efs/expodb/exp_qs_pip'
+# res_dir_name = '/mnt/efs/expodb/exp_calvin_thetavar'
+# res_dir_name = '/mnt/efs/expodb/exp_new_theatavar'
+# res_dir_name = '/mnt/efs/expodb/exp_calvin_bsize'
+# res_dir_name = '/mnt/efs/expodb/exp_calvin_bsize2'
+# res_dir_name = '/mnt/efs/expodb/exp_calvin_bsize3'
+# res_dir_name = '/mnt/efs/expodb/exp_results_wan'
+# res_dir_name = '/mnt/efs/expodb/exp_results_qc_tpcc'
+# res_dir_name = '/mnt/efs/expodb/exp_results_qstore_tpcc'
 # res_dir_name = '/mnt/efs/expodb/exp_results_su'
+# res_dir_name = '/mnt/efs/expodb/exp_results_ncvar'
 # res_dir_name = '/mnt/efs/expodb/exp_results-test'
+res_dir_name = '/mnt/efs/expodb/exp_results_bc'
+
 dir_name = res_dir_name
 if not os.path.exists(res_dir_name):
 	os.mkdir(res_dir_name)

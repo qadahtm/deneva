@@ -222,8 +222,11 @@ private:
     exec_queue_entry *entry = (exec_queue_entry *) mem_allocator.align_alloc(sizeof(exec_queue_entry));
     uint64_t et_id = 0;
     boost::random::mt19937 plan_rng;
+#if PIPELINED2
+    boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_et_thd_cnt-1);
+#else
     boost::random::uniform_int_distribution<> * eq_idx_rand = new boost::random::uniform_int_distribution<>(0, g_thread_cnt-1);
-
+#endif
     // measurements
 #if PROFILE_EXEC_TIMING
     uint64_t batch_start_time = 0;
@@ -271,11 +274,11 @@ private:
     assign_ptr_min_heap_t assignment;
 #elif MERGE_STRATEGY == RR
 #endif
-//#if NUMA_ENABLED
-//    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc_local(sizeof(uint64_t)*g_thread_cnt);
-//#else
+#if PIPELINED2
+    uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_et_thd_cnt);
+#else
     uint64_t * f_assign = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t)*g_thread_cnt);
-//#endif
+#endif
     boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list =
             new boost::lockfree::spsc_queue<assign_entry *>(FREE_LIST_INITIAL_SIZE);
 

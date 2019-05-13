@@ -185,7 +185,9 @@ extern UInt32 g_this_send_thread_cnt;
 extern UInt32 g_this_total_thread_cnt;
 extern UInt32 g_thread_cnt;
 #if CC_ALG == QUECC
+extern UInt32 g_et_thd_cnt;
 extern UInt32 g_cluster_worker_thread_cnt;
+extern UInt32 g_cluster_planner_thread_cnt;
 #endif
 extern UInt32 g_abort_thread_cnt;
 extern UInt32 g_logger_thread_cnt;

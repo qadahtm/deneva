@@ -84,7 +84,7 @@ void InputThread::setup() {
 
 RC InputThread::run() {
     tsetup();
-    printf("Running InputThread %ld\n", _thd_id);
+    printf("N_%u: Running InputThread %ld\n",g_node_id, _thd_id);
     fflush(stdout);
     if (ISCLIENT) {
         client_recv_loop();
@@ -287,21 +287,25 @@ RC InputThread::server_recv_loop() {
                 }
 
                 batch_part->remote = true;
-
+                batch_part->batch_id = eq_msg->batch_id;
                 uint64_t expected = 0;
                 uint64_t desired = (uint64_t) batch_part;
                 // neet to spin if batch slot is not ready
 //                DEBUG_Q("N_%u:RT_%lu: Going to Spin on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",g_node_id,_thd_id,
 //                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
-//                while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
+                assert(eq_msg->planner_id < (g_plan_thread_cnt*g_node_cnt));
+                assert(eq_msg->exec_id < (g_thread_cnt*g_node_cnt));
+                assert(batch_slot < g_batch_map_length);
+                while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){};
+//                while(!simulation->is_done() &&(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired,memory_order_acq_rel))){};
 //                DEBUG_Q("RT_%lu: DONE Spinning on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n", _thd_id,
 //                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
 
-                if(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired)){
-                    // this should not happen after spinning but can happen if simulation is done
-                    M_ASSERT_V(false, "Node_%u: For batch %lu : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
-                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
-                }
+//                if(!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired)){
+//                    // this should not happen after spinning but can happen if simulation is done
+//                    M_ASSERT_V(false, "Node_%u: For batch %lu : failing to SET map slot [%ld],  PG=[%ld], batch_map_val=%ld\n",
+//                               g_node_id, eq_msg->batch_id, batch_slot, eq_msg->planner_id, work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].load());
+//                }
 
 //                DEBUG_Q("N_%u:RT_%lu: Installed batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu]\n",g_node_id,_thd_id,
 //                        eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id);
@@ -316,13 +320,16 @@ RC InputThread::server_recv_loop() {
 
             if (msg->rtype == REMOTE_EQ_ACK) {
                 RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) msg;
-                DEBUG_Q("Received ACK for remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",
-                        req_ack->return_node_id, req_ack->planner_id, req_ack->exec_id, req_ack->batch_id);
+                DEBUG_Q("N_%u:RT_%lu: Received ACK for remote EQ from node=%lu, PT_%lu, CWET_%lu, ET_%lu batch_id=%lu\n",g_node_id,_thd_id,
+                        req_ack->return_node_id, req_ack->planner_id, req_ack->exec_id, QueCCPool::map_to_et_id(req_ack->exec_id), req_ack->batch_id);
                 uint64_t batch_slot = req_ack->batch_id % g_batch_map_length;
-                batch_partition * batch_part = (batch_partition *) work_queue.batch_map[batch_slot][req_ack->planner_id][req_ack->exec_id].load();
-                assert(batch_part);
+                batch_partition * batch_part = (batch_partition *) work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].load();
+//                batch_partition * batch_part = (batch_partition *) work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].load(memory_order_acq_rel);
+                M_ASSERT_V(batch_part,"N_%u:RT_%lu: Received ACK for remote EQ from node=%lu, PT_%lu, CWET_%lu, ET_%lu batch_id=%lu\n",g_node_id,_thd_id,
+                           req_ack->return_node_id, req_ack->planner_id, req_ack->exec_id, QueCCPool::map_to_et_id(req_ack->exec_id), req_ack->batch_id);
                 //assume single EQ per batch part
                 assert(batch_part->single_q);
+                assert(batch_part->batch_id == req_ack->batch_id);
 
                 // update txn contexts 'locally'
                 // For TPC-C, req_ack->update_contexts == false because operations are dependent and messages are sent
@@ -350,18 +357,24 @@ RC InputThread::server_recv_loop() {
                 quecc_pool.batch_part_release(batch_part, req_ack->planner_id, req_ack->exec_id);
 
 //                // reset or clean up
-//                uint64_t desired = 0;
-//                uint64_t expected = (uint64_t) batch_part;
-//#if BATCH_MAP_ORDER == BATCH_ET_PT
-//                while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
-//                    DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
-//                }
-//#else
-////        DEBUG_Q("ET_%ld: RESET batch map slot=%ld, PG=%ld, batch_id=%ld \n", _thd_id, batch_slot, wplanner_id, wbatch_id);
-//                if(!work_queue.batch_map[batch_slot][req_ack->planner_id][req_ack->exec_id].compare_exchange_strong(expected, desired)){
+                uint64_t desired = 0;
+                uint64_t expected = (uint64_t) batch_part;
+#if BATCH_MAP_ORDER == BATCH_ET_PT
+                while(!work_queue.batch_map[batch_slot][_thd_id][wplanner_id].compare_exchange_strong(expected, desired)){
+                    DEBUG_Q("ET_%ld: failing to RESET map slot \n", _thd_id);
+                }
+#else
+//                DEBUG_Q("N_%u:RT_%lu:: RESET batch map [%lu][%lu][%lu] CWET_id = %lu\n", g_node_id, _thd_id,
+//                        req_ack->batch_id, req_ack->planner_id,QueCCPool::map_to_et_id(req_ack->exec_id),req_ack->exec_id );
+                assert(req_ack->planner_id < (g_plan_thread_cnt*g_node_cnt));
+                assert(req_ack->exec_id< (g_thread_cnt*g_node_cnt));
+
+//                if(!work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].compare_exchange_strong(expected, desired)){
 //                    M_ASSERT_V(false, "ET_%ld: failing to RESET map slot for REMOTE EQ \n", req_ack->exec_id);
 //                }
-//#endif
+                while(!simulation->is_done() && !work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].compare_exchange_strong(expected, desired)){
+                }
+#endif
                 Message::release_message(msg);
                 msgs->erase(msgs->begin());
                 continue;
@@ -398,7 +411,7 @@ void OutputThread::setup() {
 RC OutputThread::run() {
 
     tsetup();
-    printf("Running OutputThread %ld\n", _thd_id);
+    printf("N_%u: Running OutputThread %ld\n", g_node_id, _thd_id);
     fflush(stdout);
     while (!simulation->is_done()) {
         heartbeat();

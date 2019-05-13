@@ -171,7 +171,9 @@ void TxnTable::restart_txn(uint64_t thd_id, uint64_t txn_id,uint64_t batch_id){
   while (t_node != NULL) {
     if(is_matching_txn_node(t_node,txn_id,batch_id)) {
 #if CC_ALG == CALVIN
-      work_queue.enqueue(thd_id,Message::create_message(t_node->txn_man,RTXN),false);
+    //TQ: Enqueueing this to the work_queue allows the transaction to execute without locks which is fine because
+      // a transaction is restarted only if all of its lock requests are fullfilled.
+    work_queue.enqueue(thd_id,Message::create_message(t_node->txn_man,RTXN),false);
 #else
       if(IS_LOCAL(txn_id))
         work_queue.enqueue(thd_id,Message::create_message(t_node->txn_man,RTXN_CONT),false);
