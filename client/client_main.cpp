@@ -235,6 +235,7 @@ int main(int argc, char* argv[])
     stats.print_client(false);
   fflush(stdout);
     stats.free(g_total_client_thread_cnt);
+    client_query_queue.free();
 	return 0;
 }
 

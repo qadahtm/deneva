@@ -1794,7 +1794,6 @@ void InitDoneMessage::copy_to_buf(char * buf) {
 
 void YCSBClientQueryMessage::init() {
 }
-
 void YCSBClientQueryMessage::release() {
   ClientQueryMessage::release();
   // Freeing requests is the responsibility of txn at commit time

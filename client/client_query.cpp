@@ -63,6 +63,35 @@ volatile atomic<uint64_t> Client_query_queue::next_tid;
 //
 //}
 
+void
+Client_query_queue::free(){
+    for (UInt32 i = 0; i < g_servers_per_client; i++){
+        for (UInt32 j=0; j < (g_max_txn_per_part + 4);j++){
+            if (queries[i][j]){
+#if WORKLOAD == YCSB
+                YCSBQuery * c_query = (YCSBQuery*)queries[i][j];
+                c_query->release_requests();
+                c_query->release();
+#elif WORKLOAD == TPCC
+                TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
+#if !SINGLE_NODE
+            if(cl_msg->txn_type == TPCC_NEW_ORDER) {
+                for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
+                    DEBUG_M("Sequencer::process_ack() items free\n");
+                    mem_allocator.free(cl_msg->items[i],sizeof(Item_no));
+                }
+            }
+#endif
+#elif WORKLOAD == PPS
+            PPSClientQueryMessage* cl_msg = (PPSClientQueryMessage*)msg;
+
+#endif
+                mem_allocator.free(queries[i][j],0);
+            }
+        }
+    }
+
+}
 
 void
 Client_query_queue::init(Workload * h_wl) {

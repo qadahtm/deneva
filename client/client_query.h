@@ -36,6 +36,7 @@ class Message;
 class Client_query_queue {
 public:
 	void init(Workload * h_wl);
+	void free();
 	bool done();
 #if INIT_QUERY_MSGS
 	Message * get_next_query(uint64_t server_id,uint64_t thread_id);

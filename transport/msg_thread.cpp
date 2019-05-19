@@ -108,6 +108,9 @@ void MessageThread::run() {
   if(CC_ALG != CALVIN) {
     Message::release_message(msg);
   }
+  else if (ISCLIENT){
+      Message::release_message(msg);
+  }
   if(sbuf->starttime == 0)
     sbuf->starttime = get_sys_clock();
 

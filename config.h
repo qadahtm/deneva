@@ -16,7 +16,6 @@
 //#define PART_CNT (NODE_CNT*THREAD_CNT)
 #define PART_CNT NODE_CNT
 
-
 // TQ: since we have 20 cores per node on halstead
 // With a single node used for client requests, 
 // it is better to assign 5 threads for each client per node.
