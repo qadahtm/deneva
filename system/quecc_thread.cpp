@@ -2310,7 +2310,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 #if ROW_ACCESS_IN_CTX && ROW_ACCESS_TRACKING
 // intialize for QueCC undo_buffer int contexts here
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
-        for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {
+        for (uint32_t j = 0; j < g_cluster_planner_thread_cnt; ++j) {
             for (uint64_t k = 0; k < planner_batch_size; ++k) {
                 work_queue.batch_pg_map[i][j].txn_ctxs[k].undo_buffer_inialized = true;
 #if WORKLOAD == YCSB
@@ -2326,7 +2326,7 @@ void QueCCPool::init(Workload * wl, uint64_t size){
 #if EXEC_BUILD_TXN_DEPS
 // intialize for QueCC txn dependency data structures
     for (int i = 0; i < BATCH_MAP_LENGTH; ++i) {
-        for (uint32_t j = 0; j < g_plan_thread_cnt; ++j) {
+        for (uint32_t j = 0; j < g_cluster_planner_thread_cnt; ++j) {
             for (uint64_t k = 0; k < planner_batch_size; ++k) {
                 work_queue.batch_pg_map[i][j].txn_ctxs[k].commit_deps = new std::vector<transaction_context *>();
                 work_queue.batch_pg_map[i][j].txn_ctxs[k].depslock = new spinlock();
@@ -2555,10 +2555,10 @@ void QueCCPool::free_all() {
 #if EXEC_BUILD_TXN_DEPS && TDG_ENTRY_TYPE == ARRAY_ENTRY
     for (UInt32 i = 0; i < g_thread_cnt; ++i) {
         tctx_ptr_free_list[i] = new boost::lockfree::queue<Array<transaction_context *> *>(FREE_LIST_INITIAL_SIZE);
-        Array<transaction_context *> tmp;
+        Array<transaction_context *> * tmp;
         while(tctx_ptr_free_list[i]->pop(tmp)){
             tmp->release();
-            mem_allocator.free(tmp_vfl,sizeof(sizeof(Array<transaction_context *>)));
+            mem_allocator.free(tmp,sizeof(sizeof(Array<transaction_context *>)));
         }
     }
 

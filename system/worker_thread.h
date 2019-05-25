@@ -104,7 +104,7 @@ public:
     bool add_txn_dep(transaction_context * context, uint64_t d_txn_id, priority_group * d_planner_pg);
 #endif
 
-    void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc);
+    void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * _entry, RC rc);
 
     SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man);
 

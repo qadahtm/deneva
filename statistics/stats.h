@@ -71,6 +71,8 @@ public:
   uint64_t txn_write_cnt;
   uint64_t record_write_cnt;
 
+  uint64_t txn_dd_abort_cnt;
+
     double * record_copy_time;
     uint64_t * record_copy_cnt;
     uint64_t * record_recov_cnt;

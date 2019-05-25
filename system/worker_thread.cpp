@@ -174,6 +174,9 @@ void WorkerThread::commit() {
 
     // Send result back to client
 #if !SERVER_GENERATE_QUERIES
+#if ABORT_MODE
+    assert(txn_man->dd_abort == false);
+#endif
     msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
 #endif
     // remove txn from pool
@@ -190,6 +193,21 @@ void WorkerThread::abort() {
 //    DEBUG_Q("WT_%ld: ABORT txn_id=%ld,txn_man_thd_id=%ld,thd_id=%ld -- %f\n",_thd_id, txn_man->get_txn_id(),txn_man->get_thd_id(),get_thd_id(), (double) get_sys_clock() - run_starttime / BILLION);
     // TODO: TPCC Rollback here
     // TQ: we should not do TPCC rollback here, it should be done earlier
+    bool aenqueue = true;
+#if ABORT_MODE
+    if (txn_man->dd_abort){
+//        DEBUG_Q("%s node aborting txnman.txn_id=%lu with dd_Abort\n",IS_LOCAL(txn_man->get_txn_id())? "Local": "Remote",txn_man->get_txn_id());
+        if (IS_LOCAL(txn_man->get_txn_id())){
+            msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
+        }
+        release_txn_man();
+        aenqueue = false;
+    }
+#endif
+
+    if (!aenqueue)
+        return;
+
 #if ABORT_THREAD || ABORT_QUEUES
     ++txn_man->abort_cnt;
     txn_man->reset();
@@ -1844,7 +1862,11 @@ void WorkerThread::do_batch_delivery_mpt(uint64_t batch_slot, priority_group * p
 #endif
     // multipartiton workload
         // Set batch slot first, then send out the remote EQs
-        while(!simulation->is_done() && !work_queue.batch_map[batch_slot][planner_cwid][i].compare_exchange_strong(expected, desired)){};
+        while(!work_queue.batch_map[batch_slot][planner_cwid][i].compare_exchange_strong(expected, desired)){
+            if (simulation->is_done()){
+                break;
+            }
+        };
         if (QueCCPool::get_exec_node(i) != g_node_id) {
             // remote
             // for remote EQs we keep track of their operations,
@@ -4056,8 +4078,8 @@ SRC WorkerThread::commit_batch(uint64_t batch_slot){
             pending_txns->pop_front();
         }
 
-        DEBUG_Q("N_%u:ET_%ld: committed %ld transactions, batch_id = %lu, PG=%lu, pg_idx=%lu\n",
-                g_node_id,_thd_id, commit_cnt, wbatch_id,QueCCPool::map_to_cwplanner_id(i), i);
+//        DEBUG_Q("N_%u:ET_%ld: committed %ld transactions, batch_id = %lu, PG=%lu, pg_idx=%lu\n",
+//                g_node_id,_thd_id, commit_cnt, wbatch_id,QueCCPool::map_to_cwplanner_id(i), i);
         INC_STATS(_thd_id, txn_cnt, commit_cnt);
         INC_STATS(_thd_id, total_txn_abort_cnt, abort_cnt);
 //                DEBUG_Q("ET_%ld: commit count = %ld, PG=%ld, txn_per_pg = %ld, batch_id = %ld\n",
@@ -4089,19 +4111,20 @@ batch_partition * WorkerThread::get_batch_part(uint64_t batch_slot, uint64_t wpl
 }
 
 void WorkerThread::cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id){
-    DEBUG_Q("N_%u:WT_%lu: cleaning up my batch_part wplanner_id=%lu for batch_id = %lu\n",
-            g_node_id,_worker_cluster_wide_id, wplanner_id,wbatch_id);
+//    DEBUG_Q("N_%u:WT_%lu: cleaning up my batch_part wplanner_id=%lu for batch_id = %lu\n",
+//            g_node_id,_worker_cluster_wide_id, wplanner_id,wbatch_id);
     cleanup_batch_part(batch_slot, wplanner_id, QueCCPool::map_to_et_id(_worker_cluster_wide_id));
 }
 
 void WorkerThread::cleanup_batch_part(uint64_t batch_slot, uint64_t wplanner_id, uint64_t et_id){
 
-//    DEBUG_Q("N_%u:WT_%lu:: cleaning up batch part for PG=%lu and ET=%lu\n",g_node_id,_worker_cluster_wide_id,wplanner_id, et_id);
-
     // reset batch_map_slot to zero after processing it
     // reset map slot to 0 to allow planners to use the slot
     batch_partition * batch_part = get_batch_part(batch_slot, wplanner_id, et_id);
     assert(batch_part);
+
+    DEBUG_Q("N_%u:WT_%lu:: cleaning up batch part for batch_map[%lu][%lu][%lu] part_batch_id=%lu\n",
+            g_node_id,_worker_cluster_wide_id,wbatch_id,wplanner_id, et_id,batch_part->batch_id);
     assert(batch_part->batch_id == wbatch_id);
 #if PROFILE_EXEC_TIMING
     uint64_t quecc_prof_time;
@@ -4167,8 +4190,8 @@ batch_partition * WorkerThread::get_curr_batch_part(uint64_t batch_slot){
 #else
     uint64_t  et_i = _worker_cluster_wide_id;
 #endif
-    DEBUG_Q("N_%u:WT_%lu: going to return %s batch part Batch_map[%lu][%lu][%lu] for execution\n",
-            g_node_id,_worker_cluster_wide_id, (g_node_id == QueCCPool::get_plan_node(wplanner_id))? "local" : "remote", wbatch_id, wplanner_id, et_i);
+//    DEBUG_Q("N_%u:WT_%lu: going to return %s batch part Batch_map[%lu][%lu][%lu] for execution\n",
+//            g_node_id,_worker_cluster_wide_id, (g_node_id == QueCCPool::get_plan_node(wplanner_id))? "local" : "remote", wbatch_id, wplanner_id, et_i);
 #if BATCH_MAP_ORDER == BATCH_ET_PT
     batch_part = (batch_partition *)  work_queue.batch_map[batch_slot][_thd_id][wplanner_id].load();
 #else
@@ -4212,8 +4235,16 @@ bool WorkerThread::add_txn_dep(transaction_context * context, uint64_t d_txn_id,
     }
 };
 #endif
-
-void WorkerThread::capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entry, RC rc)
+/**
+ * capturing dependnecies as follows:
+ * Each accessed row has a last TID field
+ * Use last TID to look up txn context from PGs
+ * Update commit dependencies count if needed
+ * @param batch_slot
+ * @param _entry
+ * @param rc
+ */
+void WorkerThread::capture_txn_deps(uint64_t batch_slot, exec_queue_entry * _entry, RC rc)
 {
 #if EXEC_BUILD_TXN_DEPS
     bool check_dep = true;
@@ -4226,14 +4257,14 @@ void WorkerThread::capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entr
         }
 #endif
     if (rc == RCOK && check_dep){
-        uint64_t last_tid = entry->row->last_tid;
+        uint64_t last_tid = _entry->row->last_tid;
         if (last_tid == 0){
             //  if this is a read, and record has not been update before, so no dependency
             return;
         }
-        if (last_tid == entry->txn_id){
+        if (last_tid == _entry->txn_id){
             // I just wrote to this row, // get previous txn_id from context
-            last_tid = entry->txn_ctx->prev_tid[entry->req_idx];
+            last_tid = _entry->txn_ctx->prev_tid[_entry->req_idx];
         }
         if (last_tid == 0){
             // if this is a write, we are the first to write to this record, so no dependency
@@ -4251,7 +4282,7 @@ void WorkerThread::capture_txn_deps(uint64_t batch_slot, exec_queue_entry * entr
         int64_t cplan_id = (int64_t)wplanner_id;
         for (int64_t j = cplan_id; j >= 0; --j) {
             batch_partition * part = get_batch_part(batch_slot,j,_thd_id);
-            if (add_txn_dep(entry->txn_ctx,last_tid,part->planner_pg)){
+            if (add_txn_dep(_entry->txn_ctx,last_tid,part->planner_pg)){
 //                    DEBUG_Q("ET_%ld: added dependency : entry_txnid=%ld, row_last_tid=%ld, PG=%ld, batch_id=%ld, on key=%ld\n",
 //                            _thd_id,entry->txn_id,last_tid, wplanner_id,wbatch_id,get_key_from_entry(entry));
                 break;
@@ -4365,7 +4396,7 @@ end_proc:
 #endif // #if ENABLE_EQ_SWITCH
     RC rc = RCOK;
 
-    DEBUG_Q("N_%u:ET_%ld: going to work on Batch map[%lu][%lu][%lu]\n",g_node_id, _worker_cluster_wide_id,wbatch_id,wplanner_id,QueCCPool::map_to_et_id(_worker_cluster_wide_id));
+//    DEBUG_Q("N_%u:ET_%ld: going to work on Batch map[%lu][%lu][%lu]\n",g_node_id, _worker_cluster_wide_id,wbatch_id,wplanner_id,QueCCPool::map_to_et_id(_worker_cluster_wide_id));
 
     memset(eq_comp_cnts,0, sizeof(uint64_t)*g_exec_qs_max_size);
 
@@ -4443,26 +4474,6 @@ end_proc:
 #endif
 
         while (rc == RCOK){
-
-//#if WORKLOAD == TPCC
-//            if (exec_qe_ptr->type == TPCC_NEWORDER_UPDATE_D){
-//                // need to resolve data dependency
-//                for (UInt32 i = 0; i < g_node_cnt; ++i) {
-//                    if (i != g_node_id && exec_qe_ptr->dep_nodes[i]>0){
-//                        int64_t oid = exec_qe_ptr->txn_ctx->o_id.load(memory_order_acq_rel);
-////                        DEBUG_Q("N_%u:ET_%lu: Sending OP_ACK, Execution of dependency operation is done: batch_id=%lu, planner_id=%lu, et_id=%lu,txn_idx=%lu, remote node=%u, entry_type=%d, oid=%ld, dep_cnt=%d\n",
-////                                g_node_id,_worker_cluster_wide_id, wbatch_id,wplanner_id,_worker_cluster_wide_id,exec_qe_ptr->txn_idx,i, exec_qe_ptr->type, oid, exec_qe_ptr->dep_nodes[i]);
-//                        RemoteOpAckMessage * ack = (RemoteOpAckMessage *) Message::create_message(REMOTE_OP_ACK);
-//                        ack->batch_id = wbatch_id;
-//                        ack->planner_id = wplanner_id;
-//                        ack->txn_idx = exec_qe_ptr->txn_idx;
-//                        ack->o_id = oid;
-//                        msg_queue.enqueue(_thd_id,ack,i);
-//                    }
-//                }
-//            }
-//#endif
-
 
             INC_STATS(_thd_id, exec_txn_frag_cnt[_thd_id], 1);
 #if PROFILE_EXEC_TIMING
@@ -4601,8 +4612,8 @@ end_proc:
 
     end_remote_eq:
     if (batch_part->remote){
-        DEBUG_Q("N_%u:ET_%lu: Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, remote node=%lu\n",
-                g_node_id, _worker_cluster_wide_id, wbatch_id,wplanner_id,QueCCPool::get_plan_node(wplanner_id));
+//        DEBUG_Q("N_%u:ET_%lu: Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, remote node=%lu\n",
+//                g_node_id, _worker_cluster_wide_id, wbatch_id,wplanner_id,QueCCPool::get_plan_node(wplanner_id));
         RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) Message::create_message(REMOTE_EQ_ACK);
         req_ack->batch_id = wbatch_id;
         req_ack->planner_id = wplanner_id;
@@ -4633,11 +4644,11 @@ RC WorkerThread::commit_txn(transaction_context * j_ctx) {
 
 #if EXEC_BUILD_TXN_DEPS
     // below code is not working!!
-    assert(false);
+//    assert(false);
 //    DEBUG_Q("CT_%ld:  batch_id=%lu, PG=%lu, trying to commit txn_id %lu, txn_comp_cnt=%ld, completion_cnt=%ld\n",
 //                _thd_id, wbatch_id, wplanner_id, j_ctx->txn_id, frag_txn_cnt, frag_comp_cnt);
 //    j_ctx->depslock->lock();
-    j_ctx->depslock.lock();
+    j_ctx->depslock->lock();
     if (frag_comp_cnt == frag_txn_cnt){
         // all frags has been processed
         // check if it has dependency on other txns
@@ -4676,9 +4687,9 @@ RC WorkerThread::commit_txn(transaction_context * j_ctx) {
 //        DEBUG_Q("ET_%ld: commmitting transaction txn_id = %ld, batch_id = %ld\n",
 //                _thd_id, j_ctx->txn_id, wbatch_id);
 //        j_ctx->txn_state.store(TXN_COMMITTED,memory_order_acq_rel);
-#if DEBUG_QUECC
-        j_ctx->commit_et_id = (int64_t)_thd_id;
-#endif
+//#if DEBUG_QUECC
+//        j_ctx->commit_et_id = (int64_t)_thd_id;
+//#endif
         rc =  Commit;
         goto commit_txn_end;
     }
@@ -4689,7 +4700,7 @@ RC WorkerThread::commit_txn(transaction_context * j_ctx) {
         goto commit_txn_end;
     }
     commit_txn_end:
-    j_ctx->depslock.unlock();
+    j_ctx->depslock->unlock();
 #else
     if (frag_comp_cnt < frag_txn_cnt){
         rc = WAIT;
@@ -5373,7 +5384,7 @@ RC WorkerThread::run_normal_mode() {
                 // ET is done with its PGs for the current batch
 //            DEBUG_Q("ET_%ld: done with my batch partitions, batch_id = %ld, going to wait for all ETs to finish\n", _thd_id, wbatch_id);
 
-            DEBUG_Q("N_%u:WT_%lu: going to sync for execution phase end, batch_id = %ld at batch_slot = %ld\n",g_node_id,_worker_cluster_wide_id, wbatch_id, batch_slot);
+//            DEBUG_Q("N_%u:WT_%lu: going to sync for execution phase end, batch_id = %ld at batch_slot = %ld\n",g_node_id,_worker_cluster_wide_id, wbatch_id, batch_slot);
                 // Sync
                 // spin on map_comp_cnts
 #if PROFILE_EXEC_TIMING
@@ -5391,7 +5402,7 @@ RC WorkerThread::run_normal_mode() {
                     goto end_et;
                 }
                 //Commit
-                DEBUG_Q("N_%u:ET_%ld: starting parallel commit, batch_id = %ld\n",g_node_id,_worker_cluster_wide_id, wbatch_id);
+//                DEBUG_Q("N_%u:ET_%ld: starting parallel commit, batch_id = %ld\n",g_node_id,_worker_cluster_wide_id, wbatch_id);
 
                 // process txn contexts in the current batch that are assigned to me (deterministically)
 #if !EARLY_CL_RESPONSE
@@ -5416,20 +5427,6 @@ RC WorkerThread::run_normal_mode() {
                 DEBUG_Q("N_%u:ET_%ld: is done with commit task, going to cleanup and sync for commit\n",g_node_id, _worker_cluster_wide_id);
 #endif
 
-                // Cleanup my parts of the batch
-#if PROFILE_EXEC_TIMING
-                if (batch_proc_starttime > 0){
-                    hl_prof_starttime = get_sys_clock();
-                }
-#endif
-#if !LADS_IN_QUECC
-                batch_cleanup(batch_slot);
-#endif
-#if PROFILE_EXEC_TIMING
-                if (batch_proc_starttime > 0){
-                    INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
-                }
-#endif
 
 #if PROFILE_EXEC_TIMING
                 if (batch_proc_starttime > 0){
@@ -5448,6 +5445,20 @@ RC WorkerThread::run_normal_mode() {
                     goto end_et;
                 }
 
+                // Cleanup my parts of the batch
+#if PROFILE_EXEC_TIMING
+                if (batch_proc_starttime > 0){
+                    hl_prof_starttime = get_sys_clock();
+                }
+#endif
+#if !LADS_IN_QUECC
+                batch_cleanup(batch_slot);
+#endif
+#if PROFILE_EXEC_TIMING
+                if (batch_proc_starttime > 0){
+                    INC_STATS(_thd_id, wt_hl_cleanup_time[_thd_id], get_sys_clock()-hl_prof_starttime);
+                }
+#endif
 
                 wbatch_id++;
 #if PIPELINED2
@@ -5634,15 +5645,18 @@ RC WorkerThread::process_rfin(Message *msg) {
 #if CC_ALG == MAAT
     txn_man->set_commit_timestamp(((FinishMessage*)msg)->commit_timestamp);
 #endif
-
-    if (((FinishMessage *) msg)->rc == Abort) {
+    RC mrc = ((FinishMessage *) msg)->rc;
+    if (mrc == Abort) {
+#if ABORT_MODE
+    txn_man->dd_abort = ((FinishMessage *) msg)->dd_abort;
+#endif
         txn_man->abort();
         txn_man->reset();
         txn_man->reset_query();
 //        msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), GET_NODE_ID(msg->get_txn_id()));
         assert(txn_man->get_txn_id() == msg->get_txn_id());
         msg_queue.enqueue(get_thd_id(), Message::create_message(txn_man, RACK_FIN), msg->get_return_id());
-        return Abort;
+        return mrc;
     }
     txn_man->commit();
     //if(!txn_man->query->readonly() || CC_ALG == OCC)

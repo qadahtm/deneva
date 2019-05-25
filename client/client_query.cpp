@@ -73,12 +73,12 @@ Client_query_queue::free(){
                 c_query->release_requests();
                 c_query->release();
 #elif WORKLOAD == TPCC
-                TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
+                TPCCQuery * cl_msg = (TPCCQuery*)queries[i][j];
 #if !SINGLE_NODE
             if(cl_msg->txn_type == TPCC_NEW_ORDER) {
-                for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
+                for(uint64_t k = 0; k < cl_msg->items.size(); k++) {
                     DEBUG_M("Sequencer::process_ack() items free\n");
-                    mem_allocator.free(cl_msg->items[i],sizeof(Item_no));
+                    mem_allocator.free(cl_msg->items[k],sizeof(Item_no));
                 }
             }
 #endif

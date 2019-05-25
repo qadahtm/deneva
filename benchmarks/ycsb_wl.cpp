@@ -352,14 +352,19 @@ void *YCSBWorkload::init_table_slice() {
         new_row->set_value(0, &primary_key,sizeof(uint64_t));
 
         Catalog * schema = the_table->get_schema();
+        UInt32 v =0;
         for (UInt32 fid = 0; fid < schema->get_field_cnt(); fid ++) {
-//			int field_size = schema->get_field_size(fid);
+			int field_size = schema->get_field_size(fid);
 //			char value[field_size];
-//			for (int i = 0; i < field_size; i++)
+			for (int i = 0; i < field_size; i++)
 //				value[i] = (char)rand() % (1<<8) ;
-            char value[6] = "hello";
-            new_row->set_value(fid, value,sizeof(value));
+//            char value[6] = "hello";
+			    v = rand() % 101;
+//            new_row->set_value(fid, &vp,sizeof(UInt32));
+            new_row->set_value(fid, v);
         }
+//        new_row->get_value(0,v);
+//        DEBUG_Q("row value = %d\n",v);
 #endif
 		itemid_t *m_item = (itemid_t *) mem_allocator.alloc(sizeof(itemid_t));
 		assert(m_item != NULL);

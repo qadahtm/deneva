@@ -114,13 +114,19 @@ RC ClientThread::run() {
       client_man.inflight_msgs.fetch_add(1);
       stats.totals->quecc_txn_sent_cnt.fetch_add(1);
 
+      //TQ: note that this is expected to not exactly match the total txn committed + aborted because this is only
+      // incremetned when warmup is done.
     INC_STATS(get_thd_id(),txn_sent_cnt,1);
 
 	}
 
+    int64_t total_sent =0;
+    for (uint64_t l = 0; l < g_servers_per_client; ++l){
+        total_sent += txns_sent[l];
+        printf("CWT_%lu: Txns sent to node %lu: %d\n", _thd_id, l+g_server_start_node, txns_sent[l]);
+	}
+    printf("CWT_%lu: Total Txns sent = %ld \n", _thd_id, total_sent);
 
-	for (uint64_t l = 0; l < g_servers_per_client; ++l)
-		printf("CWT_%lu: Txns sent to node %lu: %d\n", _thd_id, l+g_server_start_node, txns_sent[l]);
 
   //SET_STATS(get_thd_id(), total_runtime, get_sys_clock() - simulation->run_starttime); 
 

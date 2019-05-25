@@ -58,6 +58,7 @@ class Sequencer {
 	void send_next_batch(uint64_t thd_id);
 	void free();
 
+    volatile uint64_t total_txns_finished;
  private:
 	void reset_participating_nodes(bool * part_nodes);
 
@@ -69,7 +70,6 @@ class Sequencer {
 #elif WORKLOAD == PPS
 	PPSQuery* node_queries;
 #endif
-	volatile uint64_t total_txns_finished;
 	volatile uint64_t total_txns_received;
 	volatile uint32_t rsp_cnt;
   uint64_t last_time_batch;

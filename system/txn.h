@@ -162,6 +162,9 @@ public:
     uint64_t _thd_id;
     uint64_t _wt_id;
     Workload * h_wl;
+#if ABORT_MODE
+    bool dd_abort;
+#endif
 
     virtual RC      run_txn() = 0;
     virtual RC      run_txn_post_wait() = 0;

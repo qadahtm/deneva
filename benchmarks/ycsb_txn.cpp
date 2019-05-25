@@ -186,8 +186,10 @@ RC YCSBTxnManager::run_txn() {
     if(IS_LOCAL(get_txn_id())) {
     if(is_done() && rc == RCOK)
       rc = start_commit();
-    else if(rc == Abort)
-      rc = start_abort();
+    else if(rc == Abort){
+        rc = start_abort();
+    }
+
   }
 #else
 #if CC_ALG == SILO
@@ -333,18 +335,27 @@ inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
 
 }
 
-inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
+RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
     // TQ: implement read-modify-write
     uint8_t fval UNUSED =0;
-    char *data = row_local->get_data();
+//    char *data = row_local->get_data();
+    RC rc = RCOK;
     if (acctype == RD || acctype == SCAN) {
 
         //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is no used
         // TQ: perform the actual read by
 #if YCSB_DO_OPERATION
-        for (int j = 0; j < row_local->tuple_size; ++j) {
-            fval += data[j];
+//        for (int j = 0; j < row_local->tuple_size; ++j) {
+//            fval += data[j];
+//        }
+        UInt32 v;
+        row_local->get_value(0,v);
+#if ABORT_MODE
+        if (v < 50){
+            rc = Abort;
+            this->dd_abort = true;
         }
+#endif
 #else
         // However this only reads 8 bytes of the data
         int fid = 0;
@@ -359,11 +370,15 @@ inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
     } else {
         assert(acctype == WR);
 #if YCSB_DO_OPERATION
-        for (int j = 0; j < row_local->tuple_size; ++j) {
-            fval += data[j];
-        }
-        // write value to the first byte
-        data[0] = fval;
+        UInt32 v;
+        row_local->get_value(0,v);
+        v++;
+        row_local->set_value(0,v);
+//        for (int j = 0; j < row_local->tuple_size; ++j) {
+//            fval += data[j];
+//        }
+//        // write value to the first byte
+//        data[0] = fval;
 #else
         //TQ: here the we are zeroing the first 8 bytes
         // 100 below is the number of bytes for each field
@@ -371,6 +386,7 @@ inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
         *(uint64_t *) (&data[fid * 100]) = 0;
 #endif
 #if YCSB_ABORT_MODE
+        // this does not work???
         if(data[0] == 'a')
           return RCOK;
 #endif
@@ -380,7 +396,7 @@ inline RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
         release_last_row_lock();
 #endif
     }
-    return RCOK;
+    return rc;
 }
 
 RC YCSBTxnManager::run_calvin_txn() {
@@ -465,7 +481,11 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 //    uint64_t quecc_prof_time = 0;
     //TQ: dirty code: using a char buffer to store ycsb_request
 #if WORKLOAD == YCSB
-
+#if ABORT_MODE
+    if (exec_qe->txn_ctx->should_abort){
+        return Abort;
+    }
+#endif
 //    ycsb_request *req = (ycsb_request *) &exec_qe->req_buffer;
     ycsb_request *req = &exec_qe->req;
 
@@ -475,9 +495,9 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
     row = exec_qe->row;
 #else
     rc = run_ycsb_0(req, row);
-#if SINGLE_NODE
+//#if SINGLE_NODE
     exec_qe->row = row;
-#endif
+//#endif
     assert(rc == RCOK);
 #endif
 //    INC_STATS(get_thd_id(), exec_txn_index_lookup_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
@@ -486,11 +506,19 @@ RC YCSBTxnManager::run_quecc_txn(exec_queue_entry * exec_qe) {
 //    quecc_prof_time = get_sys_clock();
     // perfrom access
     rc = run_ycsb_1(req->acctype, row);
+#if !ABORT_MODE
     assert(rc == RCOK);
-
+#endif
     // we only update the transaction context locally
     if (update_context){
+        //TODO: MUST DO need to to handle abort in the following call
         check_commit_ready(exec_qe);
+#if ABORT_MODE
+        if (rc != RCOK){
+            assert(rc == Abort);
+            ATOM_CAS(exec_qe->txn_ctx->should_abort,false,true);
+        }
+#endif
     }
 #endif
 //    INC_STATS(get_thd_id(), exec_txn_proc_time[get_thd_id()], get_sys_clock()-quecc_prof_time);
@@ -528,6 +556,7 @@ RC YCSBTxnManager::run_ycsb() {
         assert(rc == RCOK);
 
         rc = run_ycsb_1(req->acctype, row);
+        // TODO: handle abort here
         assert(rc == RCOK);
     }
     return rc;

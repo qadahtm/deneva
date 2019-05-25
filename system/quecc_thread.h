@@ -133,10 +133,10 @@ enum tpcc_txn_frag_t{
 
 struct exec_queue_entry {
     transaction_context * txn_ctx; // 8
-#if SINGLE_NODE
+//#if SINGLE_NODE
     row_t * row; // 8 bytes
-#endif
-//    uint64_t txn_id; //8
+//#endif
+    uint64_t txn_id; //8
     uint64_t batch_id;
 #if WORKLOAD == YCSB
      // 8 bytes for access_type

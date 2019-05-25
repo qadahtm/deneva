@@ -1253,12 +1253,18 @@ void ClientQueryMessage::copy_to_buf(char * buf) {
 uint64_t ClientResponseMessage::get_size() {
   uint64_t size = Message::mget_size();
   size += sizeof(uint64_t);
+  size += sizeof(RC);
   return size;
 }
 
 void ClientResponseMessage::copy_from_txn(TxnManager * txn) {
   Message::mcopy_from_txn(txn);
   client_startts = txn->client_startts;
+#if ABORT_MODE
+  rc = txn->dd_abort? Abort:Commit;
+#else
+  rc = Commit;
+#endif
 }
 
 void ClientResponseMessage::copy_to_txn(TxnManager * txn) {
@@ -1270,6 +1276,7 @@ void ClientResponseMessage::copy_from_buf(char * buf) {
   Message::mcopy_from_buf(buf);
   uint64_t ptr = Message::mget_size();
   COPY_VAL(client_startts,buf,ptr);
+  COPY_VAL(rc,buf,ptr);
  assert(ptr == get_size());
 }
 
@@ -1277,6 +1284,7 @@ void ClientResponseMessage::copy_to_buf(char * buf) {
   Message::mcopy_to_buf(buf);
   uint64_t ptr = Message::mget_size();
   COPY_BUF(buf,client_startts,ptr);
+  COPY_BUF(buf,rc,ptr);
  assert(ptr == get_size());
 }
 
@@ -1651,7 +1659,10 @@ uint64_t FinishMessage::get_size() {
   uint64_t size = Message::mget_size();
   size += sizeof(uint64_t); 
   size += sizeof(RC); 
-  size += sizeof(bool); 
+  size += sizeof(bool);
+#if ABORT_MODE
+  size += sizeof(bool);
+#endif
 #if CC_ALG == MAAT
   size += sizeof(uint64_t); 
 #endif
@@ -1662,6 +1673,9 @@ void FinishMessage::copy_from_txn(TxnManager * txn) {
   Message::mcopy_from_txn(txn);
   rc = txn->get_rc();
   readonly = txn->query->readonly();
+#if ABORT_MODE
+  dd_abort = txn->dd_abort;
+#endif
 #if CC_ALG == MAAT
   commit_timestamp = txn->get_commit_timestamp();
 #endif
@@ -1680,6 +1694,9 @@ void FinishMessage::copy_from_buf(char * buf) {
   COPY_VAL(pid,buf,ptr);
   COPY_VAL(rc,buf,ptr);
   COPY_VAL(readonly,buf,ptr);
+#if ABORT_MODE
+  COPY_VAL(dd_abort,buf,ptr);
+#endif
 #if CC_ALG == MAAT
   COPY_VAL(commit_timestamp,buf,ptr);
 #endif
@@ -1692,6 +1709,9 @@ void FinishMessage::copy_to_buf(char * buf) {
   COPY_BUF(buf,pid,ptr);
   COPY_BUF(buf,rc,ptr);
   COPY_BUF(buf,readonly,ptr);
+#if ABORT_MODE
+  COPY_BUF(buf,dd_abort,ptr);
+#endif
 #if CC_ALG == MAAT
   COPY_BUF(buf,commit_timestamp,ptr);
 #endif

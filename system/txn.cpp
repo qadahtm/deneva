@@ -415,6 +415,9 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
     update_context = false;
 #endif
 
+#if ABORT_MODE
+    dd_abort = false;
+#endif
     txn_ready = true;
     twopl_wait_start = 0;
 
@@ -448,6 +451,10 @@ void TxnManager::reset() {
     phase = CALVIN_RW_ANALYSIS;
     locking_done = false;
     calvin_locked_rows.clear();
+#endif
+
+#if ABORT_MODE
+    dd_abort = false;
 #endif
 
     assert(txn);
@@ -528,6 +535,11 @@ RC TxnManager::abort() {
 #if !SINGLE_NODE
     if (IS_LOCAL(get_txn_id())) {
         INC_STATS(get_thd_id(), local_txn_abort_cnt, 1);
+#if ABORT_MODE
+        if (dd_abort){
+            INC_STATS(get_thd_id(), txn_dd_abort_cnt, 1);
+        }
+#endif
     } else {
         INC_STATS(get_thd_id(), remote_txn_abort_cnt, 1);
         txn_stats.abort_stats(get_thd_id());
@@ -535,7 +547,6 @@ RC TxnManager::abort() {
 #else
     INC_STATS(get_thd_id(), local_txn_abort_cnt, 1);
 #endif
-
     aborted = true;
     release_locks(Abort);
 #if CC_ALG == MAAT
@@ -682,7 +693,7 @@ void TxnManager::commit_stats() {
 
     INC_STATS(ctid, txn_cnt, 1);
     INC_STATS(ctid, local_txn_commit_cnt, 1);
-#if COUNT_BASED_SIM_ENABLED
+#if COUNT_BASED_SIM_ENABLED && CC_ALG != CALVIN
     simulation->inc_txn_cnt(1);
 #endif
 #if PROFILE_EXEC_TIMING

@@ -104,6 +104,7 @@ public:
   //uint64_t txn_id;
   //uint64_t batch_id;
   bool readonly;
+  bool dd_abort;
 #if CC_ALG == MAAT
   uint64_t commit_timestamp;
 #endif

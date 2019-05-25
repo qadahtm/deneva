@@ -82,11 +82,11 @@ uint64_t RIDMgr::next_rid(uint64_t thd_id){
 // TODO(tq): generalize this.
 uint64_t RIDMgr::next_rid_fixed(uint64_t part_id){
     // a quick fixs if the passed part_id > than g_part_id
-#if PART_CNT == 1
-    uint64_t tpart_id = part_id; // for non-partitioned stores
-#else
+//#if PART_CNT == 1
+//    uint64_t tpart_id = part_id ; // for non-partitioned stores
+//#else
+//#endif
     uint64_t tpart_id = part_id % g_part_cnt; // for partitioned stores
-#endif
     uint64_t arid = 0;
     uint64_t brid = 0;
     do{

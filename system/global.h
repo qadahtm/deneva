@@ -274,6 +274,7 @@ extern UInt32 g_seq_thread_cnt;
 // QUECC
 #if CC_ALG == QUECC || CC_ALG == LADS
 extern const UInt32 g_plan_thread_cnt;
+extern const UInt32 g_cluster_plan_thread_cnt;
 extern UInt32 g_batch_size;
 extern UInt32 g_exec_qs_max_size;
 // for circular array buffer for batch completeiton time

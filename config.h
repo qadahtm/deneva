@@ -22,7 +22,7 @@
 // Assigning more threads for each client processes
 // seems to lower the number of transactions submitted
 // to the server
-#define CLIENT_NODE_CNT 2
+#define CLIENT_NODE_CNT 1
 #define CLIENT_THREAD_CNT 4
 #define CLIENT_REM_THREAD_CNT 2
 #define CLIENT_SEND_THREAD_CNT 2
@@ -54,7 +54,7 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          true
+#define PROG_STATS          false
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
@@ -68,8 +68,8 @@
 // However, it have only been tested with a single server node.
 // Also, there is no need to run client processes when this flag is enabled
 #define SERVER_GENERATE_QUERIES false
-#define EARLY_CL_RESPONSE true
-#define SYNC_ON_COMMIT false
+#define EARLY_CL_RESPONSE false
+#define SYNC_ON_COMMIT true
 #define SPT_WORKLOAD false
 
 /***********************************************/
@@ -125,12 +125,13 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-//#define CC_ALG NO_WAIT
+#define CC_ALG NO_WAIT
 //#define CC_ALG QUECC
 //#define CC_ALG MAAT
-#define CC_ALG CALVIN
+//#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
+#define ABORT_MODE true
 
 // all transactions acquire tuples according to the primary key order.
 #define KEY_ORDER         false
@@ -187,15 +188,15 @@
 // [QUECC]
 // PART_CNT for QUECC is based on the total number of working threads to match other approaches e.g. HSTORE
 // Planner thread cnt should be greater than or equal to part_cnt
-//#define PLAN_THREAD_CNT THREAD_CNT
-#define PLAN_THREAD_CNT 2
+#define PLAN_THREAD_CNT THREAD_CNT
+//#define PLAN_THREAD_CNT 2
 // This relates to MAX_TXN_IN_FLIGHT if we are doing a Cient-server deployment,
 // For server-only deployment, this can be set to any number
 // batch size must be divisible by thread_cnt and partition cnt for YCSB
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-#define BATCH_SIZE 60 // testing
+#define BATCH_SIZE 64 // testing
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10368*(4*NODE_CNT)
 //#define BATCH_SIZE 10080
@@ -206,7 +207,7 @@
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 1//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 16//100//300//1024 // width of map is PLAN_THREAD_CNT
 //#define BATCH_MAP_LENGTH 4 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1
@@ -256,7 +257,7 @@
 #define YCSB_INDEX_LOOKUP_PLAN false
 
 #define CT_ENABLED false
-#define EXEC_BUILD_TXN_DEPS false
+#define EXEC_BUILD_TXN_DEPS true
 #define TDG_ENTRY_LENGTH 1000
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
@@ -267,7 +268,7 @@
 #define MIN_EXECQ_SIZE 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
-#define ROW_ACCESS_TRACKING false
+#define ROW_ACCESS_TRACKING true
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
@@ -495,7 +496,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -600,8 +601,8 @@ enum PPSTxnType {PPS_ALL = 0,
 //#define SEQ_BATCH_TIMER 200 * 1 * MILLION // ~5ms -- same as CALVIN paper
 //#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 //#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 30 * BILLION // debugging
-#define WARMUP_TIMER 1 * 30 * BILLION // debugging
+#define DONE_TIMER 1 * 10 * BILLION // debugging
+#define WARMUP_TIMER 1 * 10 * BILLION // debugging
 
 #define SEED 0
 #define SHMEM_ENV false

@@ -197,6 +197,10 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
         ClientResponseMessage * rsp_msg = (ClientResponseMessage*)Message::create_message(msg->get_txn_id(),CL_RSP);
         rsp_msg->client_startts = wait_list[id].client_startts;
         msg_queue.enqueue(thd_id,rsp_msg,wait_list[id].client_id);
+#if COUNT_BASED_SIM_ENABLED && CC_ALG == CALVIN
+        simulation->inc_txn_cnt(1);
+#endif
+
 #endif
 
 #if WORKLOAD == PPS

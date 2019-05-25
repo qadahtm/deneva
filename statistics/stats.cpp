@@ -139,6 +139,7 @@ void Stats_thd::clear() {
   unique_txn_abort_cnt=0;
   local_txn_abort_cnt=0;
   remote_txn_abort_cnt=0;
+    txn_dd_abort_cnt=0;
   txn_run_time=0;
   multi_part_txn_cnt=0;
   multi_part_txn_run_time=0;
@@ -463,6 +464,9 @@ void Stats_thd::print_client(FILE * outf, bool prog) {
       ",tput=%f"
       ",txn_cnt=%ld"
       ",txn_sent_cnt=%ld"
+#if ABORT_MODE
+      ",txn_abort_cnt=%ld"
+#endif
       ",txn_run_time=%f"
       ",txn_run_avg_time=%f"
       ",cl_send_intv=%f"
@@ -476,6 +480,9 @@ void Stats_thd::print_client(FILE * outf, bool prog) {
       ,tput
       ,txn_cnt
       ,txn_sent_cnt
+#if ABORT_MODE
+      ,total_txn_abort_cnt
+#endif
       ,txn_run_time / BILLION
       ,txn_run_avg_time / BILLION
       ,cl_send_intv / BILLION
@@ -624,6 +631,9 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ",unique_txn_abort_cnt=%ld"
   ",local_txn_abort_cnt=%ld"
   ",remote_txn_abort_cnt=%ld"
+#if ABORT_MODE
+  ",txn_dd_abort_cnt=%ld"
+#endif
   ",txn_run_time=%f"
   ",txn_run_avg_time=%f"
   ",multi_part_txn_cnt=%ld"
@@ -651,6 +661,9 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ,unique_txn_abort_cnt
   ,local_txn_abort_cnt
   ,remote_txn_abort_cnt
+#if ABORT_MODE
+  ,txn_dd_abort_cnt
+#endif
   ,txn_run_time / BILLION
   ,txn_run_avg_time / BILLION
   ,multi_part_txn_cnt
@@ -948,7 +961,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
     ,txn_conflict_cnt
   );
 #endif // if CC_ALG != QUECC
-#if !SINGLE_NODE
+#if !SINGLE_NODE && (CC_ALG != CALVIN && CC_ALG != QUECC)
   // 2PL
   double twopl_sh_owned_avg_time = 0;
   if(twopl_sh_owned_cnt > 0)
@@ -1645,6 +1658,7 @@ void Stats_thd::combine(Stats_thd * stats) {
   unique_txn_abort_cnt+=stats->unique_txn_abort_cnt;
   local_txn_abort_cnt+=stats->local_txn_abort_cnt;
   remote_txn_abort_cnt+=stats->remote_txn_abort_cnt;
+    txn_dd_abort_cnt+=stats->txn_dd_abort_cnt;
   txn_run_time+=stats->txn_run_time;
   multi_part_txn_cnt+=stats->multi_part_txn_cnt;
   multi_part_txn_run_time+=stats->multi_part_txn_run_time;
