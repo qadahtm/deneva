@@ -284,6 +284,32 @@ uint64_t TxnTable::get_min_ts(uint64_t thd_id) {
 
 }
 
+void TxnTable::free() {
+    //TQ
+    uint64_t txn_id;
+    txn_node_t t_node;
+    for(uint32_t i = 0; i < pool_size;i++) {
+        t_node = pool[i]->head;
+
+        while (t_node != NULL) {
+            LIST_REMOVE_HT(t_node,pool[i]->head,pool[i]->tail);
+            --pool[i]->cnt;
+
+            txn_id = t_node->txn_man->get_txn_id();
+            t_node->txn_man->release();
+            // Releasing the txn manager.
+            txn_man_pool.put(txn_id,t_node->txn_man);
+
+            // Releasing the node associated with the txn_mann
+            txn_table_pool.put(txn_id,t_node);
+
+            t_node = t_node->next;
+        }
+        mem_allocator.free(pool[i],0);
+    }
+    mem_allocator.free(pool,0);
+}
+
 void TxnTable::cleanup() {
   // not thread-safe
   // must be called by main

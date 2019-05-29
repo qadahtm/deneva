@@ -51,6 +51,9 @@ void WorkerThread::setup() {
 RC WorkerThread::process(Message *msg) {
     RC rc __attribute__ ((unused)) = ERROR;
 
+#if CC_ALG == CALVIN
+    bool remote_seq = txn_man->return_id != g_node_id;
+#endif
     DEBUG("%ld Processing %ld %d\n", get_thd_id(), msg->get_txn_id(), msg->get_rtype());
 //    DEBUG_Q("%ld Processing txn_id=%ld rtype=%d \n",get_thd_id(),msg->get_txn_id(),msg->get_rtype());
 
@@ -121,6 +124,12 @@ RC WorkerThread::process(Message *msg) {
     INC_STATS(_thd_id, worker_process_cnt, 1);
     INC_STATS(_thd_id, worker_process_cnt_by_type[msg->rtype], 1);
     DEBUG("%ld EndProcessing %d %ld\n", get_thd_id(), msg->get_rtype(), msg->get_txn_id());
+#if CC_ALG == CALVIN
+    if (remote_seq && msg->rtype == CL_QRY) {
+        Message::release_message(msg);
+    }
+#endif
+
     return rc;
 }
 
@@ -142,9 +151,21 @@ void WorkerThread::release_txn_man() {
 }
 #if CC_ALG == CALVIN
 void WorkerThread::calvin_wrapup() {
-    DEBUG_Q("(%ld,%ld) calvin ack to %ld\n", txn_man->get_txn_id(), txn_man->get_batch_id(), txn_man->return_id);
+#if ABORT_MODE
+    if (txn_man->get_rc() == Abort){
+        txn_man->abort();
+    }
+    else{
+        txn_man->release_locks(RCOK);
+        txn_man->set_rc(Commit);
+        txn_man->commit_stats();
+    }
+#else
     txn_man->release_locks(RCOK);
     txn_man->commit_stats();
+#endif
+    DEBUG_Q("N_%d:WT_%lu: (%ld,%ld) wrap up - calvin ack to %ld with %s, rc = %d, txn_return_id=%lu\n", g_node_id, get_thd_id(), txn_man->get_txn_id(), txn_man->get_batch_id(), txn_man->return_id,
+            (txn_man->get_rc() == Abort)? "Abort" : "Commit", txn_man->get_rc(), txn_man->return_id);
 #if !SINGLE_NODE
     if (txn_man->return_id == g_node_id) {
         work_queue.sequencer_enqueue(_thd_id, Message::create_message(txn_man, CALVIN_ACK));
@@ -174,10 +195,12 @@ void WorkerThread::commit() {
 
     // Send result back to client
 #if !SERVER_GENERATE_QUERIES
+    auto resp_msg = (ClientResponseMessage *) Message::create_message(txn_man, CL_RSP);
 #if ABORT_MODE
     assert(txn_man->dd_abort == false);
 #endif
-    msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
+    resp_msg->rc = Commit;
+    msg_queue.enqueue(_thd_id, resp_msg, txn_man->client_id);
 #endif
     // remove txn from pool
     // -- actually return to txn_mgr pool
@@ -196,9 +219,11 @@ void WorkerThread::abort() {
     bool aenqueue = true;
 #if ABORT_MODE
     if (txn_man->dd_abort){
-//        DEBUG_Q("%s node aborting txnman.txn_id=%lu with dd_Abort\n",IS_LOCAL(txn_man->get_txn_id())? "Local": "Remote",txn_man->get_txn_id());
+        DEBUG_Q("%s node aborting txnman.txn_id=%lu with dd_Abort\n",IS_LOCAL(txn_man->get_txn_id())? "Local": "Remote",txn_man->get_txn_id());
         if (IS_LOCAL(txn_man->get_txn_id())){
-            msg_queue.enqueue(_thd_id, Message::create_message(txn_man, CL_RSP), txn_man->client_id);
+            auto resp_msg = (ClientResponseMessage *) Message::create_message(txn_man, CL_RSP);
+            resp_msg->rc = Abort;
+            msg_queue.enqueue(_thd_id, resp_msg, txn_man->client_id);
         }
         release_txn_man();
         aenqueue = false;
@@ -227,7 +252,7 @@ void WorkerThread::abort() {
 TxnManager *WorkerThread::get_transaction_manager(Message *msg) {
 #if CC_ALG == CALVIN
     TxnManager * local_txn_man = txn_table.get_transaction_manager(get_thd_id(),msg->get_txn_id(),msg->get_batch_id());
-    DEBUG_Q("WT_%lu: (%lu,%lu) get txn_man(%lu)\n",_thd_id,msg->get_txn_id(),msg->get_batch_id(),(uint64_t)local_txn_man);
+    DEBUG("WT_%lu: (%lu,%lu) get txn_man(%lu)\n",_thd_id,msg->get_txn_id(),msg->get_batch_id(),(uint64_t)local_txn_man);
 #else
     TxnManager *local_txn_man = txn_table.get_transaction_manager(get_thd_id(), msg->get_txn_id(), 0);
 #endif
@@ -5962,17 +5987,59 @@ RC WorkerThread::process_log_flushed(Message *msg) {
 }
 
 RC WorkerThread::process_rfwd(Message *msg) {
-    DEBUG_Q("WT_%lu:RFWD (%ld,%ld)\n",_thd_id, msg->get_txn_id(), msg->get_batch_id());
+    DEBUG("WT_%lu:RFWD (%ld,%ld)\n",_thd_id, msg->get_txn_id(), msg->get_batch_id());
 #if CC_ALG == CALVIN
     txn_man->txn_stats.remote_wait_time += get_sys_clock() - txn_man->txn_stats.wait_starttime;
     assert(CC_ALG == CALVIN);
+#if ABORT_MODE
+    auto rfwd_msg = (ForwardMessage *) msg;
+    if (rfwd_msg->rc == Abort){
+        txn_man->dd_abort = true;
+        txn_man->set_rc(Abort);
+    }
+#endif
     int responses_left = txn_man->received_response(((ForwardMessage *) msg)->rc);
     assert(responses_left >= 0);
     if (txn_man->calvin_collect_phase_done()) {
         assert(ISSERVERN(txn_man->return_id));
+#if ABORT_MODE
+        if (((ForwardMessage *) msg)->rc == Abort){
+            txn_man->set_rc(Abort);
+            txn_man->dd_abort = true;
+        }
+#endif
         RC rc = txn_man->run_calvin_txn();
         if (rc == RCOK && txn_man->calvin_exec_phase_done()) {
+            bool clean = txn_man->return_id != g_node_id;
             calvin_wrapup();
+            if (clean){
+                // participant node is not the same as sequencer node
+                // release message here, otherwise sequencer will release
+                // free msg, queries
+#if WORKLOAD == YCSB
+                YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
+#if !SINGLE_NODE
+                for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+                    DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
+                    mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+                }
+#endif
+#elif WORKLOAD == TPCC
+                TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
+#if !SINGLE_NODE
+            if(cl_msg->txn_type == TPCC_NEW_ORDER) {
+                for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
+                    DEBUG_M("Sequencer::process_ack() items free\n");
+                    mem_allocator.free(cl_msg->items[i],sizeof(Item_no));
+                }
+            }
+#endif
+#elif WORKLOAD == PPS
+            PPSClientQueryMessage* cl_msg = (PPSClientQueryMessage*)msg;
+
+#endif
+            }
+
             return RCOK;
         }
     }
@@ -5993,21 +6060,21 @@ RC WorkerThread::process_calvin_rtxn(Message *msg) {
     RC rc = txn_man->run_calvin_txn();
     //if((txn_man->phase==6 && rc == RCOK) || txn_man->active_cnt == 0 || txn_man->participant_cnt == 1) {
     if (rc == RCOK && txn_man->calvin_exec_phase_done()) {
+        bool clean = txn_man->return_id != g_node_id;
         calvin_wrapup();
-        if (msg->return_node_id != g_node_id){
 
-        // participant node is not the same as sequencer node
-        // release message here, otherwise sequencer will release
-        // free msg, queries
+        if (clean){
+
+            // participant node is not the same as sequencer node
+            // release message here, otherwise sequencer will release
+            // free msg, queries
 #if WORKLOAD == YCSB
         YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
 #if !SINGLE_NODE
-        for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
-            DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
-            mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
-        }
-        cl_msg->release(); //TQ: not releasing this may cause memory leak in CALVIN
-//        Message::release_message(cl_msg);
+            for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+                DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
+                mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+            }
 #endif
 #elif WORKLOAD == TPCC
         TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
@@ -6024,8 +6091,9 @@ RC WorkerThread::process_calvin_rtxn(Message *msg) {
 
 #endif
         }
+
     }
-    return RCOK;
+    return rc;
 
 }
 #endif

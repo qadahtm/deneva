@@ -82,6 +82,8 @@ public:
   Message * sched_dequeue(uint64_t thd_id);
   void sequencer_enqueue(uint64_t thd_id, Message * msg);
   Message * sequencer_dequeue(uint64_t thd_id);
+  void free();
+  void free_clmsg(Message * msg);
 
 #if CC_ALG == QUECC || CC_ALG == LADS
     // TQ: QUECC

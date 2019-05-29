@@ -154,6 +154,58 @@ void QWorkQueue::init() {
 
 #endif // #if CC_ALG == QUECC
 }
+void QWorkQueue::free_clmsg(Message * msg) {
+    if (msg->rtype == CL_QRY || msg->rtype == RTXN){
+#if WORKLOAD == YCSB
+        auto cl_msg = (YCSBClientQueryMessage *)msg;
+#if WORKLOAD == YCSB
+#if !SINGLE_NODE && !SERVER_GENERATE_QUERIES
+        // if SERVER_GENERATE_QUERIES: we should not clear query request pointers because they will be reused by transactions
+        for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+            DEBUG_M("Sequencer::process_ack() ycsb_request free\n");
+            mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+        }
+#endif
+#elif WORKLOAD == TPCC
+        TPCCClientQueryMessage* cl_msg = (TPCCClientQueryMessage*)msg;
+#if !SINGLE_NODE && !SERVER_GENERATE_QUERIES
+      if(cl_msg->txn_type == TPCC_NEW_ORDER) {
+          for(uint64_t i = 0; i < cl_msg->items.size(); i++) {
+              DEBUG_M("Sequencer::process_ack() items free\n");
+              mem_allocator.free(cl_msg->items[i],sizeof(Item_no));
+          }
+      }
+#endif
+#elif WORKLOAD == PPS
+      PPSClientQueryMessage* cl_msg = (PPSClientQueryMessage*)wait_list[id].msg;
+
+#endif
+#endif
+    }
+    Message::release_message(msg);
+}
+void QWorkQueue::free() {
+    Message * msg;
+    printf("Freeing Work-Queue\n");
+    for (UInt32 j = 0; j < g_thread_cnt; ++j){
+        msg = dequeue(j);
+        int msg_cnt = 0;
+        while(msg){
+//            free_clmsg(msg);
+            msg = dequeue(j);
+            msg_cnt++;
+        }
+
+        msg = sched_dequeue(j);
+        while(msg){
+//            free_clmsg(msg);
+            msg = sched_dequeue(j);
+            msg_cnt++;
+        }
+
+        printf("Deq for thread %d, %d messages\n",j,msg_cnt);
+    }
+}
 
 
 #if CC_ALG == QUECC || CC_ALG == LADS

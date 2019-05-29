@@ -176,6 +176,7 @@ public:
 
   // Calvin
   uint64_t seq_txn_cnt;
+  uint64_t seq_txn_abort_cnt;
   uint64_t seq_batch_cnt;
   uint64_t seq_full_batch_cnt;
   double seq_ack_time;

@@ -471,7 +471,7 @@ TxnManager::release() {
 #if PROFILE_EXEC_TIMING
     uint64_t prof_starttime = get_sys_clock();
 #endif
-    qry_pool.put(get_thd_id(), query);
+    if (query) qry_pool.put(get_thd_id(), query);
 #if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[0], get_sys_clock() - prof_starttime);
 #endif
@@ -479,7 +479,7 @@ TxnManager::release() {
 #if PROFILE_EXEC_TIMING
     prof_starttime = get_sys_clock();
 #endif
-    txn_pool.put(get_thd_id(), txn);
+    if (txn) txn_pool.put(get_thd_id(), txn);
 #if PROFILE_EXEC_TIMING
     INC_STATS(get_thd_id(), mtx[1], get_sys_clock() - prof_starttime);
 #endif
@@ -1286,7 +1286,7 @@ RC
 TxnManager::send_remote_reads() {
     assert(CC_ALG == CALVIN);
     // we will send remote reads only in abort mode for YCSB
-#if !YCSB_ABORT_MODE && WORKLOAD == YCSB
+#if !ABORT_MODE && WORKLOAD == YCSB
     return RCOK;
 #endif
     assert(query->active_nodes.size() == g_node_cnt);
@@ -1313,7 +1313,7 @@ bool TxnManager::calvin_exec_phase_done() {
 bool TxnManager::calvin_collect_phase_done() {
     bool ready = (phase == CALVIN_COLLECT_RD) && (get_rsp_cnt() == calvin_expected_rsp_cnt);
     if (ready) {
-        DEBUG("(%ld,%ld) calvin collect phase done!\n", txn->txn_id, txn->batch_id);
+        DEBUG_Q("(%ld,%ld) calvin collect phase done!\n", txn->txn_id, txn->batch_id);
     }
     return ready;
 }

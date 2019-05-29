@@ -411,28 +411,31 @@ RC YCSBTxnManager::run_calvin_txn() {
 
                 // Phase 1: Read/write set analysis
                 calvin_expected_rsp_cnt = ycsb_query->get_participants(_wl);
-#if YCSB_ABORT_MODE
+#if ABORT_MODE
             if(query->participant_nodes[g_node_id] == 1) {
               calvin_expected_rsp_cnt--;
             }
 #else
                 calvin_expected_rsp_cnt = 0;
 #endif
-                DEBUG("(%ld,%ld) expects %d responses;\n", txn->txn_id, txn->batch_id, calvin_expected_rsp_cnt);
+                DEBUG_Q("(%ld,%ld) expects %d responses;\n", txn->txn_id, txn->batch_id, calvin_expected_rsp_cnt);
 
                 this->phase = CALVIN_LOC_RD;
                 break;
             case CALVIN_LOC_RD:
                 // Phase 2: Perform local reads
-                DEBUG("(%ld,%ld) local reads\n", txn->txn_id, txn->batch_id);
                 rc = run_ycsb();
                 //release_read_locks(query);
-
+                DEBUG_Q("(%ld,%ld) local reads rc=%s\n", txn->txn_id, txn->batch_id, (get_rc() == Abort)? "Abort":"Commit");
                 this->phase = CALVIN_SERVE_RD;
                 break;
             case CALVIN_SERVE_RD:
                 // Phase 3: Serve remote reads
                 // If there is any abort logic, relevant reads need to be sent to all active nodes...
+
+//                if (get_rc() == Abort){
+                    DEBUG_Q("(%ld,%ld) serve reads rc=%s\n", txn->txn_id, txn->batch_id, (get_rc() == Abort)? "Abort":"Commit");
+//                }
 
                 // TQ: checks a if this node is a participant (a participant node performs read operations)
                 if (query->participant_nodes[g_node_id] == 1) {
@@ -444,7 +447,7 @@ RC YCSBTxnManager::run_calvin_txn() {
                     if (calvin_collect_phase_done()) {
                         rc = RCOK;
                     } else {
-                        DEBUG("(%ld,%ld) wait in collect phase; %d / %d rfwds received\n", txn->txn_id, txn->batch_id,
+                        DEBUG_Q("(%ld,%ld) wait in collect phase; %d / %d rfwds received\n", txn->txn_id, txn->batch_id,
                               rsp_cnt, calvin_expected_rsp_cnt);
                         rc = WAIT;
                     }
@@ -456,11 +459,21 @@ RC YCSBTxnManager::run_calvin_txn() {
                 break;
             case CALVIN_COLLECT_RD:
                 // Phase 4: Collect remote reads
+#if ABORT_MODE
+                if (get_rc() == Abort){
+                    this->phase = CALVIN_DONE;
+                    DEBUG_Q("(%ld,%ld) abort transaction in phase %d\n", txn->txn_id, txn->batch_id,phase);
+                }
+                else{
+                    this->phase = CALVIN_EXEC_WR;
+                }
+#else
                 this->phase = CALVIN_EXEC_WR;
+#endif
                 break;
             case CALVIN_EXEC_WR:
                 // Phase 5: Execute transaction / perform local writes
-                DEBUG("(%ld,%ld) execute writes\n", txn->txn_id, txn->batch_id);
+                DEBUG_Q("(%ld,%ld) execute writes\n", txn->txn_id, txn->batch_id);
                 rc = run_ycsb();
                 this->phase = CALVIN_DONE;
                 break;
@@ -468,6 +481,8 @@ RC YCSBTxnManager::run_calvin_txn() {
                 assert(false);
         }
     }
+    assert(rc == RCOK || rc == WAIT);
+    DEBUG_Q("Finally, (%ld,%ld) %s in phase %d, rc=%d\n", txn->txn_id, txn->batch_id, (get_rc() == Abort)? "Abort":"Commit", phase, get_rc());
     uint64_t curr_time = get_sys_clock();
     txn_stats.process_time += curr_time - starttime;
     txn_stats.process_time_short += curr_time - starttime;
@@ -536,7 +551,11 @@ RC YCSBTxnManager::run_ycsb() {
     RC rc = RCOK;
     assert(CC_ALG == CALVIN);
     YCSBQuery *ycsb_query = (YCSBQuery *) query;
-
+#if ABORT_MODE
+    if (get_rc() == Abort){
+        return RCOK;
+    }
+#endif
     for (uint64_t i = 0; i < ycsb_query->requests.size(); i++) {
         ycsb_request *req = ycsb_query->requests[i];
         if (this->phase == CALVIN_LOC_RD && req->acctype == WR)
@@ -546,7 +565,7 @@ RC YCSBTxnManager::run_ycsb() {
 
         uint64_t part_id = _wl->key_to_part(req->key);
         query->partitions_touched.add_unique(part_id);
-//        DEBUG_Q("WT_%ld : accessing part %ld\n", get_thd_id(),part_id);
+        DEBUG("WT_%ld : (%ld,%ld) accessing part %ld\n", get_thd_id(), get_txn_id(), get_batch_id(),part_id);
 #if !SINGLE_NODE
         bool loc = GET_NODE_ID(part_id) == g_node_id;
         if (!loc)
@@ -556,9 +575,15 @@ RC YCSBTxnManager::run_ycsb() {
         assert(rc == RCOK);
 
         rc = run_ycsb_1(req->acctype, row);
-        // TODO: handle abort here
-        assert(rc == RCOK);
+#if ABORT_MODE
+        if (rc == Abort){
+            dd_abort = true;
+            set_rc(Abort);
+            rc = RCOK;
+        }
+#endif
     }
+    assert(rc == RCOK);
     return rc;
 
 }

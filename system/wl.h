@@ -47,6 +47,7 @@ public:
 /*	*/
 	// initialize the tables and indexes.
 	virtual RC init();
+	virtual RC free();
 	virtual RC init_schema(const char * schema_file);
 	virtual RC init_table()=0;
 	virtual RC get_txn_man(TxnManager *& txn_manager)=0;

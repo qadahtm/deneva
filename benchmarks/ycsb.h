@@ -44,6 +44,7 @@ inline uint64_t RAND(uint64_t max) {
 class YCSBWorkload : public Workload {
 public :
     RC init();
+    RC free();
 
     RC init_table();
 

@@ -63,6 +63,10 @@ RC YCSBWorkload::init() {
 	return RCOK;
 }
 
+RC YCSBWorkload::free() {
+    return the_index->free();
+}
+
 RC YCSBWorkload::init_schema(const char * schema_file) {
 	Workload::init_schema(schema_file);
 	the_table = tables["MAIN_TABLE"]; 	

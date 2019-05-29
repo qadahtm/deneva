@@ -100,6 +100,7 @@ public:
 	RC 			init(int part_cnt, 
 					table_t * table, 
 					uint64_t bucket_cnt);
+	RC free();
   void    index_delete();
 	bool 		index_exist(idx_key_t key); // check if the key exist.
 	RC 			index_insert(idx_key_t key, itemid_t * item, int part_id=-1);

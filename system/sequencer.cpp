@@ -41,30 +41,66 @@ void Sequencer::init(Workload * wl) {
 }
 
 void Sequencer::free(){
-//    Message * msg;
-//    for(uint64_t j = 0; j < g_node_cnt; j++) {
-//        while (fill_queue[j].pop(msg)) {
-//#if WORKLOAD == YCSB
-//            YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
-//#if !SINGLE_NODE
-//            for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
-//                DEBUG_M("Sequencer::free() ycsb_request free\n");
-//                mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
-//            }
-//#endif
-//#endif
-//
+    Message * msg;
+    for(uint64_t j = 0; j < g_node_cnt; j++) {
+        int fill_msg_cnt = 0;
+        while (fill_queue[j].pop(msg)) {
+#if WORKLOAD == YCSB
+            YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
+#if !SINGLE_NODE
+            for(uint64_t i = 0; i < cl_msg->requests.size(); i++) {
+                DEBUG_M("Sequencer::free() ycsb_request free\n");
+                mem_allocator.free(cl_msg->requests[i],sizeof(ycsb_request));
+            }
+            cl_msg->release();
+#endif
+#endif
 //            Message::release_message(msg);
-//        }
-//    }
+            fill_msg_cnt++;
+        }
+        printf("Fill cnt [%lu] = %d\n",j,fill_msg_cnt);
+    }
 
-//    delete [] fill_queue;
-//    qlite_ll * en = wl_head;
-//    while (en){
-//        LIST_REMOVE_HT(en,wl_head,wl_tail);
-//        mem_allocator.free(en->list,sizeof(qlite) * en->max_size);
-//        mem_allocator.free(en,sizeof(qlite_ll));
-//    }
+    delete [] fill_queue;
+    qlite_ll * en = wl_head;
+    int n = 0;
+    uint64_t m_cnt = 0;
+    while (en != NULL){
+        LIST_REMOVE_HT(en,wl_head,wl_tail);
+//        printf("txn_left is = %u, size = %lu\n",en->txns_left,en->size);
+
+        if (en->txns_left == 0) goto next_en;
+
+        for (uint64_t i =0; i < en->size; i++){
+            msg = en->list[i].msg;
+
+            if (en->list[i].server_ack_cnt == 0) {
+                continue;
+            }
+
+//            printf("server_ack_cnt for %lu is = %d\n",i,en->list[i].server_ack_cnt);
+#if WORKLOAD == YCSB
+            YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)msg;
+#if !SINGLE_NODE
+            for(uint64_t k = 0; k < cl_msg->requests.size(); k++) {
+                DEBUG_M("Sequencer::free() ycsb_request free\n");
+                mem_allocator.free(cl_msg->requests[k],sizeof(ycsb_request));
+            }
+//            cl_msg->release();
+            Message::release_message(msg);
+#endif
+#endif
+        }
+
+        m_cnt += en->size;
+        mem_allocator.free(en->list,sizeof(qlite) * en->max_size);
+        mem_allocator.free(en,sizeof(qlite_ll));
+
+next_en:
+        en = wl_head;
+        n++;
+    }
+    printf("En count =%d, m_cnt=%lu\n",n,m_cnt);
 }
 
 // Assumes 1 thread does sequencer work
@@ -88,11 +124,17 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
     if (wait_list[id].skew_startts == 0) {
         wait_list[id].skew_startts = get_sys_clock();
     }
-
+    DEBUG_Q("Seq %d: ack_left for (%lu,%lu) is %d\n",g_node_id, msg->get_txn_id(),msg->get_batch_id(),query_acks_left);
     if (query_acks_left == 0) {
         en->txns_left--;
         ATOM_FETCH_ADD(total_txns_finished,1);
-        INC_STATS(thd_id,seq_txn_cnt,1);
+        auto amsg = (AckMessage *) msg;
+        if (amsg->rc == Abort){
+            INC_STATS(thd_id,seq_txn_abort_cnt,1);
+        }
+        else{
+            INC_STATS(thd_id,seq_txn_cnt,1);
+        }
         // free msg, queries
 #if WORKLOAD == YCSB
         YCSBClientQueryMessage* cl_msg = (YCSBClientQueryMessage*)wait_list[id].msg;
@@ -195,6 +237,13 @@ void Sequencer::process_ack(Message * msg, uint64_t thd_id) {
 
 
         ClientResponseMessage * rsp_msg = (ClientResponseMessage*)Message::create_message(msg->get_txn_id(),CL_RSP);
+#if ABORT_MODE
+        rsp_msg->rc = amsg->rc;
+#else
+        rsp_msg->rc = Commit;
+#endif
+        DEBUG_Q("%s txn_id=%lu by sending client resposne message\n",(rsp_msg->rc == Commit)? "Commiting": "Aborting",msg->get_txn_id());
+        assert(rsp_msg->rc == Commit || rsp_msg->rc == Abort);
         rsp_msg->client_startts = wait_list[id].client_startts;
         msg_queue.enqueue(thd_id,rsp_msg,wait_list[id].client_id);
 #if COUNT_BASED_SIM_ENABLED && CC_ALG == CALVIN

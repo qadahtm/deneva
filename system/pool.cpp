@@ -84,11 +84,16 @@ void TxnManPool::free_all() {
   for(uint64_t thd_id = 0; thd_id < g_total_thread_cnt; thd_id++) {
 #if CC_ALG == CALVIN
   while(pool->pop(item)) {
+      item->release();
+      mem_allocator.free(item,sizeof(TxnManager));
+  }
 #else
   while(pool[thd_id]->pop(item)) {
-#endif
-    mem_allocator.free(item,sizeof(TxnManager));
+    item->release();
+      mem_allocator.free(item,sizeof(TxnManager));
   }
+#endif
+
   }
 }
 
@@ -141,18 +146,35 @@ void TxnPool::put(uint64_t thd_id,Transaction * item) {
 }
 
 void TxnPool::free_all() {
-  TxnManager * item;
+    Transaction * item;
     for(uint64_t thd_id = 0; thd_id < g_total_thread_cnt; thd_id++) {
 #if CC_ALG == CALVIN
-  while(pool->pop(item)) {
+        while(pool->pop(item)) {
+            item->release(0);
+            mem_allocator.free(item,sizeof(Transaction));
+        }
 #else
-  while(pool[thd_id]->pop(item)) {
+        while(pool[thd_id]->pop(item)) {
+            item->release(0);
+            mem_allocator.free(item,sizeof(Transaction));
+        }
 #endif
-    mem_allocator.free(item,sizeof(item));
-
-  }
     }
 }
+
+//void TxnPool::free_all() {
+//  TxnManager * item;
+//    for(uint64_t thd_id = 0; thd_id < g_total_thread_cnt; thd_id++) {
+//#if CC_ALG == CALVIN
+//  while(pool->pop(item)) {
+//#else
+//  while(pool[thd_id]->pop(item)) {
+//#endif
+//    mem_allocator.free(item,sizeof(item));
+//
+//  }
+//    }
+//}
 
 void QryPool::init(Workload * wl, uint64_t size) {
   _wl = wl;
@@ -250,7 +272,7 @@ void QryPool::free_all() {
 #else
   while(pool[thd_id]->pop(item)) {
 #endif
-    mem_allocator.free(item,sizeof(item));
+    mem_allocator.free(item,sizeof(BaseQuery));
   }
     }
 }

@@ -75,7 +75,7 @@ RC CalvinLockThread::run() {
         txn_man->txn_stats.lat_network_time_start = msg->lat_network_time;
         txn_man->txn_stats.lat_other_time_start = msg->lat_other_time;
 
-        msg->copy_to_txn(txn_man);
+        msg->copy_to_txn(txn_man); //copies requests pointers to txn_man
         txn_man->register_thread(this);
         assert(ISSERVERN(txn_man->return_id));
 
@@ -178,7 +178,7 @@ RC CalvinSequencerThread::run() {
             break;
           case CALVIN_ACK:
             // Ack from server
-            DEBUG("SEQ process_ack (%ld,%ld) from %ld\n",msg->get_txn_id(),msg->get_batch_id(),msg->get_return_id());
+            DEBUG_Q("SEQ process_ack (%ld,%ld) from %ld\n",msg->get_txn_id(),msg->get_batch_id(),msg->get_return_id());
             seq_man.process_ack(msg,get_thd_id());
             // Free message here
             msg->release();

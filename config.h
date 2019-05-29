@@ -54,7 +54,7 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR false
 #define STATS_ENABLE        true
-#define PROG_STATS          false
+#define PROG_STATS          true
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
@@ -125,13 +125,13 @@
 // Concurrency Control
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
-#define CC_ALG NO_WAIT
+//#define CC_ALG NO_WAIT
 //#define CC_ALG QUECC
 //#define CC_ALG MAAT
-//#define CC_ALG CALVIN
+#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
-#define ABORT_MODE true
+#define ABORT_MODE false
 
 // all transactions acquire tuples according to the primary key order.
 #define KEY_ORDER         false
@@ -196,7 +196,7 @@
 // batch size must be divisible by thread_cnt for TPCC
 //#define BATCH_SIZE 5*56*6*3*6 // ~30K
 //#define BATCH_SIZE 8192
-#define BATCH_SIZE 64 // testing
+#define BATCH_SIZE 640 // testing
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 10368*(4*NODE_CNT)
 //#define BATCH_SIZE 10080
@@ -412,7 +412,7 @@
 #define WH_UPDATE         true
 #define NUM_WH (4*NODE_CNT)
 // % of transactions that access multiple partitions
-#define MPR 0.5 // used for TPCC and YCSB
+#define MPR 1.0 // used for TPCC and YCSB
 #define MPIR 0.01
 #define MPR_NEWORDER      20 // In %
 enum TPCCTable {TPCC_WAREHOUSE, 
@@ -496,7 +496,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

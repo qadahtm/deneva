@@ -39,6 +39,11 @@ RC IndexHash::init(uint64_t bucket_cnt) {
 	return RCOK;
 }
 
+RC IndexHash::free() {
+    index_delete();
+    return RCOK;
+}
+
 RC 
 IndexHash::init(int part_cnt, table_t * table, uint64_t bucket_cnt) {
 	init(bucket_cnt);

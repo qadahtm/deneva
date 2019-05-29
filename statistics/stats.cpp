@@ -1014,6 +1014,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
     sched_queue_wait_avg_time = sched_queue_wait_time / sched_queue_cnt;
   fprintf(outf,
   ",seq_txn_cnt=%ld"
+  ",seq_txn_abort_cnt=%ld"
   ",seq_batch_cnt=%ld"
   ",seq_full_batch_cnt=%ld"
   ",seq_ack_time=%f"
@@ -1041,6 +1042,7 @@ void Stats_thd::print(FILE * outf, bool prog) {
   ",sched_epoch_cnt=%ld"
   ",sched_epoch_diff=%f"
   ,seq_txn_cnt
+  ,seq_txn_abort_cnt
   ,seq_batch_cnt
   ,seq_full_batch_cnt
   ,seq_ack_time /BILLION
@@ -1769,6 +1771,7 @@ void Stats_thd::combine(Stats_thd * stats) {
 
   // Calvin
   seq_txn_cnt+=stats->seq_txn_cnt;
+  seq_txn_abort_cnt+=stats->seq_txn_abort_cnt;
   seq_batch_cnt+=stats->seq_batch_cnt;
   seq_full_batch_cnt+=stats->seq_full_batch_cnt;
   seq_ack_time+=stats->seq_ack_time;

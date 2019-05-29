@@ -970,7 +970,8 @@ int main(int argc, char* argv[])
   fflush(stdout);
   // Free things
 	//tport_man.shutdown();
-  m_wl->index_delete_all();
+//  m_wl->index_delete_all();
+    m_wl->free();
 #if CC_ALG == QUECC
   quecc_pool.free_all();
 #endif
@@ -982,13 +983,18 @@ int main(int argc, char* argv[])
   msg_pool.free_all();
   qry_pool.free_all();
   */
-    txn_man_pool.free_all();
-    txn_table_pool.free_all();
-    stats.free(g_total_thread_cnt);
-
 #if CC_ALG == CALVIN
     seq_man.free();
 #endif
+    work_queue.free();
+//    txn_table.free();
+    txn_man_pool.free_all();
+    txn_pool.free_all();
+    txn_table_pool.free_all();
+//    qry_pool.free_all();
+    stats.free(g_total_thread_cnt);
+
+
     //JEMALLOC
 //    je_malloc_stats_print(NULL, NULL, NULL);
 //    je_mallctl("prof.dump", NULL, NULL, NULL, 0);
