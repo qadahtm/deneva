@@ -127,6 +127,7 @@
 #define CC_ALG QUECC
 #define ISOLATION_LEVEL SERIALIZABLE
 #define YCSB_ABORT_MODE false
+#define ABORT_MODE false // new Abort Mode
 
 // all transactions acquire tuples according to the primary key order.
 #define KEY_ORDER         false

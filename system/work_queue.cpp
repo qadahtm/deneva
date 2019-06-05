@@ -195,14 +195,14 @@ void QWorkQueue::free() {
             msg = dequeue(j);
             msg_cnt++;
         }
-
+#if CC_ALG == CALVIN
         msg = sched_dequeue(j);
         while(msg){
 //            free_clmsg(msg);
             msg = sched_dequeue(j);
             msg_cnt++;
         }
-
+#endif
         printf("Deq for thread %d, %d messages\n",j,msg_cnt);
     }
 }

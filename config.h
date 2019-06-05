@@ -126,12 +126,13 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
 //#define CC_ALG NO_WAIT
-//#define CC_ALG QUECC
+#define CC_ALG QUECC
 //#define CC_ALG MAAT
-#define CC_ALG CALVIN
-#define ISOLATION_LEVEL SERIALIZABLE
+//#define CC_ALG CALVIN
+//#define ISOLATION_LEVEL SERIALIZABLE
+#define ISOLATION_LEVEL READ_COMMITTED
 #define YCSB_ABORT_MODE false
-#define ABORT_MODE false
+#define ABORT_MODE false // new Abort Mode
 
 // all transactions acquire tuples according to the primary key order.
 #define KEY_ORDER         false
@@ -257,7 +258,7 @@
 #define YCSB_INDEX_LOOKUP_PLAN false
 
 #define CT_ENABLED false
-#define EXEC_BUILD_TXN_DEPS true
+#define EXEC_BUILD_TXN_DEPS false // need this for Abort mode
 #define TDG_ENTRY_LENGTH 1000
 #define FREE_LIST_INITIAL_SIZE 100
 #define EQ_INIT_CAP 1000
@@ -268,7 +269,7 @@
 #define MIN_EXECQ_SIZE 10
 #define EXEC_QS_MAX_SIZE 1024//PLAN_THREAD_`CNT*THREAD_CNT*2
 
-#define ROW_ACCESS_TRACKING true
+#define ROW_ACCESS_TRACKING false // needed for abort mode
 #define ROW_ACCESS_IN_CTX  true
 #define ENABLE_EQ_SWITCH true
 #define PARALLEL_COMMIT true
@@ -496,7 +497,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

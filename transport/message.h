@@ -26,6 +26,7 @@ class ycsb_request;
 class LogRecord;
 struct Item_no;
 struct exec_queue_entry;
+struct eq_et_meta_t;
 
 class Message {
 public:
@@ -240,8 +241,23 @@ public:
     void release();
     uint64_t planner_id;
     uint64_t exec_id;
+    //TODO(tq): when this is put back to the pool??
     Array<exec_queue_entry> * exec_q;
 
+};
+
+class RemoteEQSetMessage : public Message {
+public:
+    void copy_from_buf(char * buf);
+    void copy_to_buf(char * buf);
+    void copy_from_txn(TxnManager * txn);
+    void copy_to_txn(TxnManager * txn);
+    uint64_t get_size();
+    void init();
+    void release();
+    uint64_t planner_id;
+    uint64_t exec_id;
+    Array<Array<exec_queue_entry> *> * eqs;
 };
 
 class RemoteEQAckMessage : public Message {

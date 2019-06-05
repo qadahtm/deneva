@@ -186,6 +186,21 @@ struct exec_queue_entry {
 //#endif
 } __attribute__((aligned));
 
+struct eq_et_meta_t {
+    uint64_t et_id;
+    bool read_only;
+    Array<exec_queue_entry> * exec_q;
+} __attribute__((aligned));;
+
+typedef unordered_map<uint64_t, vector<eq_et_meta_t *> *> EQMap;
+
+struct EQSizeLess{
+    bool operator()(const Array<exec_queue_entry> *  e1, const Array<exec_queue_entry> *  e2) const
+    {
+        return e1->size() < e2->size();
+    }
+};
+typedef boost::heap::priority_queue<Array<exec_queue_entry> *, boost::heap::compare<EQSizeLess>> eq_max_heap_t;
 
 struct priority_group{
     uint64_t batch_starting_txn_id;
@@ -194,10 +209,12 @@ struct priority_group{
 #else
     transaction_context * txn_ctxs;
 #endif
+    std::atomic<uint64_t> eq_completed_rem_cnt;
+
 } __attribute__((aligned));;
 
 struct batch_partition{
-    atomic<uint64_t> status;
+//    atomic<uint64_t> status; // TODO(tq) remove completely
     priority_group * planner_pg;
     uint64_t batch_id;
     bool empty;
@@ -210,6 +227,9 @@ struct batch_partition{
 
     // Info. related to having multiple exec. queues
     Array<Array<exec_queue_entry> *> * exec_qs;
+    uint64_t curr_sum;
+    uint64_t cwet_id;
+    uint64_t cwpt_id;
 } __attribute__((aligned));;
 
 
@@ -235,9 +255,16 @@ void assign_entry_clear(assign_entry * &a_entry);
 //void assign_entry_release(assign_entry * &a_entry);
 
 struct AssignEntryCompareSum{
-    bool operator()(const uint64_t e1, const uint64_t e2) const
+    bool operator()(const assign_entry* e1, const assign_entry* e2) const
     {
-        return ((assign_entry*)e1)->curr_sum > ((assign_entry*)e2)->curr_sum;
+        return e1->curr_sum > e2->curr_sum;
+    }
+};
+
+struct BatchPartMaxSum{
+    bool operator()(const batch_partition* e1, const batch_partition* e2) const
+    {
+        return e1->curr_sum > e2->curr_sum;
     }
 };
 
@@ -268,7 +295,8 @@ void split_entry_print(split_entry * ptr, uint64_t planner_id);
 
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCompareSize>> split_max_heap_t;
 typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<SplitEntryCompareStartRange>> split_min_heap_t;
-typedef boost::heap::priority_queue<uint64_t, boost::heap::compare<AssignEntryCompareSum>> assign_ptr_min_heap_t;
+typedef boost::heap::priority_queue<assign_entry*, boost::heap::compare<AssignEntryCompareSum>> assign_ptr_min_heap_t;
+typedef boost::heap::priority_queue<batch_partition *, boost::heap::compare<BatchPartMaxSum>> batch_part_min_heap_t;
 
 struct sync_block{
     int64_t done;
@@ -365,6 +393,11 @@ public:
 
     atomic<int32_t> batch_deps[BATCH_MAP_LENGTH];
     atomic<int64_t> last_commited_batch_id;
+
+#if DEBUG_QUECC
+    std::atomic<bool> eqset_lock;
+    std::set<Array<exec_queue_entry> *> exec_q_set;
+#endif
 
 private:
 

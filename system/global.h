@@ -314,6 +314,7 @@ enum RemReqType {INIT_DONE=0,
     CL_RSP,//20 //TQ: Client response
 //#if CC_ALG == QUECC
 	REMOTE_EQ,//21
+	REMOTE_EQ_SET,//21
 	REMOTE_EQ_ACK,//22
 	REMOTE_OP_ACK,//23
 //#endif

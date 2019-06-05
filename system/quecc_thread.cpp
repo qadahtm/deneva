@@ -47,9 +47,7 @@ void assign_entry_init(assign_entry * &a_entry, uint64_t pt_thd_id){
     if (!a_entry->exec_qs){
         quecc_pool.exec_qs_get_or_create(a_entry->exec_qs, pt_thd_id);
     }
-    else{
-        a_entry->exec_qs->clear();
-    }
+    a_entry->exec_qs->clear();
 }
 
 void assign_entry_get_or_create(assign_entry *&a_entry, boost::lockfree::spsc_queue<assign_entry *> * assign_entry_free_list){
@@ -1362,7 +1360,7 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
                 assign_entry_init(a_tmp, _planner_id);
                 a_tmp->exec_thd_id = i;
                 assign_entry_add(a_tmp, exec_q_tmp);
-                assignment.push((uint64_t) a_tmp);
+                assignment.push(a_tmp);
 
 #elif MERGE_STRATEGY == RR
                 quecc_pool.exec_qs_get_or_create(exec_qs_tmp, _planner_id);
@@ -1380,7 +1378,7 @@ SRC PlannerThread::do_batch_delivery(bool force_batch_delivery, priority_group *
                     a_tmp = (assign_entry *) assignment.top();
                     assign_entry_add(a_tmp, exec_q_tmp);
                     assignment.pop();
-                    assignment.push((uint64_t) a_tmp);
+                    assignment.push(a_tmp);
 
 #elif MERGE_STRATEGY == RR
                     ((Array<Array<exec_queue_entry> *> *) f_assign[i % g_thread_cnt])->add(exec_q_tmp);
@@ -2384,16 +2382,16 @@ void QueCCPool::init(Workload * wl, uint64_t size){
         }
     }
 
-    exec_qs_free_list = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> * [g_plan_thread_cnt];
+    exec_qs_free_list = new boost::lockfree::queue<Array<Array<exec_queue_entry> *> *> * [g_cluster_planner_thread_cnt];
 //    exec_qs_status_free_list = new boost::lockfree::queue<atomic<uint8_t> *> * [g_plan_thread_cnt];
-    txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_plan_thread_cnt];
-    pg_free_list = new boost::lockfree::queue<priority_group *> * [g_plan_thread_cnt];
+    txn_ctxs_free_list = new boost::lockfree::queue<transaction_context *> * [g_cluster_planner_thread_cnt];
+    pg_free_list = new boost::lockfree::queue<priority_group *> * [g_cluster_planner_thread_cnt];
 #if EXEC_BUILD_TXN_DEPS && TDG_ENTRY_TYPE == ARRAY_ENTRY
     for (UInt32 i = 0; i < g_thread_cnt; ++i) {
         tctx_ptr_free_list[i] = new boost::lockfree::queue<Array<transaction_context *> *>(FREE_LIST_INITIAL_SIZE);
     }
 #endif
-    for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+    for ( uint64_t i = 0; i < g_cluster_planner_thread_cnt; i++) {
 #if TDG_ENTRY_TYPE == VECTOR_ENTRY
         vector_free_list[i] = new boost::lockfree::queue<std::vector<uint64_t> *>(FREE_LIST_INITIAL_SIZE);
 #elif TDG_ENTRY_TYPE == ARRAY_ENTRY
@@ -2417,6 +2415,8 @@ void QueCCPool::init(Workload * wl, uint64_t size){
         pg_alloc_cnts[i].store(0);
         pg_rel_cnts[i].store(0);
         pg_reuse_cnts[i].store(0);
+
+        eqset_lock.store(false);
 #endif
 
     }
@@ -2563,7 +2563,7 @@ void QueCCPool::free_all() {
     }
 
 #endif
-    for ( uint64_t i = 0; i < g_plan_thread_cnt; i++) {
+    for ( uint64_t i = 0; i < g_cluster_planner_thread_cnt; i++) {
         Array<uint64_t> * tmp_vfl;
         while(vector_free_list[i]->pop(tmp_vfl)){
             tmp_vfl->release();
@@ -2623,12 +2623,21 @@ void QueCCPool::exec_queue_get_or_create(Array<exec_queue_entry> *&exec_q, uint6
     }
     else{
         M_ASSERT_V(exec_q, "Invalid exec_q. PT_%ld, ET_%ld\n", planner_id, et_id);
-        exec_q->clear();
-#if DEBUG_QUECC & false
-        exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
-        DEBUG_Q("Reusing exec_q, pt_id=%ld, et_id=%ld\n", planner_id, et_id);
-#endif
     }
+#if DEBUG_QUECC & false
+    bool e = false;
+    bool d = true;
+    while (!eqset_lock.compare_exchange_strong(e,d)) {};
+    auto found = exec_q_set.find(exec_q);
+    M_ASSERT_V(found == exec_q_set.end(),"EQ get returned non-released EQ!!\n");
+    exec_q_set.insert(exec_q);
+    found = exec_q_set.find(exec_q);
+    assert(found != exec_q_set.end());
+    eqset_lock.store(false);
+//        exec_q_reuse_cnts[et_id][planner_id].fetch_add(1);
+//        DEBUG_Q("Get exec_q, pt_id=%ld, et_id=%ld, ptr=%lu\n", planner_id, et_id, (uint64_t) exec_q);
+#endif
+    exec_q->clear();
 }
 
 void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t planner_id, uint64_t et_id){
@@ -2639,8 +2648,17 @@ void QueCCPool::exec_queue_release(Array<exec_queue_entry> *&exec_q, uint64_t pl
 //    while(!exec_queue_free_list[et_id][planner_id]->push(exec_q)){};
     while(!exec_queue_free_list[qet_id][qpt_id]->push(exec_q)){};
 #if DEBUG_QUECC & false
-    DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
-    exec_q_rel_cnts[et_id][planner_id].fetch_add(1);
+    bool e = false;
+    bool d = true;
+    while (!eqset_lock.compare_exchange_strong(e,d)) {};
+    auto found = exec_q_set.find(exec_q);
+    M_ASSERT_V(found != exec_q_set.end(),"EQ released twice!! exec_q ptr = %lu\n",(uint64_t) exec_q);
+    exec_q_set.erase(found);
+    found = exec_q_set.find(exec_q);
+    assert(found == exec_q_set.end());
+    eqset_lock.store(false);
+//    DEBUG_Q("PL_%ld, ET_%ld: relaseing exec_q ptr = %lu\n", planner_id, et_id, (uint64_t) exec_q);
+//    exec_q_rel_cnts[et_id][planner_id].fetch_add(1);
 #endif
 }
 
@@ -2689,9 +2707,11 @@ void QueCCPool::exec_qs_get_or_create(Array<Array<exec_queue_entry> *> *&exec_qs
         exec_qs_reuse_cnts[planner_id].fetch_add(1);
 #endif
     }
+    exec_qs->clear();
 }
 
 void QueCCPool::exec_qs_release(Array<Array<exec_queue_entry> *> *&exec_qs, uint64_t planner_id){
+    exec_qs->clear();
     while(!exec_qs_free_list[planner_id]->push(exec_qs)){}
 #if DEBUG_QUECC
     exec_qs_rel_cnts[planner_id].fetch_add(1);

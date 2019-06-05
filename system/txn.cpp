@@ -951,6 +951,8 @@ void TxnManager::check_commit_ready(exec_queue_entry *entry) {
         e8 = entry->txn_ctx->completion_cnt.load(memory_order_acq_rel);
         d8 = e8 + 1;
     } while(!entry->txn_ctx->completion_cnt.compare_exchange_strong(e8,d8,memory_order_acq_rel));
+//    DEBUG_Q("check_commit_ready: txn_id=%lu, completion_cnt = %lu, txn_comp_cnt=%lu\n",
+//            entry->txn_ctx->txn_id,d8,entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel));
 //#if SINGLE_NODE
     if (d8 > (entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel))) {
         DEBUG_Q("completion_cnt = %lu, txn_comp_cnt=%lu\n",d8,entry->txn_ctx->txn_comp_cnt.load(memory_order_acq_rel));

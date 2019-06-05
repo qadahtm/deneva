@@ -107,6 +107,7 @@ public:
     void capture_txn_deps(uint64_t batch_slot, exec_queue_entry * _entry, RC rc);
 
     SRC execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man);
+    SRC execute_batch_part_old(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man);
 
     SRC commit_batch(uint64_t batch_slot);
 
@@ -119,7 +120,7 @@ public:
     void wt_release_accesses(transaction_context * context, RC rc);
 
     void move_to_next_eq(const batch_partition *batch_part, const uint64_t *eq_comp_cnts,
-                                              Array<exec_queue_entry> *&exec_q, uint64_t &w_exec_q_index) const;
+                                              Array<exec_queue_entry> *&exec_q, uint64_t &w_exec_q_index, uint64_t & batch_part_eq_cnt) const;
 
     uint64_t wbatch_id = 0;
     uint64_t wplanner_id = 0;
@@ -171,9 +172,13 @@ public:
     void checkMRange(Array<exec_queue_entry> *& mrange, uint64_t key, uint64_t et_id);
 
     void plan_client_msg(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man);
-
+#if ISOLATION_LEVEL == READ_COMMITTED
+    void plan_client_msg_rc(Message *msg, transaction_context *txn_ctxs, TxnManager *my_txn_man);
+#endif
     void do_batch_delivery(uint64_t batch_slot, priority_group * planner_pg);
     void do_batch_delivery_mpt(uint64_t batch_slot, priority_group * planner_pg);
+    void do_batch_delivery_mpt_rc(uint64_t batch_slot, priority_group * planner_pg);
+    void do_batch_delivery_mpt_pernode(uint64_t batch_slot, priority_group * planner_pg);
 
 #if WORKLOAD == YCSB
     // create a bucket for each worker thread
@@ -251,6 +256,10 @@ private:
     Array<Array<exec_queue_entry> *> * exec_queues = new Array<Array<exec_queue_entry> *>();
     Array<uint64_t> * exec_qs_ranges = new Array<uint64_t>();
 
+#if ISOLATION_LEVEL == READ_COMMITTED
+    Array<Array<exec_queue_entry> *> * ro_exec_queues = new Array<Array<exec_queue_entry> *>();
+#endif
+
 #if SPLIT_MERGE_ENABLED
 
 #if SPLIT_STRATEGY == LAZY_SPLIT
@@ -285,6 +294,9 @@ private:
 #endif
 #endif // - if !PIPELINED
 #endif // - if CC_ALG == QUECC
+
+    batch_partition *makeBatchPartition(priority_group *planner_pg, uint64_t planner_cwid, uint64_t cw_eid,
+                                        Array<Array<exec_queue_entry> *> *in_eqs) const;
 };
 
 #endif

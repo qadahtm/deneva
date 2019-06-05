@@ -174,6 +174,9 @@ Message * Message::create_message(RemReqType rtype) {
       case REMOTE_EQ:
           msg = new RemoteEQMessage;
       break;
+      case REMOTE_EQ_SET:
+          msg = new RemoteEQSetMessage;
+      break;
       case REMOTE_EQ_ACK:
           msg = new RemoteEQAckMessage;
       break;
@@ -383,6 +386,12 @@ void Message::release_message(Message * msg) {
 #if CC_ALG == QUECC
       case REMOTE_EQ:{
           RemoteEQMessage * m_msg = (RemoteEQMessage*)msg;
+          m_msg->release();
+          delete m_msg;
+          break;
+      }
+      case REMOTE_EQ_SET:{
+          RemoteEQSetMessage * m_msg = (RemoteEQSetMessage*)msg;
           m_msg->release();
           delete m_msg;
           break;
@@ -1378,6 +1387,97 @@ void RemoteEQMessage::copy_to_txn(TxnManager * txn) {
 }
 
 void RemoteEQMessage::release() {
+//    Message::release();
+}
+
+/************************/
+
+
+void RemoteEQSetMessage::init() {
+}
+
+uint64_t RemoteEQSetMessage::get_size() {
+    uint64_t size = Message::mget_size();
+    size += sizeof(uint64_t); // for planner_id
+    size += sizeof(uint64_t); // et_id
+    size += sizeof(uint64_t); // for EQ-Set size
+    for (uint64_t i=0; i < this->eqs->size(); ++i){
+        size += sizeof(uint64_t); // for size each EQ in this->eqs
+        size += sizeof(exec_queue_entry) * this->eqs->get(i)->size();
+//        DEBUG_Q("RemoteEQSetMessage: get_size : Batch map[%lu][%lu][%lu]. eqs_size=%lu, eq[%lu].size=%lu\n",
+//                batch_id,planner_id, exec_id, this->eqs->size(),i,this->eqs->get(i)->size());
+    }
+    return size;
+}
+
+
+void RemoteEQSetMessage::copy_from_buf(char * buf) {
+    Message::mcopy_from_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    COPY_VAL(planner_id,buf,ptr);
+    COPY_VAL(exec_id,buf,ptr);
+    size_t ssize;
+    COPY_VAL(ssize,buf,ptr);
+    quecc_pool.exec_qs_get_or_create(this->eqs,planner_id);
+//    DEBUG_Q("1Received RemoteEQSetMessage: Batch map[%lu][%lu][%lu]\n",
+//            batch_id,planner_id, exec_id);
+    for (size_t i = 0; i < ssize; ++i) {
+        Array<exec_queue_entry> * exec_q;
+        quecc_pool.exec_queue_get_or_create(exec_q,planner_id,exec_id);
+        size_t size;
+//        M_ASSERT_V(size > 0,"Received empty EQ? idx=%lu for batch map[%lu][%lu][%lu], size=%lu\n",i,batch_id,planner_id, exec_id,size);
+        COPY_VAL(size,buf,ptr);
+        if (size > 0) {
+            size_t items_size = sizeof(exec_queue_entry)*size;
+            memcpy(exec_q->items,&buf[ptr],items_size);
+            ptr += items_size;
+            exec_q->count = size;
+        }
+        DEBUG_Q("RemoteEQSetMessage: copy_from_buf : Batch map[%lu][%lu][%lu]. eqs_size=%lu, eq[%lu].size=%lu, ptr=%lu\n",
+                batch_id,planner_id, exec_id, ssize,i,size,ptr);
+        this->eqs->add(exec_q);
+    }
+    auto msg_size = get_size();
+//    DEBUG_Q("2Received RemoteEQSetMessage: Batch map[%lu][%lu][%lu]. eqs_size=%lu, ptr_size=%lu, get_size=%lu\n",
+//            batch_id,planner_id, exec_id, this->eqs->size(),ptr, msg_size);
+    assert(ptr == msg_size);
+}
+
+void RemoteEQSetMessage::copy_to_buf(char * buf) {
+    Message::mcopy_to_buf(buf);
+    uint64_t ptr = Message::mget_size();
+    COPY_BUF(buf,planner_id,ptr);
+    COPY_BUF(buf,exec_id,ptr);
+//    DEBUG_Q("Going to send RemoteEQSetMessage: Batch map[%lu][%lu][%lu]\n",batch_id,planner_id, exec_id);
+    size_t ssize = eqs->size();
+    COPY_BUF(buf,ssize,ptr);
+    for (size_t i = 0; i < ssize; ++i) {
+        Array<exec_queue_entry> * exec_q =  this->eqs->get(i);
+        size_t size = exec_q->size();
+        COPY_BUF(buf,size,ptr);
+        if (size > 0) {
+            size_t items_size = sizeof(exec_queue_entry)*size;
+            memcpy(&buf[ptr], exec_q->items,items_size);
+            ptr += items_size;
+        }
+        DEBUG_Q("RemoteEQSetMessage: copy_to_buf : Batch map[%lu][%lu][%lu]. eqs_size=%lu, eq[%lu].size=%lu, ptr=%lu\n",
+                batch_id,planner_id, exec_id, ssize,i,size,ptr);
+    }
+
+    uint64_t msize = get_size();
+//    DEBUG_Q("Sending RemoteEQSetMessage: Batch map[%lu][%lu][%lu], eqs_size=%lu, size=%lu\n",batch_id,planner_id, exec_id, eqs->size(),msize);
+    assert(ptr == msize);
+}
+
+void RemoteEQSetMessage::copy_from_txn(TxnManager * txn) {
+    Message::mcopy_from_txn(txn);
+}
+
+void RemoteEQSetMessage::copy_to_txn(TxnManager * txn) {
+    Message::mcopy_to_txn(txn);
+}
+
+void RemoteEQSetMessage::release() {
 //    Message::release();
 }
 

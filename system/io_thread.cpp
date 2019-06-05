@@ -266,6 +266,44 @@ RC InputThread::server_recv_loop() {
                 continue;
             }
 
+            if (msg->rtype == REMOTE_EQ_SET) {
+                auto eq_msg = (RemoteEQSetMessage *) msg;
+                uint64_t batch_slot = eq_msg->batch_id % g_batch_map_length;
+                batch_partition * batch_part;
+                quecc_pool.batch_part_get_or_create(batch_part, eq_msg->planner_id, eq_msg->exec_id);
+
+                if(eq_msg->eqs->size() == 0){
+                    batch_part->empty = true;
+                    DEBUG_Q("N_%u:RT_%lu: Received Remote EQ from node=%lu, Batch map[%lu][%lu][%lu] , EQ_size=%lu\n",g_node_id,_thd_id,
+                            eq_msg->return_node_id, eq_msg->batch_id, eq_msg->planner_id, eq_msg->exec_id, 0L);
+                }
+                else{
+                    batch_part->single_q = false;
+                    batch_part->exec_qs = eq_msg->eqs;
+                }
+
+                batch_part->remote = true;
+                batch_part->batch_id = eq_msg->batch_id;
+                uint64_t expected = 0;
+                uint64_t desired = (uint64_t) batch_part;
+
+                assert(eq_msg->planner_id < (g_plan_thread_cnt*g_node_cnt));
+                assert(eq_msg->exec_id < (g_thread_cnt*g_node_cnt));
+                assert(batch_slot < g_batch_map_length);
+                COMPILER_MEMORY_FENCE;
+                while((!work_queue.batch_map[batch_slot][eq_msg->planner_id][eq_msg->exec_id].compare_exchange_strong(expected, desired))){
+                    if (simulation->is_done()){
+                        break;
+                    }
+//                    DEBUG_Q("N_%u:RT_%lu: Could not install!! batch_part for Remote EQ from node=%lu, Batch_map[%lu][%lu][%lu]\n",g_node_id,_thd_id,
+//                            eq_msg->return_node_id, eq_msg->batch_id , eq_msg->planner_id, eq_msg->exec_id);
+                };
+
+                Message::release_message(msg);
+                msgs->erase(msgs->begin());
+                continue;
+            }
+
             if (msg->rtype == REMOTE_EQ) {
                 RemoteEQMessage * eq_msg = (RemoteEQMessage *) msg;
                 uint64_t batch_slot = eq_msg->batch_id % g_batch_map_length;
@@ -335,15 +373,16 @@ RC InputThread::server_recv_loop() {
 
             if (msg->rtype == REMOTE_EQ_ACK) {
                 RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) msg;
-//                DEBUG_Q("N_%u:RT_%lu: Received ACK for remote EQ from node=%lu, PT_%lu, CWET_%lu, ET_%lu batch_id=%lu\n",g_node_id,_thd_id,
-//                        req_ack->return_node_id, req_ack->planner_id, req_ack->exec_id, QueCCPool::map_to_et_id(req_ack->exec_id), req_ack->batch_id);
+                DEBUG_Q("N_%u:RT_%lu: Received ACK for remote EQ from node=%lu, batch_map[%lu][%lu][%lu]\n",g_node_id,_thd_id,
+                        req_ack->return_node_id, req_ack->batch_id, req_ack->planner_id, req_ack->exec_id);
                 uint64_t batch_slot = req_ack->batch_id % g_batch_map_length;
                 batch_partition * batch_part = (batch_partition *) work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].load();
 //                batch_partition * batch_part = (batch_partition *) work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].load(memory_order_acq_rel);
                 M_ASSERT_V(batch_part,"N_%u:RT_%lu: Received ACK for remote EQ from node=%lu, PT_%lu, CWET_%lu, ET_%lu batch_id=%lu\n",g_node_id,_thd_id,
                            req_ack->return_node_id, req_ack->planner_id, req_ack->exec_id, QueCCPool::map_to_et_id(req_ack->exec_id), req_ack->batch_id);
+
                 //assume single EQ per batch part
-                assert(batch_part->single_q);
+//                assert(batch_part->single_q);
                 assert(batch_part->batch_id == req_ack->batch_id);
 
                 // update txn contexts 'locally'
@@ -352,22 +391,50 @@ RC InputThread::server_recv_loop() {
                 // This final REQ-ACK is used to indicate that the remote EQ has been fully processed.
 //                if (!batch_part->empty && req_ack->update_contexts){
                 if (!batch_part->empty){
-                    for (uint64_t j = 0; j < batch_part->exec_q->size(); ++j) {
+                    if (batch_part->single_q){
+                        for (uint64_t j = 0; j < batch_part->exec_q->size(); ++j) {
 #if WORKLOAD == TPCC
 //                        if (batch_part->exec_q->get_ptr(j)->type == TPCC_PAYMENT_UPDATE_C){
                             TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
 //                        }
 #endif
 #if WORKLOAD == YCSB
-                        TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
+                            TxnManager::check_commit_ready(batch_part->exec_q->get_ptr(j));
 #endif
+                        }
+                        // release EQs
+                        DEBUG_Q("N_%u:RT_%lu: Releaseing during ET execution and RECV ACK SINGLE, ptr=%lu\n",g_node_id,_thd_id,(uint64_t) batch_part->exec_q);
+                        quecc_pool.exec_queue_release(batch_part->exec_q, req_ack->planner_id, req_ack->exec_id);
+                        assert(QueCCPool::get_plan_node(req_ack->planner_id) == g_node_id);
+                        batch_part->planner_pg->eq_completed_rem_cnt.fetch_sub(1);
+                    }
+                    else{
+
+                        DEBUG_Q("N_%u:RT_%lu:: batch map [%lu][%lu][%lu] , CW_ET_ID=%lu, eqs_size = %lu\n", g_node_id, _thd_id,
+                        req_ack->batch_id, req_ack->planner_id,QueCCPool::map_to_et_id(req_ack->exec_id),req_ack->exec_id, batch_part->exec_qs->size() );
+                        for (uint64_t i = 0; i < batch_part->exec_qs->size(); ++i) {
+                            auto exec_q = batch_part->exec_qs->get(i);
+                            for (uint64_t j = 0; j < exec_q->size(); ++j) {
+#if WORKLOAD == TPCC
+//                        if (exec_q->get_ptr(j)->type == TPCC_PAYMENT_UPDATE_C){
+                            TxnManager::check_commit_ready(exec_q->get_ptr(j));
+//                        }
+#endif
+#if WORKLOAD == YCSB
+                                TxnManager::check_commit_ready(exec_q->get_ptr(j));
+#endif
+                            }
+                            // release EQs
+                            DEBUG_Q("N_%u:RT_%lu: Releaseing during ET execution and RECV ACK DONE, ptr=%lu\n",g_node_id,_thd_id, (uint64_t) exec_q);
+                            quecc_pool.exec_queue_release(exec_q, req_ack->planner_id, req_ack->exec_id);
+                            assert(QueCCPool::get_plan_node(req_ack->planner_id) == g_node_id);
+                            batch_part->planner_pg->eq_completed_rem_cnt.fetch_sub(1);
+                        }
+
+                        quecc_pool.exec_qs_release(batch_part->exec_qs,req_ack->planner_id);
                     }
 //                    DEBUG_Q("updated txn_ctx for %lu entries\n",batch_part->exec_q->size());
                 }
-
-//                // release EQs
-                quecc_pool.exec_queue_release(batch_part->exec_q, req_ack->planner_id, req_ack->exec_id);
-//
 //                // release batch part
                 quecc_pool.batch_part_release(batch_part, req_ack->planner_id, req_ack->exec_id);
 
@@ -381,8 +448,8 @@ RC InputThread::server_recv_loop() {
 #else
 //                DEBUG_Q("N_%u:RT_%lu:: RESET batch map [%lu][%lu][%lu] CWET_id = %lu\n", g_node_id, _thd_id,
 //                        req_ack->batch_id, req_ack->planner_id,QueCCPool::map_to_et_id(req_ack->exec_id),req_ack->exec_id );
-                assert(req_ack->planner_id < (g_plan_thread_cnt*g_node_cnt));
-                assert(req_ack->exec_id< (g_thread_cnt*g_node_cnt));
+//                assert(req_ack->planner_id < (g_plan_thread_cnt*g_node_cnt));
+//                assert(req_ack->exec_id< (g_thread_cnt*g_node_cnt));
 
 //                if(!work_queue.batch_map[batch_slot][req_ack->planner_id][QueCCPool::map_to_et_id(req_ack->exec_id)].compare_exchange_strong(expected, desired)){
 //                    M_ASSERT_V(false, "ET_%ld: failing to RESET map slot for REMOTE EQ \n", req_ack->exec_id);
