@@ -2654,6 +2654,8 @@ void WorkerThread::do_batch_delivery_mpt_pernode(uint64_t batch_slot, priority_g
         }
 #endif
         // assign to batch partitions
+        std::set<UInt32> out_nodes;
+
         for (auto it=assignments[i].begin(); it != assignments[i].end(); ++it){
 //            DEBUG_Q("N_%u:WT_%lu: Final assigns for ET_Node ID=%lu: batch_id=%lu, PT=%lu, ET=%lu, size=%lu\n",
 //                    g_node_id,_thd_id,i, wbatch_id,planner_cwid,(*it)->exec_thd_id, (*it)->exec_qs->size());
@@ -2677,8 +2679,9 @@ void WorkerThread::do_batch_delivery_mpt_pernode(uint64_t batch_slot, priority_g
             if (i != g_node_id) {
                 // remote
 
-                DEBUG_Q("N_%u:WT_%lu: TargetNode=%lu: Sending REMOTE %lu EQs Batch map[%lu][%lu][%lu] e_cnt = %lu\n",
-                        g_node_id,_thd_id,i, batch_part->exec_qs->size(), wbatch_id,planner_cwid,(*it)->exec_thd_id, e_cnt);
+                DEBUG_Q("N_%u:WT_%lu: TargetNode=%lu: Sending REMOTE %lu EQs Batch map[%lu][%lu][%lu] e_cnt = %lu, pg_tctxs=%lu\n",
+                        g_node_id,_thd_id,i, batch_part->exec_qs->size(), wbatch_id,planner_cwid,(*it)->exec_thd_id,
+                        e_cnt, (uint64_t)planner_pg->txn_ctxs);
 
                 // create remote message and send it
                 Message * req_msg = (RemoteEQSetMessage *) Message::create_message(REMOTE_EQ_SET);
@@ -2688,14 +2691,23 @@ void WorkerThread::do_batch_delivery_mpt_pernode(uint64_t batch_slot, priority_g
                 rs_msg->planner_id = planner_cwid;
                 rs_msg->exec_id = (*it)->exec_thd_id;
                 rs_msg->eqs = batch_part->exec_qs;
+                rs_msg->pg_txn_ctx = planner_pg->txn_ctxs;
+                if (out_nodes.find(i) == out_nodes.end()){
+                    rs_msg->pg_txn_ctx_size = sizeof(transaction_context)*PG_TXN_CTX_SIZE;
+                    out_nodes.insert(i);
+                }
+                else{
+                    rs_msg->pg_txn_ctx_size = 0;
+                }
                 msg_queue.enqueue(_thd_id,req_msg,i);
-
                 batch_part->remote = true;
             }
             else{
                 DEBUG_Q("N_%u:WT_%lu: TargetNode=%lu: Assigned LOCAL %lu EQs to Batch map[%lu][%lu][%lu] e_cnt = %lu\n",
                         g_node_id,_thd_id,i, batch_part->exec_qs->size(), wbatch_id,planner_cwid,(*it)->exec_thd_id, e_cnt);
             }
+
+
 
             expected = 0;
             desired = (uint64_t) batch_part;
@@ -4084,6 +4096,209 @@ SRC WorkerThread::sync_on_execution_phase_end(uint64_t batch_slot){
 }
 
 SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
+#if WT_SYNC_METHOD == SYNC_BLOCK
+    return sync_on_commit_phase_end_sync_block(batch_slot);
+#elif WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL
+    return sync_on_commit_phase_end_atomic(batch_slot);
+#else
+    assert(false);
+    return SUCCESS;
+#endif
+}
+
+SRC WorkerThread::sync_on_commit_phase_end_atomic(uint64_t batch_slot){
+    assert(WT_SYNC_METHOD == CNT_FETCH_ADD_ACQ_REL);
+    assert(false);
+    return SUCCESS;
+}
+SRC WorkerThread::sync_on_commit_phase_end_sync_block(uint64_t batch_slot){
+    assert(WT_SYNC_METHOD == SYNC_BLOCK);
+    assert(!SYNC_MASTER_RR);
+    assert(NEXT_STAGE_ARRAY);
+
+#if PROFILE_EXEC_TIMING
+    uint64_t sync_idlestarttime =0;
+#endif
+    UInt32 done_cnt = 0;
+    work_queue.commit_sblocks[batch_slot][_thd_id].done = 1;
+    atomic_thread_fence(memory_order_release);
+
+    bool is_master = (_thd_id == 0);
+    if (is_master){
+        while (true){
+            done_cnt = 0;
+            atomic_thread_fence(memory_order_acquire);
+            for (uint32_t i=0; i < g_thread_cnt; ++i){
+                done_cnt += work_queue.commit_sblocks[batch_slot][i].done;
+            }
+            if (done_cnt == g_thread_cnt){
+                break;
+            }
+#if PROFILE_EXEC_TIMING
+            if (sync_idlestarttime ==0){
+                sync_idlestarttime = get_sys_clock();
+//                    DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+            }
+#endif
+            //TQ: no need to preeempt this wait
+            if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
+                return BREAK;
+            }
+        }
+
+#if PROFILE_EXEC_TIMING
+        if (sync_idlestarttime > 0){
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+        }
+#endif
+        // cleanup remote txn context
+
+        //TQ: At this point all the local threads are sync'ed and arrived at here
+        for (uint32_t i = 0; i < g_node_cnt; ++i) {
+            if (i != g_node_id) {
+                DEBUG_Q("N_%u:WT_%lu: Sending RDONE msg for batch_id=%lu to node=%u\n",g_node_id,_thd_id,wbatch_id,i);
+                Message * batch_done_msg = Message::create_message(RDONE);
+                batch_done_msg->batch_id = wbatch_id;
+                msg_queue.enqueue(_thd_id,batch_done_msg,i);
+            }
+        }
+
+        DEBUG_Q("N_%u:WT_%lu: Waiting for other nodes to finish for batch_id=%lu\n",g_node_id,_thd_id,wbatch_id);
+
+        while(!simulation->is_done() && quecc_pool.batch_deps[batch_slot].load(memory_order_acq_rel) > 0){}
+
+        if (simulation->is_done()){
+            return BREAK;
+        }
+        // we should have received messages from all nodes
+        //reste batch_deps
+        int32_t de = 0;
+        if(!quecc_pool.batch_deps[batch_slot].compare_exchange_strong(de,(NODE_CNT-1),memory_order_acq_rel)){
+            assert(false);
+        }
+
+        DEBUG_Q("N_%u:WT_%lu: all nodes are done for batch_id=%lu\n",g_node_id,_thd_id,wbatch_id);
+
+        // it is safe now since we are at the end of the batch
+#if WORKLOAD == TPCC
+        for (uint64_t i = 0; i < g_cluster_worker_thread_cnt; ++i) {
+            if (g_node_id != QueCCPool::get_plan_node(i)){
+                transaction_context * pg_tctxs = work_queue.batch_pg_map[batch_slot][i].txn_ctxs;
+                for (uint64_t j = 0; j < planner_batch_size; ++j) {
+//                    DEBUG_Q("N_%u:WT_%lu: RESET O_ID for batch_map[%lu][%lu], txn_idx=%lu\n",
+//                            g_node_id,_worker_cluster_wide_id,wbatch_id,i,j);
+                    pg_tctxs[j].o_id.store(-1,memory_order_acq_rel);
+                }
+            }
+        }
+#endif
+
+        for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+            *(work_queue.commit_next_stage[batch_slot][j]) = 1;
+        }
+        atomic_thread_fence(memory_order_release);
+
+        // need to wait for all threads to exit sync
+        work_queue.commit_sblocks[batch_slot][_thd_id].done = 0;
+
+        while (true){
+            done_cnt = 0;
+            atomic_thread_fence(memory_order_acquire);
+            for (uint32_t i=0; i < g_thread_cnt; ++i){
+                done_cnt += work_queue.commit_sblocks[batch_slot][i].done;
+            }
+            if (done_cnt == 0){
+                break;
+            }
+#if PROFILE_EXEC_TIMING
+            if (sync_idlestarttime ==0){
+                sync_idlestarttime = get_sys_clock();
+                DEBUG_Q("WT_%ld: commit_stage waiting for WT_* to SET done, batch_id = %ld\n", _thd_id,wbatch_id);
+            }
+#endif
+            //TQ: no need to preeempt this wait
+            if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
+                DEBUG_Q("N_%u:WT_%lu: SIM_DONE waiting in commit sync for batch_id=%lu\n",g_node_id,_thd_id,wbatch_id);
+                return BREAK;
+            }
+        }
+
+        DEBUG_Q("N_%u:WT_%lu: all local threads are done for batch_id=%lu\n",g_node_id,_thd_id,wbatch_id);
+#if PROFILE_EXEC_TIMING
+        if (sync_idlestarttime > 0){
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+        }
+#endif
+        for (UInt32 j = 0; j < g_thread_cnt; ++j) {
+            *(work_queue.commit_next_stage[batch_slot][j]) = 0;
+        }
+        atomic_thread_fence(memory_order_release);
+    }
+    else{
+        DEBUG_Q("N_%d:ET_%ld: going to wait for ET_0 to finalize the commit phase\n",g_node_id, _thd_id);
+
+
+        atomic_thread_fence(memory_order_acquire);
+        while (*work_queue.commit_next_stage[batch_slot][_thd_id] != 1){
+#if PROFILE_EXEC_TIMING
+            if (sync_idlestarttime ==0){
+                sync_idlestarttime = get_sys_clock();
+                    DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+            }
+#endif
+            if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
+                return BREAK;
+            }
+        }
+#if PROFILE_EXEC_TIMING
+        if (sync_idlestarttime > 0){
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+        }
+#endif
+        work_queue.commit_sblocks[batch_slot][_thd_id].done = 0;
+        atomic_thread_fence(memory_order_release);
+        atomic_thread_fence(memory_order_acquire);
+        while (*work_queue.commit_next_stage[batch_slot][_thd_id] != 0){
+#if PROFILE_EXEC_TIMING
+            if (sync_idlestarttime ==0){
+                sync_idlestarttime = get_sys_clock();
+                    DEBUG_Q("WT_%ld: commit stage waiting for WT_0 to SET next_stage, batch_id = %ld\n", _thd_id,wbatch_id);
+            }
+#endif
+            if (simulation->is_done()){
+#if PROFILE_EXEC_TIMING
+                INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+#endif
+                return BREAK;
+            }
+            atomic_thread_fence(memory_order_acquire);
+        }
+#if PROFILE_EXEC_TIMING
+        if (sync_idlestarttime > 0){
+            INC_STATS(_thd_id,exec_idle_time[_thd_id],get_sys_clock() - sync_idlestarttime);
+            INC_STATS(_thd_id,worker_idle_time,get_sys_clock() - sync_idlestarttime);
+        }
+#endif
+    }
+    DEBUG_Q("N_%u:ET_%ld: commit sync is done for batch_slot=%ld, going to work on the next batch\n", g_node_id, _worker_cluster_wide_id,batch_slot);
+    return SUCCESS;
+}
+
+// TODO(tq): remove this _mix function
+/*
+SRC WorkerThread::sync_on_commit_phase_end_mix(uint64_t batch_slot){
 #if PROFILE_EXEC_TIMING
     uint64_t sync_idlestarttime =0;
 #endif
@@ -4475,7 +4690,7 @@ SRC WorkerThread::sync_on_commit_phase_end(uint64_t batch_slot){
     DEBUG_Q("N_%u:ET_%ld: commit sync is done for batch_slot=%ld, going to work on the next batch\n", g_node_id, _worker_cluster_wide_id,batch_slot);
     return SUCCESS;
 }
-
+*/
 SRC WorkerThread::batch_cleanup(uint64_t batch_slot){
 
 #if PIPELINED2
@@ -4719,6 +4934,10 @@ SRC WorkerThread::commit_batch(uint64_t batch_slot){
 
     for (uint64_t i=0; i < g_cluster_planner_thread_cnt;++i){
         // Skipp committing PGs that are not planned on this node
+//         Should only skip if I am a passive node??
+        // if no transactions abort, we just need to commit spectulative writes here
+        //otherwise, we need to wait for abort
+
         if (QueCCPool::get_plan_node(i) != g_node_id) continue;
 
         planner_pg = &work_queue.batch_pg_map[batch_slot][i];
@@ -5263,20 +5482,21 @@ SRC WorkerThread::execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts
 
     end_remote_eq:
     if (batch_part->remote){
-        DEBUG_Q("N_%u:ET_%lu: Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, remote node=%lu\n",
-                g_node_id, _worker_cluster_wide_id, wbatch_id,wplanner_id,QueCCPool::get_plan_node(wplanner_id));
-        RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) Message::create_message(REMOTE_EQ_ACK);
-        req_ack->batch_id = wbatch_id;
-        req_ack->planner_id = wplanner_id;
-        req_ack->exec_id = _worker_cluster_wide_id;
-#if WORKLOAD == YCSB
-        req_ack->update_contexts = true;
-#endif
 
-#if WORKLOAD == TPCC
-        req_ack->update_contexts = false;
-#endif
-        msg_queue.enqueue(_thd_id,req_ack,QueCCPool::get_plan_node(wplanner_id));
+        // Broadcast EQs to all nodes (for now). We only need to send to active nodes + coordinator
+        for (UInt32 k=0; k < g_node_cnt; ++k){
+            if (k != g_node_id){
+                DEBUG_Q("N_%u:ET_%lu: Sending ACK, Execution of remote EQ is done: batch_id=%lu, planner_id=%lu, remote node=%d, original_plan node=%s\n",
+                        g_node_id, _worker_cluster_wide_id, wbatch_id,wplanner_id,k, (QueCCPool::get_plan_node(wplanner_id) == k)? "yes":"no");
+                RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) Message::create_message(REMOTE_EQ_ACK);
+                req_ack->batch_id = wbatch_id;
+                req_ack->planner_id = wplanner_id;
+                req_ack->exec_id = _worker_cluster_wide_id;
+//                msg_queue.enqueue(_thd_id,req_ack,QueCCPool::get_plan_node(wplanner_id));
+                msg_queue.enqueue(_thd_id,req_ack,k);
+            }
+        }
+
     }
     else{
         DEBUG_Q("N_%u:ET_%lu: Execution of local EQ is done: batch_id=%lu, planner_id=%lu\n",
@@ -5285,7 +5505,8 @@ SRC WorkerThread::execute_batch_part(uint64_t batch_slot, uint64_t *eq_comp_cnts
 
     return src;
 }
-// TODO(tq): refactor this function
+// TODO(tq): refactor this function or remove
+/*
 SRC WorkerThread::execute_batch_part_old(uint64_t batch_slot, uint64_t *eq_comp_cnts, TxnManager * my_txn_man)
 {
 
@@ -5657,7 +5878,7 @@ end_proc:
 #endif //#if LADS_IN_QUECC
     return SUCCESS;
 }
-
+*/
 RC WorkerThread::commit_txn(transaction_context * j_ctx) {
     RC rc = Commit;
     // count of txn frags in the txn

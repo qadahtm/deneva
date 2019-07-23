@@ -208,7 +208,7 @@
 //#define BATCH_SIZE 100000
 //#define BATCH_SIZE 10368
 //#define BATCH_SIZE 2*3*5*7*31*2*2*2*2*2*3 // = 624960 ~ 600K txns per batch
-#define BATCH_MAP_LENGTH 16//100//300//1024 // width of map is PLAN_THREAD_CNT
+#define BATCH_MAP_LENGTH 1//100//300//1024 // width of map is PLAN_THREAD_CNT
 //#define BATCH_MAP_LENGTH 4 // width of map is PLAN_THREAD_CNT
 #define BATCH_MAP_ORDER BATCH_PT_ET
 #define BATCH_ET_PT     1

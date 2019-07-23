@@ -338,22 +338,25 @@ inline RC YCSBTxnManager::run_ycsb_0(ycsb_request *req, row_t *&row_local) {
 RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
     // TQ: implement read-modify-write
     uint8_t fval UNUSED =0;
-//    char *data = row_local->get_data();
+#if !ABORT_MODE
+    char *data = row_local->get_data();
+#endif
     RC rc = RCOK;
     if (acctype == RD || acctype == SCAN) {
 
         //TQ: attribute unused cause GCC compiler not ot produce a warning as fval is no used
         // TQ: perform the actual read by
 #if YCSB_DO_OPERATION
-//        for (int j = 0; j < row_local->tuple_size; ++j) {
-//            fval += data[j];
-//        }
+#if ABORT_MODE
         UInt32 v;
         row_local->get_value(0,v);
-#if ABORT_MODE
         if (v < 50){
             rc = Abort;
             this->dd_abort = true;
+        }
+#else
+        for (int j = 0; j < row_local->tuple_size; ++j) {
+            fval += data[j];
         }
 #endif
 #else
@@ -370,15 +373,18 @@ RC YCSBTxnManager::run_ycsb_1(access_t acctype, row_t *row_local) {
     } else {
         assert(acctype == WR);
 #if YCSB_DO_OPERATION
+#if ABORT_MODE
         UInt32 v;
         row_local->get_value(0,v);
         v++;
         row_local->set_value(0,v);
-//        for (int j = 0; j < row_local->tuple_size; ++j) {
-//            fval += data[j];
-//        }
-//        // write value to the first byte
-//        data[0] = fval;
+#else
+        for (int j = 0; j < row_local->tuple_size; ++j) {
+            fval += data[j];
+        }
+        // write value to the first byte
+        data[0] = fval;
+#endif
 #else
         //TQ: here the we are zeroing the first 8 bytes
         // 100 below is the number of bytes for each field

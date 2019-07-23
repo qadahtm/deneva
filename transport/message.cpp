@@ -14,6 +14,7 @@
    limitations under the License.
 */
 
+#include <work_queue.h>
 #include "mem_alloc.h"
 #include "query.h"
 #include "ycsb_query.h"
@@ -1407,6 +1408,8 @@ uint64_t RemoteEQSetMessage::get_size() {
 //        DEBUG_Q("RemoteEQSetMessage: get_size : Batch map[%lu][%lu][%lu]. eqs_size=%lu, eq[%lu].size=%lu\n",
 //                batch_id,planner_id, exec_id, this->eqs->size(),i,this->eqs->get(i)->size());
     }
+    size += sizeof(uint64_t); // for TXN_CTXs
+    size += pg_txn_ctx_size;
     return size;
 }
 
@@ -1437,6 +1440,16 @@ void RemoteEQSetMessage::copy_from_buf(char * buf) {
                 batch_id,planner_id, exec_id, ssize,i,size,ptr);
         this->eqs->add(exec_q);
     }
+    COPY_VAL(pg_txn_ctx_size,buf,ptr);
+    DEBUG_Q("N_%u: RemoteEQSetMessage: copy_from_buf : Batch map[%lu][%lu][%lu]. tctx_size=%lu, ptr=%lu\n",
+            g_node_id,batch_id,planner_id, exec_id,pg_txn_ctx_size,ptr);
+    if (pg_txn_ctx_size > 0){
+        uint64_t batch_slot = batch_id % g_batch_map_length;
+        pg_txn_ctx = work_queue.batch_pg_map[batch_slot][planner_id].txn_ctxs;
+        memcpy(pg_txn_ctx,&buf[ptr], pg_txn_ctx_size);
+        ptr += pg_txn_ctx_size;
+    }
+
     auto msg_size = get_size();
 //    DEBUG_Q("2Received RemoteEQSetMessage: Batch map[%lu][%lu][%lu]. eqs_size=%lu, ptr_size=%lu, get_size=%lu\n",
 //            batch_id,planner_id, exec_id, this->eqs->size(),ptr, msg_size);
@@ -1462,6 +1475,19 @@ void RemoteEQSetMessage::copy_to_buf(char * buf) {
         }
         DEBUG_Q("RemoteEQSetMessage: copy_to_buf : Batch map[%lu][%lu][%lu]. eqs_size=%lu, eq[%lu].size=%lu, ptr=%lu\n",
                 batch_id,planner_id, exec_id, ssize,i,size,ptr);
+    }
+    COPY_BUF(buf,pg_txn_ctx_size,ptr);
+    DEBUG_Q("N_%u: RemoteEQSetMessage: copy_to_buf : Batch map[%lu][%lu][%lu]. tctx_size=%lu, ptr=%lu\n",
+            g_node_id,batch_id,planner_id, exec_id, pg_txn_ctx_size,ptr);
+
+    if (pg_txn_ctx_size > 0){
+        uint64_t batch_slot = batch_id % g_batch_map_length;
+        M_ASSERT_V(pg_txn_ctx == work_queue.batch_pg_map[batch_slot][planner_id].txn_ctxs,
+                   "N_%u: Sending Batch map[%lu][%lu][%lu], pg_txn_ctx = %lu, batch_pg_map.txn_ctxs = %lu\n", g_node_id,
+                   batch_id,planner_id, exec_id,
+                   (uint64_t)pg_txn_ctx, (uint64_t)work_queue.batch_pg_map[batch_id][planner_id].txn_ctxs);
+        memcpy(&buf[ptr],pg_txn_ctx, pg_txn_ctx_size);
+        ptr += pg_txn_ctx_size;
     }
 
     uint64_t msize = get_size();

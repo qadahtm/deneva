@@ -77,6 +77,9 @@ public:
     SRC sync_on_execution_phase_end(uint64_t batch_slot);
 
     SRC sync_on_commit_phase_end(uint64_t batch_slot);
+    SRC sync_on_commit_phase_end_atomic(uint64_t batch_slot);
+    SRC sync_on_commit_phase_end_sync_block(uint64_t batch_slot);
+    SRC sync_on_commit_phase_end_mix(uint64_t batch_slot);
 
     SRC batch_cleanup(uint64_t batch_slot);
 

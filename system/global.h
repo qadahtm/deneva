@@ -87,6 +87,7 @@ class Plock;
 // for QueCC
 //#if CC_ALG == QUECC
 class QueCCPool;
+#define PG_TXN_CTX_SIZE (BATCH_SIZE/(PLAN_THREAD_CNT*NODE_CNT))
 //#endif
 //#if CC_ALG == LADS
 namespace gdgcc {

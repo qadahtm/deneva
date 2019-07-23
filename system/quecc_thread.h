@@ -205,10 +205,11 @@ typedef boost::heap::priority_queue<Array<exec_queue_entry> *, boost::heap::comp
 struct priority_group{
     uint64_t batch_starting_txn_id;
 #if BATCHING_MODE == SIZE_BASED
-    transaction_context txn_ctxs[BATCH_SIZE/(PLAN_THREAD_CNT*NODE_CNT)];
+    transaction_context txn_ctxs[PG_TXN_CTX_SIZE];
 #else
     transaction_context * txn_ctxs;
 #endif
+    bool ready; // remote PGs can be sent out of order
     std::atomic<uint64_t> eq_completed_rem_cnt;
 
 } __attribute__((aligned));;

@@ -26,6 +26,7 @@ class ycsb_request;
 class LogRecord;
 struct Item_no;
 struct exec_queue_entry;
+struct transaction_context;
 struct eq_et_meta_t;
 
 class Message {
@@ -258,6 +259,8 @@ public:
     uint64_t planner_id;
     uint64_t exec_id;
     Array<Array<exec_queue_entry> *> * eqs;
+    transaction_context * pg_txn_ctx;
+    uint64_t pg_txn_ctx_size;
 };
 
 class RemoteEQAckMessage : public Message {
