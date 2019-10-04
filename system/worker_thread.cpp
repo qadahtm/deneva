@@ -1833,6 +1833,10 @@ void WorkerThread::plan_client_msg_rc(Message *msg, transaction_context *txn_ctx
     tctx->txn_state.store(TXN_INITIALIZED,memory_order_acq_rel);
     tctx->completion_cnt.store(0,memory_order_acq_rel);
     tctx->txn_comp_cnt.store(0,memory_order_acq_rel);
+    for (UInt32 k = 0; k < g_node_cnt; ++k) {
+        tctx->commit_dep_per_node[k] = 0;
+        tctx->active_nodes[k] = 0;
+    }
 #if EXEC_BUILD_TXN_DEPS
     tctx->should_abort = false;
     tctx->commit_dep_cnt.store(0,memory_order_acq_rel);
@@ -5956,61 +5960,6 @@ RC WorkerThread::commit_txn(transaction_context * j_ctx) {
     return rc;
 }
 
-RC WorkerThread::commit_txn(priority_group * planner_pg, uint64_t txn_idx)
-{
-    transaction_context * txn_ctxs = planner_pg->txn_ctxs;
-    uint64_t j = txn_idx;
-    // txn state is not supported
-    assert(false);
-
-//    DEBUG_Q("ET_%ld:trying to commit txn_id = %ld\n",_thd_id, txn_ctxs[j].txn_id);
-    // check if transactio is ready to commit
-    atomic_thread_fence(memory_order_acq_rel);
-    if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_COMMIT){
-        // check for any dependent transaction
-#if EXEC_BUILD_TXN_DEPS
-        if (txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel) > 0){
-//                DEBUG_Q("CT_%ld: txn_id %lu has %lu dependent txns that has not committed or aborted, batch_id=%lu\n",
-//                        _thd_id, txn_ctxs[j].txn_id, txn_ctxs[j].commit_dep_cnt.load(memory_order_acq_rel),wbatch_id);
-            return WAIT;
-        }
-        else{
-            if (txn_ctxs[j].should_abort){
-//                    DEBUG_Q("CT_%ld: txn_id %lu should be aborted\n",
-//                            _thd_id, txn_ctxs[j].txn_id);
-                return Abort;
-            }
-            else{
-//                    DEBUG_Q("CT_%ld: txn_id %lu should be committed, batch_id=%lu\n",
-//                            _thd_id, txn_ctxs[j].txn_id,wbatch_id);
-                return Commit;
-            }
-        }
-#endif
-    }
-    else if (txn_ctxs[j].txn_state.load(memory_order_acq_rel) == TXN_READY_TO_ABORT){
-        //     abort transaction, this abort decision is done by an ET during execution phase
-        return Abort;
-    }
-    else {
-//#if DEBUG_QUECC
-//        DEBUG_Q("ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, wbatch_id=%ld, gbatch_id=%ld, batch_slot=%ld, pt_cnt = %d, et_cnt=%d\n",
-//                _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, work_queue.gbatch_id, (wbatch_id % g_batch_map_length),
-//                g_plan_thread_cnt, g_thread_cnt);
-//#endif
-#if PIPELINED2
-        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
-                   _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_et_thd_cnt);
-#else
-        M_ASSERT_V(false, "ET_%ld: transaction state is not valid. state = %ld, txn_id = %ld, batch_id=%ld, pt_cnt = %d, et_cnt=%d\n",
-                   _thd_id, txn_ctxs[j].txn_state.load(memory_order_acq_rel), txn_ctxs[j].txn_id, wbatch_id, g_plan_thread_cnt, g_thread_cnt);
-#endif
-        assert(false);
-    }
-
-    return Commit;
-};
-
 void WorkerThread::wt_release_accesses(transaction_context * context, RC rc)
 {
 #if ROW_ACCESS_TRACKING
@@ -6099,40 +6048,6 @@ transaction_context * WorkerThread::get_tctx_from_pg(uint64_t txnid, priority_gr
 //                    _thd_id,d_txn_ctx_idx,txnid,planner_pg->batch_starting_txn_id, d_tctx->txn_id);
         return d_tctx;
     }
-}
-
-void WorkerThread::finalize_txn_commit(transaction_context *tctx, RC rc) {
-    uint64_t e8,d8;
-#if PROFILE_EXEC_TIMING
-    uint64_t commit_time = get_sys_clock();
-    uint64_t timespan_long = commit_time - tctx->starttime;
-    // Committing
-    INC_STATS_ARR(_thd_id, first_start_commit_latency, timespan_long);
-#endif
-    // Sending response to client a
-#if !SERVER_GENERATE_QUERIES
-    Message * rsp_msg = Message::create_message(CL_RSP);
-    rsp_msg->txn_id = tctx->txn_id;
-//    rsp_msg->batch_id = tctx->batch_id; // using batch_id from local, we can also use the one in the context
-    ((ClientResponseMessage *) rsp_msg)->client_startts = tctx->client_startts;
-    rsp_msg->lat_work_queue_time = 0;
-    rsp_msg->lat_msg_queue_time = 0;
-    rsp_msg->lat_cc_block_time = 0;
-    rsp_msg->lat_cc_time = 0;
-    rsp_msg->lat_process_time = 0;
-    rsp_msg->lat_network_time = 0;
-    rsp_msg->lat_other_time = 0;
-
-    msg_queue.enqueue(_thd_id, rsp_msg, tctx->return_node_id);
-#endif
-    wt_release_accesses(tctx,rc);
-    e8 = TXN_READY_TO_COMMIT;
-    d8 = TXN_COMMITTED;
-    if (tctx->txn_state.compare_exchange_strong(e8,d8,memory_order_acq_rel)){
-        M_ASSERT_V(false, "ET_%ld: trying to commit a transaction with invalid status\n", _thd_id);
-    }
-//                    DEBUG_Q("ET_%ld: committed transaction txn_id = %ld, batch_id = %ld\n",
-//                            _thd_id, planner_pg->txn_ctxs[j].txn_id, wbatch_id);
 }
 #endif // if CC_ALG == QUECC
 

@@ -42,6 +42,8 @@ struct transaction_context {
     volatile atomic<uint64_t> completion_cnt; // used at execution time to track operations that have completed
     // 8bytes
     volatile atomic<uint64_t> txn_comp_cnt; // used during planning to track the number of operations to be executed
+    uint64_t commit_dep_per_node[NODE_CNT];
+    uint64_t active_nodes[NODE_CNT];
 #if EXEC_BUILD_TXN_DEPS
     // 8bytes
     volatile atomic<int64_t> commit_dep_cnt; // used during execution to track the number of dependent transactions
