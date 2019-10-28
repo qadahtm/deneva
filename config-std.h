@@ -357,6 +357,12 @@
 #define REQ_PER_QUERY 10
 #define FIELD_PER_TUPLE       10
 #define YCSB_DO_OPERATION true
+
+#define YCSB_LONG_READS_TXN_ENABLED true
+#define YCSB_LONG_READS_TXN_PERC 0.5
+#define YCSB_LONG_READS_DB_PERC 0.1
+#define YCSB_LONG_READS_DB_PERC_MAX 0.8
+
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
 #define STRICT_PPT true

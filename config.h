@@ -129,8 +129,8 @@
 #define CC_ALG QUECC
 //#define CC_ALG MAAT
 //#define CC_ALG CALVIN
-//#define ISOLATION_LEVEL SERIALIZABLE
-#define ISOLATION_LEVEL READ_COMMITTED
+#define ISOLATION_LEVEL SERIALIZABLE
+//#define ISOLATION_LEVEL READ_COMMITTED
 #define YCSB_ABORT_MODE false
 #define ABORT_MODE false // new Abort Mode
 
@@ -391,6 +391,12 @@
 #define REQ_PER_QUERY 16
 #define FIELD_PER_TUPLE       10
 #define YCSB_DO_OPERATION true
+
+#define YCSB_LONG_READS_TXN_ENABLED true
+#define YCSB_LONG_READS_TXN_PERC 0.5
+#define YCSB_LONG_READS_DB_PERC 0.1
+#define YCSB_LONG_READS_DB_PERC_MAX 0.8
+
 // Use this to only generate transactions
 #define CREATE_TXN_FILE false
 #define STRICT_PPT true
@@ -497,7 +503,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC true
+#define DEBUG_QUECC false
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 

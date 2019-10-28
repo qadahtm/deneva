@@ -110,7 +110,21 @@ public:
   }
 
   void append(Array a) {
-    M_ASSERT_V(count + a.size() <= capacity, "count=%ld,a.size()=%ld,capacity=%ld\n",count,a.size(),capacity);
+
+      // resize items if it does not fit
+
+//      if (count + a.size() > capacity){
+//          uint64_t new_cap = count + a.size() + capacity;
+//          auto new_items = (T*) mem_allocator.alloc(sizeof(T)*new_cap);
+//          for(uint64_t i = 0; i < count; i++) {
+//              new_items[i] = items[i];
+//          }
+//          mem_allocator.free(items,sizeof(T)*capacity);
+//          items = new_items;
+//          capacity = new_cap;
+//      }
+
+      M_ASSERT_V(count + a.size() <= capacity, "count=%ld,a.size()=%ld,capacity=%ld\n",count,a.size(),capacity);
       assert(count + a.size() <= capacity);
     for(uint64_t i = 0; i < a.size(); i++) {
       add(a[i]);

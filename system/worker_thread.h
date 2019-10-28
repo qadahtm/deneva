@@ -296,10 +296,12 @@ private:
 
 #endif
 #endif // - if !PIPELINED
-#endif // - if CC_ALG == QUECC
 
     batch_partition *makeBatchPartition(priority_group *planner_pg, uint64_t planner_cwid, uint64_t cw_eid,
                                         Array<Array<exec_queue_entry> *> *in_eqs) const;
+#endif // - if CC_ALG == QUECC
+
+
 };
 
 #endif

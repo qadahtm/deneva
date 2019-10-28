@@ -54,7 +54,14 @@ RC YCSBTxnManager::acquire_locks() {
     locking_done = false;
     RC rc = RCOK;
     incr_lr();
-    assert(ycsb_query->requests.size() == g_req_per_query);
+    //FIXME(tq): for now we skip this assertion if we are using long-read workload
+    /**
+     * This should be fixed proparly by checking the flag asssociated with ycsb_query struct, for now this is sufficient
+     */
+
+    if (!YCSB_LONG_READS_TXN_ENABLED){ // this means there is no long-read txns
+        assert(ycsb_query->requests.size() == g_req_per_query);
+    }
     assert(phase == CALVIN_RW_ANALYSIS);
     for (uint32_t rid = 0; rid < ycsb_query->requests.size(); rid++) {
         ycsb_request *req = ycsb_query->requests[rid];

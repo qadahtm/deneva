@@ -60,7 +60,14 @@ BaseQuery *YCSBQueryGenerator::create_query(Workload *h_wl, uint64_t home_partit
         query = gen_requests_hot(home_partition_id, h_wl);
     } else if (SKEW_METHOD == ZIPF) {
         assert(the_n != 0);
-        query = gen_requests_zipf(home_partition_id, h_wl);
+        double r = (double) (mrand->next() % 10000) / 10000;
+        if (YCSB_LONG_READS_TXN_ENABLED && r > YCSB_LONG_READS_TXN_PERC){
+            DEBUG_Q("Generating log read!\n");
+            query = gen_requests_long_read(home_partition_id, h_wl);
+        }
+        else{
+            query = gen_requests_zipf(home_partition_id, h_wl);
+        }
     }
 
 //    DEBUG_WL("Generated YCSB requests accessing %ld partitions\n", query->partitions.size());
@@ -105,7 +112,15 @@ void YCSBQuery::print() {
 }
 
 void YCSBQuery::init() {
-    requests.init(g_req_per_query);
+    uint64_t req_cnt = g_req_per_query;
+    if (YCSB_LONG_READS_TXN_PERC > 0.0){
+        // cannot allow more than max
+        assert(YCSB_LONG_READS_DB_PERC <= YCSB_LONG_READS_DB_PERC_MAX);
+        // allocate max according to configuration
+        req_cnt = g_synth_table_size * YCSB_LONG_READS_DB_PERC;
+
+    }
+    requests.init(req_cnt);
     BaseQuery::init();
 }
 
@@ -116,6 +131,7 @@ void YCSBQuery::copy_request_to_msg(YCSBQuery *ycsb_query, YCSBQueryMessage *msg
   req->copy(ycsb_query->requests[id]);
   msg->requests.add(req);
 */
+    DEBUG_Q("YCSBQuery::copy_request_to_msg ycsb_request alloc\n");
     msg->requests.add(ycsb_query->requests[id]);
 
 }
@@ -361,6 +377,105 @@ BaseQuery *YCSBQueryGenerator::gen_requests_hot(uint64_t home_partition_id, Work
     return query;
 
 }
+
+BaseQuery *YCSBQueryGenerator::gen_requests_long_read(uint64_t home_partition_id, Workload *h_wl) {
+    YCSBQuery *query = (YCSBQuery *) mem_allocator.alloc(sizeof(YCSBQuery));
+    new(query) YCSBQuery();
+    M_ASSERT_V(YCSB_LONG_READS_DB_PERC > 0.0, "Access percentage must be greater than 0\n");
+    UInt32 req_cnt = g_synth_table_size * YCSB_LONG_READS_DB_PERC;
+    DEBUG_Q("Long read txn with req_cnt=%u, g_synth_table_size=%lu\n", req_cnt, g_synth_table_size);
+    assert(req_cnt > 0);
+    query->long_read = true;
+    query->requests.init(req_cnt);
+
+    uint64_t access_cnt = 0;
+    set<uint64_t> all_keys;
+    set<uint64_t> partitions_accessed;
+    uint64_t table_size = g_synth_table_size / g_part_cnt;
+    int rid = 0;
+
+    double r_mpt = (double) (mrand->next() % 10000) / 10000;
+    uint64_t part_limit;
+    if (r_mpt < g_mpr)
+        part_limit = g_part_per_txn;
+    else
+        part_limit = 1;
+
+    for (UInt32 i = 0; i < req_cnt; i++) {
+        uint64_t partition_id;
+
+        if (FIRST_PART_LOCAL && rid == 0) {
+            partition_id = home_partition_id;;
+        } else {
+            partition_id = mrand->next() % g_part_cnt;
+            if (g_strict_ppt && part_limit <= g_part_cnt) {
+                while ((partitions_accessed.size() < part_limit && partitions_accessed.count(partition_id) > 0) ||
+                       (partitions_accessed.size() == part_limit && partitions_accessed.count(partition_id) == 0)) {
+                    partition_id = mrand->next() % g_part_cnt;
+                }
+            }
+        }
+
+        ycsb_request *req = (ycsb_request *) mem_allocator.alloc(sizeof(ycsb_request));
+        req->acctype = RD;
+
+        //TQ: We need to generate a row_id withing the selected partition
+        uint64_t row_id;
+        uint64_t primary_key;
+        row_id = zipf(table_size - 1, 0.0); // uniform
+//        uint64_t primary_key = row_id * g_part_cnt + partition_id;
+        table_size = g_synth_table_size / g_part_cnt;
+        primary_key = row_id + (partition_id * table_size);
+
+        assert(row_id < table_size);
+//        DEBUG_Q("Selected part_id = %lu, key=%lu, computed_part_id=%d, g_part_cnt=%u, g_synth_table_size=%lu\n",
+//                partition_id, primary_key, ((YCSBWorkload *)h_wl)->key_to_part(primary_key),g_part_cnt,g_synth_table_size);
+
+        assert(partition_id == (uint64_t) ((YCSBWorkload *)h_wl)->key_to_part(primary_key));
+        assert(primary_key < g_synth_table_size);
+
+        req->key = primary_key;
+        req->value = mrand->next() % (1 << 8);
+        // Make sure a single row is not accessed twice
+        if (all_keys.find(req->key) == all_keys.end()) {
+            all_keys.insert(req->key);
+            access_cnt++;
+        } else {
+            // Need to have the full g_req_per_query amount
+            i--;
+            continue;
+        }
+
+        partitions_accessed.insert(partition_id);
+        rid++;
+
+        query->requests.add(req);
+    }
+    assert(query->requests.size() == req_cnt);
+    // Sort the requests in key order.
+    if (g_key_order) {
+        for (uint64_t i = 0; i < query->requests.size(); i++) {
+            for (uint64_t j = query->requests.size() - 1; j > i; j--) {
+                if (query->requests[j]->key < query->requests[j - 1]->key) {
+                    query->requests.swap(j, j - 1);
+                }
+            }
+        }
+        //std::sort(query->requests.begin(),query->requests.end(),[](ycsb_request lhs, ycsb_request rhs) { return lhs.key < rhs.key;});
+    }
+
+
+    assert(partitions_accessed.size()!= 0 && partitions_accessed.size() <= g_part_cnt);
+    query->partitions.init(partitions_accessed.size());
+    for (auto it = partitions_accessed.begin(); it != partitions_accessed.end(); ++it) {
+        query->partitions.add(*it);
+    }
+
+    return query;
+
+}
+
+
 
 #if !RANGE_PARITIONING
 BaseQuery * YCSBQueryGenerator::gen_requests_zipf(uint64_t home_partition_id, Workload * h_wl) {

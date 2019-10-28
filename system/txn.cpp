@@ -298,7 +298,11 @@ void Transaction::init() {
     DEBUG_M("Transaction::init array insert_rows\n");
     insert_rows.init(g_max_items_per_txn + 10);
     DEBUG_M("Transaction::reset array accesses\n");
-    accesses.init(MAX_ROW_PER_TXN);
+    uint64_t r_size = MAX_ROW_PER_TXN;
+    if (YCSB_LONG_READS_TXN_ENABLED){
+        r_size = g_synth_table_size * YCSB_LONG_READS_DB_PERC + 4;
+    }
+    accesses.init(r_size);
 
     reset(0);
 }
@@ -334,7 +338,7 @@ void Transaction::release_inserts(uint64_t thd_id) {
 }
 
 void Transaction::release(uint64_t thd_id) {
-    DEBUG_Q("Transaction release\n");
+    DEBUG_M("Transaction release\n");
     release_accesses(thd_id);
     DEBUG_M("Transaction::release array accesses free\n")
     accesses.release();
@@ -384,7 +388,11 @@ void TxnManager::init(uint64_t thd_id, Workload *h_wl) {
 #if CC_ALG == CALVIN
     phase = CALVIN_RW_ANALYSIS;
     locking_done = false;
-    calvin_locked_rows.init(MAX_ROW_PER_TXN);
+    uint64_t r_size = MAX_ROW_PER_TXN;
+    if (YCSB_LONG_READS_TXN_ENABLED){
+        r_size = g_synth_table_size * YCSB_LONG_READS_DB_PERC + 4;
+    }
+    calvin_locked_rows.init(r_size);
 #endif
 
 #if CC_ALG == TICTOC || CC_ALG == SILO || CC_ALG == MOCC_SILO

@@ -61,6 +61,7 @@ public:
 private:
 	BaseQuery * gen_requests_hot(uint64_t home_partition_id, Workload * h_wl);
 	BaseQuery * gen_requests_zipf(uint64_t home_partition_id, Workload * h_wl);
+    BaseQuery * gen_requests_long_read(uint64_t home_partition_id, Workload * h_wl);
 	// for Zipfian distribution
 	double zeta(uint64_t n, double theta);
 	uint64_t zipf(uint64_t n, double theta);
@@ -85,13 +86,16 @@ private:
 class YCSBQuery : public BaseQuery {
 public:
   YCSBQuery() {
+      long_read = false;
   }
   ~YCSBQuery() {
   }
 
   void print();
   
-	void init(uint64_t thd_id, Workload * h_wl) {};
+	void init(uint64_t thd_id, Workload * h_wl) {
+	    long_read = false;
+	};
   void init();
   void release();
   void release_requests();
@@ -105,6 +109,7 @@ public:
 
   //std::vector<ycsb_request> requests;
   Array<ycsb_request*> requests;
+  bool long_read;
   /*
   uint64_t rid;
   uint64_t access_cnt;
