@@ -214,9 +214,13 @@ final:
     INC_STATS(txn->get_thd_id(),twopl_getlock_cnt,1);
 #endif
     if (g_central_man)
+    {
         glob_manager.release_row(_row);
+    }
     else
+    {
         pthread_mutex_unlock( latch );
+    }
 
 
 	return rc;
