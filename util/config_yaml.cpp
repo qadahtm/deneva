@@ -18,6 +18,9 @@ config_yaml::config_yaml() {
     servers = new std::vector<std::string *>();
     clients = new std::vector<std::string *>();
     replicas = new std::vector<std::vector<std::string *> *>();
+
+    zk_nodes = new std::vector<std::string *>();
+    zk_ports = new std::vector<std::string *>();
 }
 
 config_yaml::~config_yaml() {
@@ -33,12 +36,24 @@ config_yaml::~config_yaml() {
     }
     servers->clear();
     replicas->clear();
+    delete(servers);
+    delete(replicas);
 
     for(auto it = clients->begin(); it < clients->end(); it++){
         delete *it;
     }
-
     clients->clear();
+    delete(clients);
+
+    assert(zk_nodes->size() == zk_ports->size());
+    for(size_t i = 0; i < zk_nodes->size(); i++){
+        delete zk_nodes->at(i);
+        delete zk_ports->at(i);
+    }
+    zk_nodes->clear();
+    zk_ports->clear();
+    delete zk_nodes;
+    delete zk_ports;
 }
 
 int config_yaml::load(char * input) {
@@ -52,7 +67,7 @@ int config_yaml::load(char * input) {
     }
     yaml_parser_set_input_file(&parser, conf_file);
     int error = 0;
-    rc_t rc = OK;
+    rc_t rc __attribute((unused)) = OK;
 
     while (true){
 
@@ -84,6 +99,14 @@ int config_yaml::load(char * input) {
             }
         }
 
+        if (event.type == YAML_SCALAR_EVENT &&
+            scalar_get_value(&event) == "zookeeper") {
+            rc = parseZkList();
+            if (rc == ERROR){
+                error = 1;
+                goto done;
+            }
+        }
 
 
         yaml_event_delete(&event);
@@ -102,9 +125,9 @@ int config_yaml::load(char * input) {
     printf("Servers list size: %lu\n", servers->size());
     printf("Client list size: %lu\n", clients->size());
 
-    yaml_document_delete(&document);
 done:
     fclose(conf_file);
+    yaml_document_delete(&document);
     return error;
 }
 
@@ -124,6 +147,13 @@ void config_yaml::print() {
     printf("Clients:\n");
     for( size_t i = 0; i < clients->size(); i++){
         printf("%zu: %s\n", i, clients->at(i)->c_str());
+    }
+
+    printf("=== \n");
+    printf("Zookeeper cluster:\n");
+    assert(zk_nodes->size() == zk_ports->size());
+    for(size_t i = 0; i < zk_nodes->size(); i++){
+        printf("%zu ZkNode: %s:%s \n", i, zk_nodes->at(i)->c_str(), zk_ports->at(i)->c_str());
     }
 }
 
@@ -280,6 +310,35 @@ rc_e config_yaml::parseClientAddress() {
     }
     std::string * address = new std::string(scalar_get_value(&event));
     clients->push_back(address);
+    return OK;
+}
+
+rc_t config_yaml::parseZkList() {
+    rc_t rc;
+
+    MOVE_TO_NEXT_EVENT
+    assert(event.type == YAML_SEQUENCE_START_EVENT);
+
+    MOVE_TO_NEXT_EVENT
+    while(event.type != YAML_SEQUENCE_END_EVENT){
+        rc = parseZkEntry();
+        RETURN_IF_RC_EQ_ERROR
+
+        MOVE_TO_NEXT_EVENT
+    }
+    return OK;
+}
+
+rc_e config_yaml::parseZkEntry() {
+    if (event.type != YAML_SCALAR_EVENT){
+        return  ERROR;
+    }
+    std::string socket = std::string(scalar_get_value(&event));
+    size_t col_pos = socket.find_first_of(':',0);
+    std::string * port = new std::string(socket.substr(col_pos+1));
+    std::string * address = new std::string(socket.substr(0, socket.length()-(socket.length()-col_pos)));
+    zk_nodes->push_back(address);
+    zk_ports->push_back(port);
     return OK;
 }
 
