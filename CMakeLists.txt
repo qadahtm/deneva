@@ -96,6 +96,11 @@ add_subdirectory(test)
 add_sources(
         config.cpp
 )
+#Important note:
+# When running on Ubuntu 18.04 we need to install dependent packages via apt/apt-get using the following command (See INSTALL.md for details).
+# $ sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev python3
+
+
 if(APPLE)
     include_directories("/usr/local/Cellar/boost/1.67.0_1/include")
     include_directories("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1")
@@ -106,21 +111,6 @@ if(APPLE)
     link_directories(../deps/jemalloc_mac/lib)
     link_directories(../deps/nanomsg_mac/lib)
     link_directories("/usr/local/Cellar/boost/1.67.0_1/lib")
-
-else()
-
-    #set up include directories for software dependencies boost, jemalloc, and nanomesg
-    #we only need some headers from boost
-    include_directories("../boost_1_63_0")
-    include_directories("../deps/nanomsg-1.0.0/include")
-    include_directories("../deps/jemalloc-4.5.0/include")
-
-    link_directories(../deps/jemalloc-4.5.0/lib)
-    # fix fo ubuntu 18.04 build
-#    link_directories(../deps/nanomsg-1.0.0/lib64)
-#    link_directories(../deps/nanomsg-1.0.0/lib)
-
-    link_directories(../deps-ubuntu18/nanomsg-1.0.0)
 
 endif()
 
