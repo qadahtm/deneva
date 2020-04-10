@@ -108,6 +108,9 @@ if(APPLE)
     link_directories("/usr/local/Cellar/boost/1.67.0_1/lib")
 
 else()
+
+    #set up include directories for software dependencies boost, jemalloc, and nanomesg
+    #we only need some headers from boost
     include_directories("../boost_1_63_0")
     include_directories("../deps/nanomsg-1.0.0/include")
     include_directories("../deps/jemalloc-4.5.0/include")
@@ -119,9 +122,6 @@ else()
 
     link_directories(../deps-ubuntu18/nanomsg-1.0.0)
 
-    #Yaml
-#    include_directories("../deps/yaml-cpp-0.6.0/include")
-#    link_directories(../deps/yaml-cpp-0.6.0)
 endif()
 
 
@@ -132,6 +132,8 @@ if(APPLE)
 else()
     target_link_libraries(expodb jemalloc nanomsg pthread)
 endif()
+
+#using libyaml installed by apt-get on host
 target_link_libraries(expodb yaml)
 
 add_executable(rundb system/main.cpp)
