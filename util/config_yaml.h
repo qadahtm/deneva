@@ -40,7 +40,21 @@ public:
     config_yaml();
 
     ~config_yaml();
+
+    /**
+     * Loads configuration parameters into class
+     * @param input File path to YAML config file
+     * @return 0 if success or 1 in case of error in YAML file
+     */
+
     int load(char * input);
+
+    /**
+     * Prints out LibYaml parser events
+     * @param input File path to YAML config file
+     * @return 0 if success or 1 in case of error in YAML file
+     */
+    int trace(char * input);
 
     void print();
 

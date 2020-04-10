@@ -14,7 +14,6 @@ return rc; \
 #define MOVE_TO_NEXT_EVENT rc = nextEvent(); RETURN_IF_RC_EQ_ERROR
 
 config_yaml::config_yaml() {
-    yaml_parser_initialize(&this->parser);
     servers = new std::vector<std::string *>();
     clients = new std::vector<std::string *>();
     replicas = new std::vector<std::vector<std::string *> *>();
@@ -58,11 +57,11 @@ config_yaml::~config_yaml() {
 
 int config_yaml::load(char * input) {
 
-//    size_t flength = strlen(input);
-
-    printf("Test yaml file: %s\n", input);
+    yaml_parser_initialize(&parser);
+    printf("Loading YAML file: %s\n", input);
     FILE * conf_file = fopen(input, "rb");
     if (conf_file == NULL){
+        printf("Could note open file %s\n", input);
         return 1;
     }
     yaml_parser_set_input_file(&parser, conf_file);
@@ -111,16 +110,6 @@ int config_yaml::load(char * input) {
 
         yaml_event_delete(&event);
     }
-
-//    if (!yaml_parser_load(&parser, &document)) {
-//        error = 1;
-//        goto done;
-//    }
-
-//    rc = parse_config();
-//    if (rc == ERROR){
-//        error = 1;
-//    }
 
     printf("Servers list size: %lu\n", servers->size());
     printf("Client list size: %lu\n", clients->size());
@@ -340,6 +329,40 @@ rc_e config_yaml::parseZkEntry() {
     zk_nodes->push_back(address);
     zk_ports->push_back(port);
     return OK;
+}
+
+int config_yaml::trace(char *input) {
+    yaml_parser_initialize(&parser);
+    printf("Tracing YAML file: %s\n", input);
+    FILE * conf_file = fopen(input, "rb");
+    if (conf_file == NULL){
+        return 1;
+    }
+    yaml_parser_set_input_file(&parser, conf_file);
+    int error = 0;
+    rc_t rc __attribute((unused)) = OK;
+
+    while (true){
+
+        if (!yaml_parser_parse(&parser, &event)){
+            error = 1;
+            printf("Error in paring first event");
+            goto done;
+        }
+
+        if (event.type == YAML_NO_EVENT){
+            break;
+        }
+        printf("%s\n", event_type_get_name(&event).c_str());
+
+
+        yaml_event_delete(&event);
+    }
+
+done:
+    fclose(conf_file);
+    yaml_document_delete(&document);
+    return error;
 }
 
 
