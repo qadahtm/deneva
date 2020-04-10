@@ -20,10 +20,14 @@ config_yaml::config_yaml() {
 
     zk_nodes = new std::vector<std::string *>();
     zk_ports = new std::vector<std::string *>();
+
+    parser = new yaml_parser_t();
+    document =  new yaml_document_t();
+    event = new yaml_event_t();
 }
 
 config_yaml::~config_yaml() {
-    reset();
+    clear();
     assert(servers->size() == replicas->size());
     delete(servers);
     delete(replicas);
@@ -33,33 +37,37 @@ config_yaml::~config_yaml() {
     assert(zk_nodes->size() == zk_ports->size());
     delete zk_nodes;
     delete zk_ports;
+
+    delete(document);
+    delete(parser);
+    delete(event);
 }
 
 int config_yaml::load(char * input) {
 
-    yaml_parser_initialize(&parser);
+    yaml_parser_initialize(parser);
     printf("Loading YAML file: %s\n", input);
     FILE * conf_file = fopen(input, "rb");
-    if (conf_file == NULL){
+    if (conf_file == nullptr){
         printf("Could note open file %s\n", input);
         return 1;
     }
-    yaml_parser_set_input_file(&parser, conf_file);
+    yaml_parser_set_input_file(parser, conf_file);
     int error = 0;
-    rc_t rc __attribute((unused)) = OK;
+    rc_t rc;
 
     while (true){
 
-        if (!yaml_parser_parse(&parser, &event)){
+        if (!yaml_parser_parse(parser, event)){
             error = 1;
             goto done;
         }
 
-        if (event.type == YAML_NO_EVENT){
+        if (event->type == YAML_NO_EVENT){
             break;
         }
-        if (event.type == YAML_SCALAR_EVENT &&
-            scalar_get_value(&event) == "servers") {
+        if (event->type == YAML_SCALAR_EVENT &&
+            scalar_get_value(event) == "servers") {
             rc = parserServerList();
             if (rc == ERROR){
                 error = 1;
@@ -67,8 +75,8 @@ int config_yaml::load(char * input) {
             }
         }
 
-        if (event.type == YAML_SCALAR_EVENT &&
-            scalar_get_value(&event) == "clients") {
+        if (event->type == YAML_SCALAR_EVENT &&
+            scalar_get_value(event) == "clients") {
             rc = parseClientList();
             if (rc == ERROR){
                 error = 1;
@@ -76,8 +84,8 @@ int config_yaml::load(char * input) {
             }
         }
 
-        if (event.type == YAML_SCALAR_EVENT &&
-            scalar_get_value(&event) == "zookeeper") {
+        if (event->type == YAML_SCALAR_EVENT &&
+            scalar_get_value(event) == "zookeeper") {
             rc = parseZkList();
             if (rc == ERROR){
                 error = 1;
@@ -86,7 +94,7 @@ int config_yaml::load(char * input) {
         }
 
 
-        yaml_event_delete(&event);
+        yaml_event_delete(event);
     }
 
     printf("Servers list size: %lu\n", servers->size());
@@ -94,7 +102,7 @@ int config_yaml::load(char * input) {
 
 done:
     fclose(conf_file);
-    yaml_document_delete(&document);
+    yaml_document_delete(document);
     return error;
 }
 
@@ -126,11 +134,11 @@ void config_yaml::print() {
 
 rc_t config_yaml::parseServerAddress() {
     rc_t rc;
-    if (scalar_get_value(&event) != "address"){
+    if (scalar_get_value(event) != "address"){
         return ERROR;
     }
     MOVE_TO_NEXT_EVENT
-    std::string * address = new std::string(scalar_get_value(&event));
+    auto * address = new std::string(scalar_get_value(event));
     servers->push_back(address);
     return OK;
 }
@@ -145,29 +153,29 @@ void config_yaml::saveReplicaServerIP() {
         repList = replicas->back();
     }
 
-    auto * ip = new std::string(scalar_get_value(&event));
+    auto * ip = new std::string(scalar_get_value(event));
     repList->push_back(ip);
 }
 
 rc_t config_yaml::parseServerReplicas() {
     rc_t rc;
-    if (event.type != YAML_SCALAR_EVENT){
+    if (event->type != YAML_SCALAR_EVENT){
         return ERROR;
     }
 
-    if (scalar_get_value(&event) != "replicas"){
+    if (scalar_get_value(event) != "replicas"){
         return ERROR;
     }
 
     MOVE_TO_NEXT_EVENT
-    assert(event.type == YAML_SEQUENCE_START_EVENT);
+    assert(event->type == YAML_SEQUENCE_START_EVENT);
 
     MOVE_TO_NEXT_EVENT
-    while (event.type == YAML_SCALAR_EVENT){
+    while (event->type == YAML_SCALAR_EVENT){
         saveReplicaServerIP();
         MOVE_TO_NEXT_EVENT
     }
-    assert(event.type == YAML_SEQUENCE_END_EVENT);
+    assert(event->type == YAML_SEQUENCE_END_EVENT);
 
     return OK;
 }
@@ -224,14 +232,14 @@ rc_t config_yaml::parserServerList() {
     rc_t rc;
 
     MOVE_TO_NEXT_EVENT
-    assert(event.type == YAML_SEQUENCE_START_EVENT);
+    assert(event->type == YAML_SEQUENCE_START_EVENT);
 
     MOVE_TO_NEXT_EVENT
     do{
-        assert(event.type == YAML_MAPPING_START_EVENT);
+        assert(event->type == YAML_MAPPING_START_EVENT);
 
         MOVE_TO_NEXT_EVENT
-        assert(event.type == YAML_SCALAR_EVENT);
+        assert(event->type == YAML_SCALAR_EVENT);
         rc = parseServerAddress();
         RETURN_IF_RC_EQ_ERROR
 
@@ -240,15 +248,15 @@ rc_t config_yaml::parserServerList() {
         RETURN_IF_RC_EQ_ERROR
 
         MOVE_TO_NEXT_EVENT
-        assert(event.type == YAML_MAPPING_END_EVENT);
+        assert(event->type == YAML_MAPPING_END_EVENT);
 
         MOVE_TO_NEXT_EVENT
-    } while (event.type != YAML_SEQUENCE_END_EVENT);
+    } while (event->type != YAML_SEQUENCE_END_EVENT);
     return OK;
 }
 
 rc_t config_yaml::nextEvent() {
-    if (!yaml_parser_parse(&parser, &event)){
+    if (!yaml_parser_parse(parser, event)){
         return  ERROR;
     }
     return OK;
@@ -258,10 +266,10 @@ rc_t config_yaml::parseClientList() {
     rc_t rc;
 
     MOVE_TO_NEXT_EVENT
-    assert(event.type == YAML_SEQUENCE_START_EVENT);
+    assert(event->type == YAML_SEQUENCE_START_EVENT);
 
     MOVE_TO_NEXT_EVENT
-    while(event.type != YAML_SEQUENCE_END_EVENT){
+    while(event->type != YAML_SEQUENCE_END_EVENT){
         rc = parseClientAddress();
         RETURN_IF_RC_EQ_ERROR
 
@@ -271,10 +279,10 @@ rc_t config_yaml::parseClientList() {
 }
 
 rc_e config_yaml::parseClientAddress() {
-    if (event.type != YAML_SCALAR_EVENT){
+    if (event->type != YAML_SCALAR_EVENT){
         return  ERROR;
     }
-    std::string * address = new std::string(scalar_get_value(&event));
+    auto * address = new std::string(scalar_get_value(event));
     clients->push_back(address);
     return OK;
 }
@@ -283,10 +291,10 @@ rc_t config_yaml::parseZkList() {
     rc_t rc;
 
     MOVE_TO_NEXT_EVENT
-    assert(event.type == YAML_SEQUENCE_START_EVENT);
+    assert(event->type == YAML_SEQUENCE_START_EVENT);
 
     MOVE_TO_NEXT_EVENT
-    while(event.type != YAML_SEQUENCE_END_EVENT){
+    while(event->type != YAML_SEQUENCE_END_EVENT){
         rc = parseZkEntry();
         RETURN_IF_RC_EQ_ERROR
 
@@ -296,58 +304,58 @@ rc_t config_yaml::parseZkList() {
 }
 
 rc_e config_yaml::parseZkEntry() {
-    if (event.type != YAML_SCALAR_EVENT){
+    if (event->type != YAML_SCALAR_EVENT){
         return  ERROR;
     }
-    std::string socket = std::string(scalar_get_value(&event));
+    std::string socket = std::string(scalar_get_value(event));
     size_t col_pos = socket.find_first_of(':',0);
-    std::string * port = new std::string(socket.substr(col_pos+1));
-    std::string * address = new std::string(socket.substr(0, socket.length()-(socket.length()-col_pos)));
+    auto * port = new std::string(socket.substr(col_pos+1));
+    auto * address = new std::string(socket.substr(0, socket.length()-(socket.length()-col_pos)));
     zk_nodes->push_back(address);
     zk_ports->push_back(port);
     return OK;
 }
 
 int config_yaml::trace(char *input) {
-    yaml_parser_initialize(&parser);
+    yaml_parser_initialize(parser);
     printf("Tracing YAML file: %s\n", input);
     FILE * conf_file = fopen(input, "rb");
-    if (conf_file == NULL){
+    if (conf_file == nullptr){
         return 1;
     }
-    yaml_parser_set_input_file(&parser, conf_file);
+    yaml_parser_set_input_file(parser, conf_file);
     int error = 0;
     rc_t rc __attribute((unused)) = OK;
 
     while (true){
 
-        if (!yaml_parser_parse(&parser, &event)){
+        if (!yaml_parser_parse(parser, event)){
             error = 1;
             printf("Error in paring first event");
             goto done;
         }
 
-        if (event.type == YAML_NO_EVENT){
+        if (event->type == YAML_NO_EVENT){
             break;
         }
-        printf("%s\n", event_type_get_name(&event).c_str());
+        printf("%s\n", event_type_get_name(event).c_str());
 
 
-        yaml_event_delete(&event);
+        yaml_event_delete(event);
     }
 
 done:
     fclose(conf_file);
-    yaml_document_delete(&document);
+    yaml_document_delete(document);
     return error;
 }
 
-void config_yaml::reset() {
+void config_yaml::clear() {
     assert(servers->size() == replicas->size());
     for( size_t i = 0; i < servers->size(); i++){
         std::vector<std::string *> * repList = replicas->at(i);
-        for (size_t j = 0; j < repList->size(); ++j) {
-            delete repList->at(j);
+        for (auto & j : *repList) {
+            delete j;
         }
         repList->clear();
         delete repList;

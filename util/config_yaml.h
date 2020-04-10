@@ -16,10 +16,9 @@ typedef enum rc_e {
 } rc_t;
 
 class config_yaml {
-    yaml_parser_t parser;
-    yaml_document_t document;
-    yaml_node_t *node;
-    yaml_event_t event;
+    yaml_parser_t * parser;
+    yaml_document_t * document;
+    yaml_event_t * event;
     int done = 0;
 
 public:
@@ -36,7 +35,7 @@ public:
     std::vector<std::string *> * zk_nodes;
     std::vector<std::string *> * zk_ports;
 
-    void reset();
+    void clear();
 
     config_yaml();
 
