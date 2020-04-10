@@ -22,6 +22,7 @@ class config_yaml {
     yaml_event_t event;
     int done = 0;
 
+public:
     // list of servers ip addresses
     // server[i] has replicas[i]
     std::vector<std::string *> * servers;
@@ -35,8 +36,8 @@ class config_yaml {
     std::vector<std::string *> * zk_nodes;
     std::vector<std::string *> * zk_ports;
 
+    void reset();
 
-public:
     config_yaml();
 
     ~config_yaml();

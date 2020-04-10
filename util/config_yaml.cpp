@@ -23,34 +23,14 @@ config_yaml::config_yaml() {
 }
 
 config_yaml::~config_yaml() {
+    reset();
     assert(servers->size() == replicas->size());
-    for( size_t i = 0; i < servers->size(); i++){
-        std::vector<std::string *> * repList = replicas->at(i);
-        for (size_t j = 0; j < repList->size(); ++j) {
-            delete repList->at(j);
-        }
-        repList->clear();
-        delete repList;
-        delete servers->at(i);
-    }
-    servers->clear();
-    replicas->clear();
     delete(servers);
     delete(replicas);
 
-    for(auto it = clients->begin(); it < clients->end(); it++){
-        delete *it;
-    }
-    clients->clear();
     delete(clients);
 
     assert(zk_nodes->size() == zk_ports->size());
-    for(size_t i = 0; i < zk_nodes->size(); i++){
-        delete zk_nodes->at(i);
-        delete zk_ports->at(i);
-    }
-    zk_nodes->clear();
-    zk_ports->clear();
     delete zk_nodes;
     delete zk_ports;
 }
@@ -78,8 +58,6 @@ int config_yaml::load(char * input) {
         if (event.type == YAML_NO_EVENT){
             break;
         }
-        printf("%s\n", event_type_get_name(&event).c_str());
-
         if (event.type == YAML_SCALAR_EVENT &&
             scalar_get_value(&event) == "servers") {
             rc = parserServerList();
@@ -214,7 +192,7 @@ std::string config_yaml::event_type_get_name(yaml_event_t * s) {
 
         case YAML_SCALAR_EVENT:
             res_s.append("Scalar Event - ");
-            res_s.append("key=");
+            res_s.append("value=");
             res_s.append((char *)s->data.scalar.value, s->data.scalar.length);
             return res_s;
 
@@ -250,7 +228,6 @@ rc_t config_yaml::parserServerList() {
 
     MOVE_TO_NEXT_EVENT
     do{
-        printf("%s\n", event_type_get_name(&event).c_str());
         assert(event.type == YAML_MAPPING_START_EVENT);
 
         MOVE_TO_NEXT_EVENT
@@ -363,6 +340,33 @@ done:
     fclose(conf_file);
     yaml_document_delete(&document);
     return error;
+}
+
+void config_yaml::reset() {
+    assert(servers->size() == replicas->size());
+    for( size_t i = 0; i < servers->size(); i++){
+        std::vector<std::string *> * repList = replicas->at(i);
+        for (size_t j = 0; j < repList->size(); ++j) {
+            delete repList->at(j);
+        }
+        repList->clear();
+        delete repList;
+        delete servers->at(i);
+    }
+    servers->clear();
+    replicas->clear();
+
+    for(auto it = clients->begin(); it < clients->end(); it++){
+        delete *it;
+    }
+    clients->clear();
+
+    for(size_t i = 0; i < zk_nodes->size(); i++){
+        delete zk_nodes->at(i);
+        delete zk_ports->at(i);
+    }
+    zk_nodes->clear();
+    zk_ports->clear();
 }
 
 
