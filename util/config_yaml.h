@@ -25,7 +25,7 @@ public:
     // list of servers ip addresses
     // server[i] has replicas[i]
     std::vector<std::string> * servers;
-    std::vector<std::vector<std::string> *> * replicas;
+    std::vector<std::vector<std::string>> * replicas;
 
     // list of servers ip addresses
     std::vector<std::string> * clients;

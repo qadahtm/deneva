@@ -15,7 +15,7 @@ return rc; \
 
 config_yaml::config_yaml() {
     servers = new std::vector<std::string>();
-    replicas = new std::vector<std::vector<std::string> *>();
+    replicas = new std::vector<std::vector<std::string>>();
 
     clients = new std::vector<std::string>();
 
@@ -113,9 +113,10 @@ void config_yaml::print() {
     for( size_t i = 0; i < servers->size(); i++){
         printf("%zu: %s\n", i, servers->at(i).c_str());
         printf("Server %zu replicas: \n", i);
-        std::vector<std::string> * repList = replicas->at(i);
-        for (size_t j = 0; j < repList->size(); ++j) {
-            printf("%zu: %s\n", j, repList->at(j).c_str());
+//        std::vector<std::string> * repList = replicas->at(i);
+        std::vector<std::string> repList = replicas->at(i);
+        for (size_t j = 0; j < repList.size(); ++j) {
+            printf("%zu: %s\n", j, repList.at(j).c_str());
         }
         printf("--- \n");
     }
@@ -144,16 +145,15 @@ rc_t config_yaml::parseServerAddress() {
 }
 
 void config_yaml::saveReplicaServerIP() {
-    std::vector<std::string> * repList;
+    auto repIP = std::string(scalar_get_value(event));
     if (replicas->size() < servers->size()){
-        repList = new std::vector<std::string>();
+        std::vector<std::string> repList;
+        repList.push_back(repIP);
         replicas->push_back(repList);
     }
     else{
-        repList = replicas->back();
+        replicas->back().push_back(repIP);
     }
-
-    repList->push_back(std::string(scalar_get_value(event)));
 }
 
 rc_t config_yaml::parseServerReplicas() {
@@ -350,9 +350,10 @@ done:
 void config_yaml::clear() {
     assert(servers->size() == replicas->size());
     for( size_t i = 0; i < servers->size(); i++){
-        std::vector<std::string> * repList = replicas->at(i);
-        repList->clear();
-        delete repList;
+        replicas->at(i).clear();
+//        std::vector<std::string> * repList = replicas->at(i);
+//        repList->clear();
+//        delete repList;
     }
     servers->clear();
     replicas->clear();
