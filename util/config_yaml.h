@@ -24,16 +24,16 @@ class config_yaml {
 public:
     // list of servers ip addresses
     // server[i] has replicas[i]
-    std::vector<std::string *> * servers;
-    std::vector<std::vector<std::string *> *> * replicas;
+    std::vector<std::string> * servers;
+    std::vector<std::vector<std::string> *> * replicas;
 
     // list of servers ip addresses
-    std::vector<std::string *> * clients;
+    std::vector<std::string> * clients;
 
     // list of zookeeper ips
     // zk_nodes[i] with port at zk_ports[i]
-    std::vector<std::string *> * zk_nodes;
-    std::vector<std::string *> * zk_ports;
+    std::vector<std::string> * zk_nodes;
+    std::vector<std::string> * zk_ports;
 
     void clear();
 

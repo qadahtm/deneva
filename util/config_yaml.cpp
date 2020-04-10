@@ -14,12 +14,13 @@ return rc; \
 #define MOVE_TO_NEXT_EVENT rc = nextEvent(); RETURN_IF_RC_EQ_ERROR
 
 config_yaml::config_yaml() {
-    servers = new std::vector<std::string *>();
-    clients = new std::vector<std::string *>();
-    replicas = new std::vector<std::vector<std::string *> *>();
+    servers = new std::vector<std::string>();
+    replicas = new std::vector<std::vector<std::string> *>();
 
-    zk_nodes = new std::vector<std::string *>();
-    zk_ports = new std::vector<std::string *>();
+    clients = new std::vector<std::string>();
+
+    zk_nodes = new std::vector<std::string>();
+    zk_ports = new std::vector<std::string>();
 
     parser = new yaml_parser_t();
     document =  new yaml_document_t();
@@ -110,25 +111,25 @@ void config_yaml::print() {
 
     printf("Servers:\n");
     for( size_t i = 0; i < servers->size(); i++){
-        printf("%zu: %s\n", i, servers->at(i)->c_str());
+        printf("%zu: %s\n", i, servers->at(i).c_str());
         printf("Server %zu replicas: \n", i);
-        std::vector<std::string *> * repList = replicas->at(i);
+        std::vector<std::string> * repList = replicas->at(i);
         for (size_t j = 0; j < repList->size(); ++j) {
-            printf("%zu: %s\n", j, repList->at(j)->c_str());
+            printf("%zu: %s\n", j, repList->at(j).c_str());
         }
         printf("--- \n");
     }
     printf("=== \n");
     printf("Clients:\n");
     for( size_t i = 0; i < clients->size(); i++){
-        printf("%zu: %s\n", i, clients->at(i)->c_str());
+        printf("%zu: %s\n", i, clients->at(i).c_str());
     }
 
     printf("=== \n");
     printf("Zookeeper cluster:\n");
     assert(zk_nodes->size() == zk_ports->size());
     for(size_t i = 0; i < zk_nodes->size(); i++){
-        printf("%zu ZkNode: %s:%s \n", i, zk_nodes->at(i)->c_str(), zk_ports->at(i)->c_str());
+        printf("%zu ZkNode: %s:%s \n", i, zk_nodes->at(i).c_str(), zk_ports->at(i).c_str());
     }
 }
 
@@ -138,23 +139,21 @@ rc_t config_yaml::parseServerAddress() {
         return ERROR;
     }
     MOVE_TO_NEXT_EVENT
-    auto * address = new std::string(scalar_get_value(event));
-    servers->push_back(address);
+    servers->push_back(std::string(scalar_get_value(event)));
     return OK;
 }
 
 void config_yaml::saveReplicaServerIP() {
-    std::vector<std::string *> * repList;
+    std::vector<std::string> * repList;
     if (replicas->size() < servers->size()){
-        repList = new std::vector<std::string *>();
+        repList = new std::vector<std::string>();
         replicas->push_back(repList);
     }
     else{
         repList = replicas->back();
     }
 
-    auto * ip = new std::string(scalar_get_value(event));
-    repList->push_back(ip);
+    repList->push_back(std::string(scalar_get_value(event)));
 }
 
 rc_t config_yaml::parseServerReplicas() {
@@ -282,8 +281,8 @@ rc_e config_yaml::parseClientAddress() {
     if (event->type != YAML_SCALAR_EVENT){
         return  ERROR;
     }
-    auto * address = new std::string(scalar_get_value(event));
-    clients->push_back(address);
+//    auto * address = new std::string(scalar_get_value(event));
+    clients->push_back(std::string(scalar_get_value(event)));
     return OK;
 }
 
@@ -309,10 +308,8 @@ rc_e config_yaml::parseZkEntry() {
     }
     std::string socket = std::string(scalar_get_value(event));
     size_t col_pos = socket.find_first_of(':',0);
-    auto * port = new std::string(socket.substr(col_pos+1));
-    auto * address = new std::string(socket.substr(0, socket.length()-(socket.length()-col_pos)));
-    zk_nodes->push_back(address);
-    zk_ports->push_back(port);
+    zk_nodes->push_back(socket.substr(0, socket.length()-(socket.length()-col_pos)));
+    zk_ports->push_back(socket.substr(col_pos+1));
     return OK;
 }
 
@@ -353,26 +350,15 @@ done:
 void config_yaml::clear() {
     assert(servers->size() == replicas->size());
     for( size_t i = 0; i < servers->size(); i++){
-        std::vector<std::string *> * repList = replicas->at(i);
-        for (auto & j : *repList) {
-            delete j;
-        }
+        std::vector<std::string> * repList = replicas->at(i);
         repList->clear();
         delete repList;
-        delete servers->at(i);
     }
     servers->clear();
     replicas->clear();
 
-    for(auto it = clients->begin(); it < clients->end(); it++){
-        delete *it;
-    }
     clients->clear();
 
-    for(size_t i = 0; i < zk_nodes->size(); i++){
-        delete zk_nodes->at(i);
-        delete zk_ports->at(i);
-    }
     zk_nodes->clear();
     zk_ports->clear();
 }
