@@ -15,7 +15,7 @@ jobs:
   # This workflow contains a single job called "build"
   build:
     # The type of runner that the job will run on
-    name: deploy to staging
+    name: Q-store build
     runs-on: ubuntu-18.04
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -23,25 +23,26 @@ jobs:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
 
-    # Runs a single command using the runners shell
-    - name: Run a one-line script
-      run: echo Hello, world!
-
     # Runs a set of commands using the runners shell
-    - name: Run a multi-line script
+    - name: Install libraries/packages
       run: |
         echo installing softwar dependencies.
         sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev python3
         echo setting up Python3 as default.
         sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
-    
-    - name: Start build
-      run:
-        mkdir qcd-build; cd qcd-build
-        cmake ../
-        make
-    
-    # Runs local tests using GoogleTests
+
+    - name: Create build directory
+      run: mkdir ${{ github.workspace }}/qcd-build
+
+    - name: Change to build directory
+      run: cd ${{ github.workspace }}/qcd-build
+
+    - name: Run CMake directory
+      run: cmake ${{ github.workspace }}
+
+    - name: Build binaries
+      run: make -j2
+
+      # Runs local tests using GoogleTests
     - name: Run tests
-      run: 
-        ./bin/config_yaml_test
+      run: bin/config_yaml_test
