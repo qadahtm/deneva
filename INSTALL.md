@@ -47,6 +47,8 @@ Watcher SESSION_EVENT state = CONNECTED_STATE
 Got a new session id: 0x171714aa7f40003
 ```
 
+Tutorial on Zookeeper Cli: http://www.mtitek.com/tutorials/zookeeper/zkCli.php
+
 ### Ubuntu 16.04 (xeniel)
 
 The nanomsg version associated with xeniel is old. Therefore, the current build configuration does not support Ubuntu 16.04 out of the box. Users need to manually install `nanomsg` version `1.0.0` or grater manually, and modify the `CMakeLists.txt` to include headers and link libraries for this to work. Similar workaround maybe needed for other software dependencies.
