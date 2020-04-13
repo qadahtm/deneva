@@ -79,6 +79,7 @@ include_directories(transport)
 include_directories(statistics)
 include_directories(".")
 include_directories(util)
+include_directories(paxos)
 
 add_subdirectory(benchmarks)
 add_subdirectory(client)
@@ -89,6 +90,7 @@ add_subdirectory(system)
 add_subdirectory(transport)
 add_subdirectory(scripts)
 add_subdirectory(util)
+add_subdirectory(paxos)
 
 #Tests
 add_subdirectory(test)
@@ -105,6 +107,7 @@ if(APPLE)
     include_directories("/usr/local/Cellar/boost/1.67.0_1/include")
     include_directories("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1")
     include_directories("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/8.1.0/include")
+    include_directories(../deps/zookeeper_mac/include)
 
     include_directories("../deps/jemalloc_mac/include")
     include_directories("../deps/nanomsg_mac/include")
