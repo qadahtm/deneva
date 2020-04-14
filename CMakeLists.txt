@@ -129,6 +129,9 @@ endif()
 #using libyaml installed by apt-get on host
 target_link_libraries(expodb yaml)
 
+#zookeeper
+target_link_libraries(expodb zookeeper_mt)
+
 add_executable(rundb system/main.cpp)
 target_link_libraries(rundb expodb)
 
@@ -136,7 +139,7 @@ add_executable(runcl client/client_main.cpp)
 target_link_libraries(runcl expodb)
 
 #Test modules
-add_executable(basic_tests test/basic_tests.cpp)
+add_executable(basic_tests test/basic_tests.cpp test/paxos_test.cpp)
 target_link_libraries(basic_tests gtest_main)
 target_link_libraries(basic_tests expodb)
 

@@ -5,7 +5,7 @@ For now, this document is a set of notes for Ubuntu 18.04.
 ## Build dependencies
 These dependencies are needed to run the build process.
 
-### Ubuntu 18.04 
+### Ubuntu 18.04 (bionic)
 Install `cmake` version `>= 3.5`. 
 
 Install `libboost-atomic-dev, libnuma, libyaml`. (Note: this is to ensure it compiles, may not be needed later)
@@ -25,7 +25,6 @@ For testing with Zookeeper, the simplest way is to utilize the `zookeeperd` debi
 Install using `apt-get` as follows:
 
 ```shell script
-
 $ sudo apt-get update # update apt-get
 
 # installs zookeeper service and and command line util
