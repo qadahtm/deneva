@@ -1,3 +1,5 @@
+![](https://github.com/msadoghi/ExpoDB-Platform/workflows/BuildAndTest/badge.svg)
+
 SETUP
 -----------------------------
 == Dependencies ==
