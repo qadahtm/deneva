@@ -10,10 +10,13 @@
 #include <vector>
 #include <string>
 
+#define USE_YAML_CPP true
+
 typedef enum rc_e {
     OK,
     ERROR
 } rc_t;
+
 
 class config_yaml {
     yaml_parser_t * parser;

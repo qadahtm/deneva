@@ -7,3 +7,6 @@ rundb
 runcl
 .idea
 cmake-build-debug
+ansible/activate_env
+ansible/dev/hosts
+ansible/exp/hosts

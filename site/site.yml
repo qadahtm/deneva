@@ -1,0 +1,19 @@
+name: "site"
+prefix: "qcd"
+nodes:
+  - name: "node-p1-r1"
+    template: "c8-qstore"
+    zone: "us-east1-b"
+    replicas:
+      - "node"
+      - "node12"
+  - name: "node-p2-r1"
+    template: "c8-qstore"
+    region: "us-east1-a"
+zk_nodes:
+  - name: "zk-1"
+    template: "n4-qstore-zk"
+  - name: "zk-2"
+    template: "n4-qstore-zk"
+  - name: "zk-2"
+    template: "n4-qstore-zk"

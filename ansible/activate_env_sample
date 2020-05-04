@@ -1,0 +1,4 @@
+# Home directory for Python source
+export CEPLOY_HOME=/path/to/cloud-deployer
+# Env. Var. Ceploy's configuration file
+export CEPLOY_CONF_FILE=/path/to/config_file.yml
