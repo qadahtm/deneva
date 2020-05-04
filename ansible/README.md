@@ -1,5 +1,8 @@
 # Ansible-based project and supporting scripts in Python
 
+## Dependencies
+Ansible and Ceploy
+
 ## Setup environment variables
 Copy `activate_env_sample` to `activate_env`
 
@@ -12,6 +15,7 @@ Edit variables values according to the comments, then use the following command:
 $ source activate_env
 ```
 
-## Dependencies
-Ansible and Ceploy
+## Creating cluster nodes
+
+By running the script `init_hosts.py`, cloud vm instances will be created based on `../site/site.yml` site specifications. 
 
