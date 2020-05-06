@@ -1,7 +1,13 @@
 # Ansible-based project and supporting scripts in Python
 
 ## Dependencies
-Ansible and Ceploy
+Ansible, Google Cloud SDK (i.e., `gcloud` CLI) and Ceploy
+
+## Setting Up SSH
+Ansible needs to connect to VM instances remotely via SSH. 
+
+### Google Cloud
+Add public key to project meta-data. 
 
 ## Setup environment variables
 Copy `activate_env_sample` to `activate_env`

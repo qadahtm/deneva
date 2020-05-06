@@ -1,0 +1,9 @@
+deps:
+  - cmake
+  - libboost-atomic-dev
+  - libnuma-dev
+  - libyaml-dev
+  - libnanomsg-dev
+  - libjemalloc-dev
+  - python3
+  - libzookeeper-mt-dev

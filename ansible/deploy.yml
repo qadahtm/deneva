@@ -1,0 +1,11 @@
+- hosts: all
+  tasks:
+  - name: Update Apt
+    become: yes
+    apt: update_cache=yes cache_valid_time=36000
+
+  - name: Install dependencies
+    become: yes
+    apt:
+      name: "{{ deps }}" # located in group_vars/all
+      state: present
