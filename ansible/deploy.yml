@@ -9,3 +9,19 @@
     apt:
       name: "{{ deps }}" # located in group_vars/all
       state: present
+
+  - name: Syncronizing ExpoDB Codebase
+    synchronize:
+      src: ../../
+      dest: ~/expodb
+
+  - name: Create build directory
+    file:
+      state: directory
+      path: ~/expodb-build
+
+  - name: Build code
+    command: "{{ item }} chdir=~/expodb-build"
+    with_items:
+      - cmake ~/expodb
+      - make

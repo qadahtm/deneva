@@ -1,9 +1,11 @@
 deps:
   - cmake
+  - make
+  - build-essential
   - libboost-atomic-dev
   - libnuma-dev
   - libyaml-dev
   - libnanomsg-dev
   - libjemalloc-dev
-  - python3
+  - python3-dev
   - libzookeeper-mt-dev

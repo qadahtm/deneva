@@ -1,0 +1,10 @@
+- /deps
+- /exp_results
+- /halstead
+- /obj
+- /pynb
+- /cmake-build-debug
+- /cloud-deployer
+- /ansible
+- /.github
+- /site
