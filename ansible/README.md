@@ -21,6 +21,13 @@ Edit variables values according to the comments, then use the following command:
 $ source activate_env
 ```
 
+### Disable SSH Strict check for host keys
+
+Use the following: 
+```shell script
+$ export ANSIBLE_HOST_KEY_CHECKING=False
+```
+
 ## Creating cluster nodes
 
 By running the script `init_hosts.py`, cloud vm instances will be created based on `../site/site.yml` site specifications. 
