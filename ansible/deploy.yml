@@ -25,3 +25,6 @@
     with_items:
       - cmake ~/expodb
       - make
+
+  - name: Copy ifconfig.txt
+    command: "cp ~/expodb/ifconfig.txt ~/expodb-build/ifconfig.txt"

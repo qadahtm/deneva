@@ -7,16 +7,18 @@ import yaml
 def usage():
     print('init_hosts.py [-h, --ceploy-home=/path/to/ceploy, --conf-file=/path/to/ceploy-conf] <inventory directory>')
 
+
 def delete_hosts(opts, args):
     pass
+
 
 def get_vm_name(prefix, n):
     return "{}-{}-{}".format(prefix, n['group'], n['name'])
 
-def main(argv):
 
+def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hd",["help", "delete-hosts", "ceploy-home=", "conf-file="])
+        opts, args = getopt.getopt(argv, "hd", ["help", "delete-hosts", "ceploy-home=", "conf-file="])
     except getopt.GetoptError:
         usage()
         sys.exit(2)
@@ -46,7 +48,6 @@ def main(argv):
     from ceploy.constants import Provider
 
     if cloud_conf_file is None:
-
         raise ValueError("Setting environemnt variable CEPLOY_CONF_FILE to point to the key file is required")
 
     # initiate Cloud context
@@ -55,8 +56,30 @@ def main(argv):
     deploy_vms_and_create_hosts_file(args, cloud)
 
 
-def deploy_vms_and_create_hosts_file(args, cloud):
+def print_error(msg):
+    from ceploy.constants import OutputColors
+    print("{}{}{}".format(OutputColors.COLOR_RED, msg, OutputColors.COLOR_RESET))
 
+def print_warning(msg):
+    from ceploy.constants import OutputColors
+    print("{}{}{}".format(OutputColors.COLOR_YELLOW, msg, OutputColors.COLOR_RESET))
+
+def create_ifconfig_file(output_path, servers, clients):
+    with open("{}/ifconfig.txt".format(output_path), 'w') as ifconfig_file:
+
+        if len(servers) == 0:
+            print_warning("Warning: Server IPs list is empty")
+
+        for n in servers:
+            print(servers[n]['vm'].ext_ip, file=ifconfig_file)
+
+        if len(clients) == 0:
+            print_warning("Warning: Client IPs list is empty")
+        for n in clients:
+            print(clients[n]['vm'].ext_ip, file=ifconfig_file)
+
+
+def deploy_vms_and_create_hosts_file(args, cloud):
     from ceploy.providers.gcloud import GCVM
 
     with open('../site/site.yml') as site_file:
@@ -94,6 +117,7 @@ def deploy_vms_and_create_hosts_file(args, cloud):
                 print("Error in create instance.")
                 pprint(err)
 
+        # Create hosts file for Ansible
         with open('./{}/hosts'.format(args[0]), 'w') as hosts_file:
 
             for n in default_group:
@@ -113,6 +137,9 @@ def deploy_vms_and_create_hosts_file(args, cloud):
                 print("[zookeeper]", file=hosts_file)
             for n in zookeepers:
                 print(zookeepers[n]['vm'].ext_ip, file=hosts_file)
+
+        # Create ifconfig.txt for ExpoDB
+        create_ifconfig_file("..", servers, clients)
 
 
 if __name__ == "__main__":
