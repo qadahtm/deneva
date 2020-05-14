@@ -25,22 +25,22 @@
 
 #define MAX_IFADDR_LEN 20 // max # of characters in name of address
 
-void Transport::read_ifconfig(const char * ifaddr_file) {
+void Transport::read_ifconfig(const char *ifaddr_file) {
 
-	ifaddr = new char *[g_total_node_cnt];
+    ifaddr = new char *[g_total_node_cnt];
 
-	uint64_t cnt = 0;
-  printf("Reading ifconfig file: %s\n",ifaddr_file);
-	ifstream fin(ifaddr_file);
-	string line;
-  while (getline(fin, line)) {
-		//memcpy(ifaddr[cnt],&line[0],12);
-		ifaddr[cnt] = new char[line.length()+1];
-    strcpy(ifaddr[cnt],&line[0]);
-		printf("%ld: %s\n",cnt,ifaddr[cnt]);
-		cnt++;
-	}
-  assert(cnt == g_total_node_cnt);
+    uint64_t cnt = 0;
+    printf("Reading ifconfig file: %s\n", ifaddr_file);
+    ifstream fin(ifaddr_file);
+    string line;
+    while (getline(fin, line)) {
+        //memcpy(ifaddr[cnt],&line[0],12);
+        ifaddr[cnt] = new char[line.length() + 1];
+        strcpy(ifaddr[cnt], &line[0]);
+        printf("%ld: %s\n", cnt, ifaddr[cnt]);
+        cnt++;
+    }
+    assert(cnt == g_total_node_cnt);
 }
 
 uint64_t Transport::get_socket_count() {

@@ -286,7 +286,7 @@ all record actions coresponding to that tuple are maintained in its linkedlist.
 the class ActiveTupleList is monitoring the active tuple set in each round.
 with such kind of information, it is easier for the sytem to do load balancing during the execution
 
-each site/machine only invoke on ActiveTupleList object
+each conf/machine only invoke on ActiveTupleList object
 important: use new to initialize this object!!! not use malloc
 */
     class ActiveTupleList {
@@ -718,7 +718,7 @@ save the environment information(hardware information)
         Executor**       executors;
         SyncWorker*     syncworker;
 
-        //each site maintains multiple dependency graphs that are constructed in parallel
+        //each conf maintains multiple dependency graphs that are constructed in parallel
         ActionDependencyGraph** dgraphs;
 
         Workload* workload;

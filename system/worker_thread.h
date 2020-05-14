@@ -31,10 +31,12 @@ class Message;
 
 class WorkerThread : public Thread {
 public:
-    RC run();
+    ~WorkerThread() override;
+
+    RC run() override;
     RC run_normal_mode();
     RC run_fixed_mode();
-    void setup();
+    void setup() override;
     RC process(Message * msg);
     void check_if_done(RC rc);
     void release_txn_man();

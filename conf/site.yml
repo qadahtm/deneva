@@ -1,4 +1,4 @@
-name: "site"
+name: "conf"
 prefix: "qcd"
 nodes:
   # two servers

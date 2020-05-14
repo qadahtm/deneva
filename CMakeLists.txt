@@ -91,7 +91,7 @@ add_subdirectory(transport)
 add_subdirectory(scripts)
 add_subdirectory(util)
 add_subdirectory(paxos)
-
+add_subdirectory(conf)
 #Tests
 add_subdirectory(test)
 

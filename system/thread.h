@@ -23,7 +23,7 @@ class Workload;
 
 class Thread {
 public:
-    virtual ~Thread() {}
+    virtual ~Thread() = default;
     void send_init_done_to_all_nodes();
     void progress_stats();
     void heartbeat();

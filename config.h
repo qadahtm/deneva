@@ -58,7 +58,7 @@
 #define TIME_ENABLE         true //STATS_ENABLE
 #define ASSERT_ENABLED      true
 #define NUMA_ENABLED        false
-#define PROFILE_EXEC_TIMING      false
+#define PROFILE_EXEC_TIMING      true
 
 #define FIN_BY_TIME true
 // Max allowed number of transactions and also controls the pool size of the transaction table

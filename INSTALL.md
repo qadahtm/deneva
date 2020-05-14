@@ -6,12 +6,17 @@ For now, this document is a set of notes for Ubuntu 18.04.
 These dependencies are needed to run the build process.
 
 ### Ubuntu 18.04 (bionic)
+
+Ubuntu 18.04 (Bionic) has updated packages that the code base depends on during compilation. However, it is possible to build and run the code on older versions by installing the correct versions manually. 
+
+TODO: Add version numbers for dependencies. 
+
 Install `cmake` version `>= 3.5`. 
 
 Install `libboost-atomic-dev, libnuma, libyaml`. (Note: this is to ensure it compiles, may not be needed later)
 
 ```shell script
-$ sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev python3 libzookeeper-mt-dev
+$ sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev python3 libzookeeper-mt-dev libyaml-cpp-dev
 ```
 
 Install `python3`, use `update-alternatives` to configure the defualt python version. 

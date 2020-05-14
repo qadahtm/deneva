@@ -60,9 +60,11 @@ def print_error(msg):
     from ceploy.constants import OutputColors
     print("{}{}{}".format(OutputColors.COLOR_RED, msg, OutputColors.COLOR_RESET))
 
+
 def print_warning(msg):
     from ceploy.constants import OutputColors
     print("{}{}{}".format(OutputColors.COLOR_YELLOW, msg, OutputColors.COLOR_RESET))
+
 
 def create_ifconfig_file(output_path, servers, clients):
     with open("{}/ifconfig.txt".format(output_path), 'w') as ifconfig_file:
@@ -82,7 +84,7 @@ def create_ifconfig_file(output_path, servers, clients):
 def deploy_vms_and_create_hosts_file(args, cloud):
     from ceploy.providers.gcloud import GCVM
 
-    with open('../site/site.yml') as site_file:
+    with open('../conf/site.yml') as site_file:
         site = yaml.full_load(site_file)
         from pprint import pprint
 
@@ -100,7 +102,7 @@ def deploy_vms_and_create_hosts_file(args, cloud):
             if status:
                 final_vm = {}
                 final_vm['vm'] = GCVM(vm[0])
-                final_vm['vm_raw'] = vm[0]
+                # final_vm['vm_raw'] = vm[0]
                 final_vm['conf'] = n
 
                 if group == 'clients':
@@ -140,6 +142,18 @@ def deploy_vms_and_create_hosts_file(args, cloud):
 
         # Create ifconfig.txt for ExpoDB
         create_ifconfig_file("..", servers, clients)
+
+        # Create site_deploy.yml
+        try:
+            with open("../conf/site_deploy.yml", "w") as site_deploy:
+                doc = {}
+                doc['servers'] = servers
+                doc['clients'] = clients
+                doc['zookeeper'] = zookeepers
+                yaml.dump(doc, site_deploy)
+        except Exception as e:
+            print_error("Could not dump YAML site_deploy file")
+            print_error(e)
 
 
 if __name__ == "__main__":

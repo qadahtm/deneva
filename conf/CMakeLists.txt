@@ -1,0 +1,1 @@
+configure_file(site.yml site.yml COPYONLY)

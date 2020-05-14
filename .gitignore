@@ -10,3 +10,4 @@ cmake-build-debug
 ansible/activate_env
 ansible/dev/hosts
 ansible/exp/hosts
+conf/site_deploy.yml
