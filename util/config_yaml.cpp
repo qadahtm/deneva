@@ -13,7 +13,7 @@ return rc; \
 
 #define MOVE_TO_NEXT_EVENT rc = nextEvent(); RETURN_IF_RC_EQ_ERROR
 
-config_yaml::config_yaml() {
+config_yaml::config_yaml(bool use_yaml_cpp) {
     servers = new std::vector<std::string>();
     replicas = new std::vector<std::vector<std::string>>();
 
@@ -22,9 +22,13 @@ config_yaml::config_yaml() {
     zk_nodes = new std::vector<std::string>();
     zk_ports = new std::vector<std::string>();
 
-    parser = new yaml_parser_t();
-    document =  new yaml_document_t();
-    event = new yaml_event_t();
+    this->use_yamlcpp = use_yaml_cpp;
+
+    if (!use_yamlcpp){
+        parser = new yaml_parser_t();
+        document =  new yaml_document_t();
+        event = new yaml_event_t();
+    }
 }
 
 config_yaml::~config_yaml() {
@@ -39,71 +43,110 @@ config_yaml::~config_yaml() {
     delete zk_nodes;
     delete zk_ports;
 
-    delete(document);
-    delete(parser);
-    delete(event);
+    if (!use_yamlcpp){
+        delete(document);
+        delete(parser);
+        delete(event);
+    }
 }
 
 int config_yaml::load(char * input) {
 
-    yaml_parser_initialize(parser);
-    printf("Loading YAML file: %s\n", input);
-    FILE * conf_file = fopen(input, "rb");
-    if (conf_file == nullptr){
-        printf("Could note open file %s\n", input);
-        return 1;
-    }
-    yaml_parser_set_input_file(parser, conf_file);
     int error = 0;
     rc_t rc;
+    printf("Loading YAML file: %s\n", input);
 
-    while (true){
-
-        if (!yaml_parser_parse(parser, event)){
-            error = 1;
-            goto done;
+    if (!use_yamlcpp){
+        yaml_parser_initialize(parser);
+        FILE * conf_file = fopen(input, "rb");
+        if (conf_file == nullptr){
+            printf("Could note open file %s\n", input);
+            return 1;
         }
+        yaml_parser_set_input_file(parser, conf_file);
+        while (true){
 
-        if (event->type == YAML_NO_EVENT){
-            break;
-        }
-        if (event->type == YAML_SCALAR_EVENT &&
-            scalar_get_value(event) == "servers") {
-            rc = parserServerList();
-            if (rc == ERROR){
+            if (!yaml_parser_parse(parser, event)){
                 error = 1;
                 goto done;
             }
-        }
 
-        if (event->type == YAML_SCALAR_EVENT &&
-            scalar_get_value(event) == "clients") {
-            rc = parseClientList();
-            if (rc == ERROR){
-                error = 1;
-                goto done;
+            if (event->type == YAML_NO_EVENT){
+                break;
             }
-        }
-
-        if (event->type == YAML_SCALAR_EVENT &&
-            scalar_get_value(event) == "zookeeper") {
-            rc = parseZkList();
-            if (rc == ERROR){
-                error = 1;
-                goto done;
+            if (event->type == YAML_SCALAR_EVENT &&
+                scalar_get_value(event) == "servers") {
+                rc = parserServerList();
+                if (rc == ERROR){
+                    error = 1;
+                    goto done;
+                }
             }
+
+            if (event->type == YAML_SCALAR_EVENT &&
+                scalar_get_value(event) == "clients") {
+                rc = parseClientList();
+                if (rc == ERROR){
+                    error = 1;
+                    goto done;
+                }
+            }
+
+            if (event->type == YAML_SCALAR_EVENT &&
+                scalar_get_value(event) == "zookeeper") {
+                rc = parseZkList();
+                if (rc == ERROR){
+                    error = 1;
+                    goto done;
+                }
+            }
+
+
+            yaml_event_delete(event);
         }
 
-
-        yaml_event_delete(event);
+        printf("Servers list size: %lu\n", servers->size());
+        printf("Client list size: %lu\n", clients->size());
+        done:
+        fclose(conf_file);
+        yaml_document_delete(document);
     }
+    else{
+        // Using yaml-cpp
+        site_deploy = YAML::LoadAllFromFile(std::string(input))[0]; // file has only one document
 
-    printf("Servers list size: %lu\n", servers->size());
-    printf("Client list size: %lu\n", clients->size());
+        std::string group = "servers";
+        for (auto it = site_deploy[group].begin(); it != site_deploy[group].end() ; ++it) {
+            auto address = (*it)["address"].as<std::string>();
+            servers->push_back(address);
+            auto yaml_replicas = (*it)["replicas"];
+            for (auto r = yaml_replicas.begin(); r != yaml_replicas.end(); ++r){
+                auto repIP = (*r).as<std::string>();
+                if (replicas->size() < servers->size()){
+                    std::vector<std::string> repList;
+                    repList.push_back(repIP);
+                    replicas->push_back(repList);
+                }
+                else{
+                    replicas->back().push_back(repIP);
+                }
+            }
+        }
 
-done:
-    fclose(conf_file);
-    yaml_document_delete(document);
+        group = "clients";
+        for (auto it = site_deploy[group].begin(); it != site_deploy[group].end() ; ++it) {
+            auto address = (*it).as<std::string>();
+            clients->push_back(address);
+        }
+
+        group = "zookeeper";
+        for (auto it = site_deploy[group].begin(); it != site_deploy[group].end() ; ++it) {
+            std::string socket = (*it).as<std::string>();
+            size_t col_pos = socket.find_first_of(':',0);
+            zk_nodes->push_back(socket.substr(0, socket.length()-(socket.length()-col_pos)));
+            zk_ports->push_back(socket.substr(col_pos+1));
+        }
+    }
     return error;
 }
 

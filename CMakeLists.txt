@@ -132,6 +132,10 @@ configure_file(run_local_test.sh run_local_test.sh COPYONLY)
 #using libyaml installed by apt-get on host
 target_link_libraries(expodb yaml)
 
+#using libyaml installed by apt-get on host
+target_link_libraries(expodb yaml-cpp)
+
+
 #zookeeper
 target_link_libraries(expodb zookeeper_mt)
 

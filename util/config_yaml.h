@@ -5,12 +5,13 @@
 #ifndef EXPODB_QCD_CONFIG_YAML_H
 #define EXPODB_QCD_CONFIG_YAML_H
 
+#include <yaml-cpp/yaml.h>
 #include <yaml.h>
 
 #include <vector>
 #include <string>
 
-#define USE_YAML_CPP true
+
 
 typedef enum rc_e {
     OK,
@@ -19,10 +20,14 @@ typedef enum rc_e {
 
 
 class config_yaml {
+
+    YAML::Node site_deploy;
     yaml_parser_t * parser;
     yaml_document_t * document;
     yaml_event_t * event;
     int done = 0;
+
+    bool use_yamlcpp;
 
 public:
     // list of servers ip addresses
@@ -40,7 +45,7 @@ public:
 
     void clear();
 
-    config_yaml();
+    config_yaml(bool use_yamlcpp);
 
     ~config_yaml();
 
