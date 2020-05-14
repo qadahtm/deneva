@@ -10,7 +10,7 @@
 
 TEST(ZookeeperPaxos, LoadConfigTest){
     auto conf = new config_yaml(false);
-    char * in = (char *) "./test/test_zk_only_config.yml";
+    auto in = std::string("./test/test_zk_only_config.yml");
     int rc = conf->load(in);
     conf->print();
 

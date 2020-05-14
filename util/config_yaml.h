@@ -15,7 +15,7 @@
 
 typedef enum rc_e {
     OK,
-    ERROR
+    RC_ERROR
 } rc_t;
 
 
@@ -55,14 +55,14 @@ public:
      * @return 0 if success or 1 in case of error in YAML file
      */
 
-    int load(char * input);
+    int load(std::string input);
 
     /**
      * Prints out LibYaml parser events
      * @param input File path to YAML config file
      * @return 0 if success or 1 in case of error in YAML file
      */
-    int trace(char * input);
+    int trace(std::string input);
 
     void print();
 

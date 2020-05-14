@@ -7,7 +7,7 @@
 
 TEST(ConfigYaml, TraceTest){
     auto * conf = new config_yaml(false);
-    char * in = (char *) "./test/test_config.yml";
+    auto in = std::string("./test/test_config.yml");
     int rc = conf->trace(in);
     delete(conf);
     ASSERT_EQ(rc, 0);
@@ -15,7 +15,7 @@ TEST(ConfigYaml, TraceTest){
 
 TEST(ConfigYaml, LoadTest){
     auto * conf = new config_yaml(false);
-    char * in = (char *) "./test/test_config.yml";
+    auto in = std::string("./test/test_config.yml");
     int rc = conf->load(in);
     conf->print();
 
@@ -53,7 +53,7 @@ TEST(ConfigYaml, LoadTest){
 
 TEST(ConfigYaml, LoadTest_NoZks){
     auto conf = new config_yaml(false);
-    char * in = (char *) "./test/test_config2.yml";
+    auto in = std::string("./test/test_config2.yml");
     int rc = conf->load(in);
     conf->print();
 
@@ -74,7 +74,7 @@ TEST(ConfigYaml, LoadTest_NoZks){
 
 TEST(ConfigYaml, LoadTest_YamlCpp){
     auto conf = new config_yaml(true);
-    char * in = (char *) "./test/test_config.yml";
+    auto in = std::string("./test/test_config.yml");
     int rc = conf->load(in);
     conf->print();
 
@@ -106,6 +106,6 @@ TEST(ConfigYaml, LoadTest_YamlCpp){
     ASSERT_STREQ(conf->zk_ports->at(0).c_str(), "2828");
     ASSERT_STREQ(conf->zk_ports->at(1).c_str(), "2828");
     ASSERT_STREQ(conf->zk_ports->at(2).c_str(), "2828");
-    
+
     delete(conf);
 }

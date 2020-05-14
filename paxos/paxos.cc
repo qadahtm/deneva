@@ -41,7 +41,7 @@ void Paxos::init(const string &zookeeper_config_file, bool reader, const string 
     this->traceNodeCreation = traceNodeCreation;
 
     auto conf = new config_yaml(false);
-    int rc = conf->load( (char *) zookeeper_config_file.c_str());
+    int rc = conf->load(zookeeper_config_file);
     if (rc == 1) {
         printf("Loading Zookeeper config failed.\n");
         return;

@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <cassert>
 
-#define RETURN_IF_RC_EQ_ERROR if (rc == ERROR){ \
+#define RETURN_IF_RC_EQ_ERROR if (rc == RC_ERROR){ \
 return rc; \
 }
 
@@ -50,17 +50,17 @@ config_yaml::~config_yaml() {
     }
 }
 
-int config_yaml::load(char * input) {
+int config_yaml::load(std::string input) {
 
     int error = 0;
     rc_t rc;
-    printf("Loading YAML file: %s\n", input);
+    printf("Loading YAML file: %s\n", input.c_str());
 
     if (!use_yamlcpp){
         yaml_parser_initialize(parser);
-        FILE * conf_file = fopen(input, "rb");
+        FILE * conf_file = fopen(input.c_str(), "rb");
         if (conf_file == nullptr){
-            printf("Could note open file %s\n", input);
+            printf("Could note open file %s\n", input.c_str());
             return 1;
         }
         yaml_parser_set_input_file(parser, conf_file);
@@ -77,7 +77,7 @@ int config_yaml::load(char * input) {
             if (event->type == YAML_SCALAR_EVENT &&
                 scalar_get_value(event) == "servers") {
                 rc = parserServerList();
-                if (rc == ERROR){
+                if (rc == RC_ERROR){
                     error = 1;
                     goto done;
                 }
@@ -86,7 +86,7 @@ int config_yaml::load(char * input) {
             if (event->type == YAML_SCALAR_EVENT &&
                 scalar_get_value(event) == "clients") {
                 rc = parseClientList();
-                if (rc == ERROR){
+                if (rc == RC_ERROR){
                     error = 1;
                     goto done;
                 }
@@ -95,7 +95,7 @@ int config_yaml::load(char * input) {
             if (event->type == YAML_SCALAR_EVENT &&
                 scalar_get_value(event) == "zookeeper") {
                 rc = parseZkList();
-                if (rc == ERROR){
+                if (rc == RC_ERROR){
                     error = 1;
                     goto done;
                 }
@@ -180,7 +180,7 @@ void config_yaml::print() {
 rc_t config_yaml::parseServerAddress() {
     rc_t rc;
     if (scalar_get_value(event) != "address"){
-        return ERROR;
+        return RC_ERROR;
     }
     MOVE_TO_NEXT_EVENT
     servers->push_back(std::string(scalar_get_value(event)));
@@ -202,11 +202,11 @@ void config_yaml::saveReplicaServerIP() {
 rc_t config_yaml::parseServerReplicas() {
     rc_t rc;
     if (event->type != YAML_SCALAR_EVENT){
-        return ERROR;
+        return RC_ERROR;
     }
 
     if (scalar_get_value(event) != "replicas"){
-        return ERROR;
+        return RC_ERROR;
     }
 
     MOVE_TO_NEXT_EVENT
@@ -299,7 +299,7 @@ rc_t config_yaml::parserServerList() {
 
 rc_t config_yaml::nextEvent() {
     if (!yaml_parser_parse(parser, event)){
-        return  ERROR;
+        return  RC_ERROR;
     }
     return OK;
 }
@@ -322,7 +322,7 @@ rc_t config_yaml::parseClientList() {
 
 rc_e config_yaml::parseClientAddress() {
     if (event->type != YAML_SCALAR_EVENT){
-        return  ERROR;
+        return  RC_ERROR;
     }
 //    auto * address = new std::string(scalar_get_value(event));
     clients->push_back(std::string(scalar_get_value(event)));
@@ -347,7 +347,7 @@ rc_t config_yaml::parseZkList() {
 
 rc_e config_yaml::parseZkEntry() {
     if (event->type != YAML_SCALAR_EVENT){
-        return  ERROR;
+        return  RC_ERROR;
     }
     std::string socket = std::string(scalar_get_value(event));
     size_t col_pos = socket.find_first_of(':',0);
@@ -356,10 +356,10 @@ rc_e config_yaml::parseZkEntry() {
     return OK;
 }
 
-int config_yaml::trace(char *input) {
+int config_yaml::trace(std::string input) {
     yaml_parser_initialize(parser);
-    printf("Tracing YAML file: %s\n", input);
-    FILE * conf_file = fopen(input, "rb");
+    printf("Tracing YAML file: %s\n", input.c_str());
+    FILE * conf_file = fopen(input.c_str(), "rb");
     if (conf_file == nullptr){
         return 1;
     }
