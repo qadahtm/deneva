@@ -27,7 +27,7 @@ jobs:
     - name: Install libraries/packages
       run: |
         echo installing softwar dependencies.
-        sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev libzookeeper-mt-dev python3 zookeeperd zookeeper-bin
+        sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev libzookeeper-mt-dev python3 zookeeperd zookeeper-bin libyaml-cpp-dev
         echo setting up Python3 as default.
         sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 
