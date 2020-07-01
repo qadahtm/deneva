@@ -28,7 +28,28 @@ Use the following:
 $ export ANSIBLE_HOST_KEY_CHECKING=False
 ```
 
-## Creating cluster nodes
+## Provision cluster nodes
 
-By running the script `init_hosts.py`, cloud vm instances will be created based on `../site/site.yml` site specifications. 
+By running the script `provision.py`, cloud vm instances will be created based on `../site/site_deploy.yml` site specifications.
+The `provision.py` script requires to specify a directory to store the Ansible inventory information. 
+Exmple command: 
 
+```shell script
+$ python provision.py dev
+```
+
+Example 
+
+## Setup nodes 
+This Ansible script installs required packages to build and run experiments on the provisioned cluster.
+
+```shell script
+$ ansible-playbook -i dev deploy.yml
+```
+
+## Run experiment 
+This Ansible script builds and run an experiment using the provisioned cluster. It uses the current `config.h`, `ifconfig.txt` in this root project directory.   
+
+```shell script
+$ ansible-playbook -i dev build_run.yml
+```

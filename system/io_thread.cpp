@@ -176,6 +176,7 @@ RC InputThread::server_recv_loop() {
 
     std::vector<Message *> *msgs;
 #if CC_ALG == QUECC
+    uint64_t quecc_starttime;
     // avoids enqueue to the same planner
     planner_msg_cnt = _thd_id;
     for (int i = 0; i < PLAN_THREAD_CNT; ++i) {
@@ -267,6 +268,8 @@ RC InputThread::server_recv_loop() {
             }
 
             if (msg->rtype == REMOTE_EQ_SET) {
+                quecc_starttime = get_sys_clock();
+
                 auto eq_msg = (RemoteEQSetMessage *) msg;
                 uint64_t batch_slot = eq_msg->batch_id % g_batch_map_length;
                 batch_partition * batch_part;
@@ -287,6 +290,7 @@ RC InputThread::server_recv_loop() {
                 uint64_t expected = 0;
                 uint64_t desired = (uint64_t) batch_part;
 
+                INC_STATS(get_rthd_id(), rt_rplan_time[get_rthd_id()], get_sys_clock() - quecc_starttime);
                 assert(eq_msg->planner_id < (g_plan_thread_cnt*g_node_cnt));
                 assert(eq_msg->exec_id < (g_thread_cnt*g_node_cnt));
                 assert(batch_slot < g_batch_map_length);
@@ -305,6 +309,8 @@ RC InputThread::server_recv_loop() {
             }
 
             if (msg->rtype == REMOTE_EQ) {
+                quecc_starttime = get_sys_clock();
+
                 RemoteEQMessage * eq_msg = (RemoteEQMessage *) msg;
                 uint64_t batch_slot = eq_msg->batch_id % g_batch_map_length;
                 batch_partition * batch_part;
@@ -339,6 +345,7 @@ RC InputThread::server_recv_loop() {
                 // neet to spin if batch slot is not ready
 //                DEBUG_Q("N_%u:RT_%lu: Going to Spin on MSG Remote EQ from node=%lu, PT_%lu, ET_%lu, batch_id=%lu\n",g_node_id,_thd_id,
 //                        eq_msg->return_node_id, eq_msg->planner_id, eq_msg->exec_id, eq_msg->batch_id);
+                INC_STATS(get_rthd_id(), rt_rplan_time[get_rthd_id()], get_sys_clock() - quecc_starttime);
                 assert(eq_msg->planner_id < (g_plan_thread_cnt*g_node_cnt));
                 assert(eq_msg->exec_id < (g_thread_cnt*g_node_cnt));
                 assert(batch_slot < g_batch_map_length);
@@ -372,6 +379,8 @@ RC InputThread::server_recv_loop() {
 
 
             if (msg->rtype == REMOTE_EQ_ACK) {
+                quecc_starttime = get_sys_clock();
+
                 RemoteEQAckMessage * req_ack = (RemoteEQAckMessage *) msg;
                 DEBUG_Q("N_%u:RT_%lu: Received ACK for remote EQ from node=%lu, batch_map[%lu][%lu][%lu]\n",g_node_id,_thd_id,
                         req_ack->return_node_id, req_ack->batch_id, req_ack->planner_id, req_ack->exec_id);
@@ -462,6 +471,7 @@ RC InputThread::server_recv_loop() {
                     }
                 }
 #endif
+                INC_STATS(get_rthd_id(), rt_rplan_time[get_rthd_id()], get_sys_clock() - quecc_starttime);
                 Message::release_message(msg);
                 msgs->erase(msgs->begin());
                 continue;

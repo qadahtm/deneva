@@ -270,6 +270,11 @@ public:
     double *wt_hl_sync_exec_time;
     double *wt_pg_sync_exec_time;
     double *wt_hl_sync_commit_time;
+
+    // Time elapsed waiting for other nodes to sync and send RDONE message
+    double *wt_node_deps_wait_time;
+
+    double *rt_rplan_time;
 #endif
 
     // OCC

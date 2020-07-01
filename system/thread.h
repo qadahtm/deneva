@@ -35,6 +35,15 @@ public:
 
     uint64_t    get_thd_id();
     uint64_t    get_node_id();
+
+    inline uint64_t get_rthd_id() {
+        return _thd_id-g_thread_cnt;
+    }
+
+    inline uint64_t get_sthd_id() {
+        return _thd_id-(g_thread_cnt+g_rem_thread_cnt);
+    }
+
     void tsetup();
 
     void        init(uint64_t thd_id, uint64_t node_id, Workload * workload);

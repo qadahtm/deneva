@@ -2711,8 +2711,6 @@ void WorkerThread::do_batch_delivery_mpt_pernode(uint64_t batch_slot, priority_g
                         g_node_id,_thd_id,i, batch_part->exec_qs->size(), wbatch_id,planner_cwid,(*it)->exec_thd_id, e_cnt);
             }
 
-
-
             expected = 0;
             desired = (uint64_t) batch_part;
             // multipartiton workload
@@ -4122,6 +4120,7 @@ SRC WorkerThread::sync_on_commit_phase_end_sync_block(uint64_t batch_slot){
 
 #if PROFILE_EXEC_TIMING
     uint64_t sync_idlestarttime =0;
+    uint64_t starttime =0;
 #endif
     UInt32 done_cnt = 0;
     work_queue.commit_sblocks[batch_slot][_thd_id].done = 1;
@@ -4172,9 +4171,13 @@ SRC WorkerThread::sync_on_commit_phase_end_sync_block(uint64_t batch_slot){
         }
 
         DEBUG_Q("N_%u:WT_%lu: Waiting for other nodes to finish for batch_id=%lu\n",g_node_id,_thd_id,wbatch_id);
-
+#if PROFILE_EXEC_TIMING
+        starttime = get_sys_clock();
+#endif
         while(!simulation->is_done() && quecc_pool.batch_deps[batch_slot].load(memory_order_acq_rel) > 0){}
-
+#if PROFILE_EXEC_TIMING
+        INC_STATS(_thd_id, wt_node_deps_wait_time[_thd_id], get_sys_clock()-starttime);
+#endif
         if (simulation->is_done()){
             return BREAK;
         }

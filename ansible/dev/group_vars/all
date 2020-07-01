@@ -8,4 +8,6 @@ deps:
   - libnanomsg-dev
   - libjemalloc-dev
   - python3-dev
+  - python3-pip
   - libzookeeper-mt-dev
+  - libyaml-cpp-dev

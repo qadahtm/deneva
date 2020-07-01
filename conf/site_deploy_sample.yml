@@ -1,0 +1,7 @@
+clients:
+  - localhost
+servers:
+  -
+    address: localhost
+  -
+    address: localhost

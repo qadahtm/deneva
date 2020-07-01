@@ -185,7 +185,7 @@ void Transport::init() {
 
     // Loading YAML-based config
     _yaml_conf = new config_yaml(true);
-    _yaml_conf->load(get_yaml_conf_path().c_str());
+//    _yaml_conf->load(get_yaml_conf_path().c_str());
 
     rr = 0;
     printf("Tport Init %d: %ld\n", g_node_id, _sock_cnt);

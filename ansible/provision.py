@@ -5,7 +5,7 @@ import yaml
 
 
 def usage():
-    print('init_hosts.py [-h, --ceploy-home=/path/to/ceploy, --conf-file=/path/to/ceploy-conf] <inventory directory>')
+    print('provision.py [-h, --ceploy-home=/path/to/ceploy, --conf-file=/path/to/ceploy-conf] <inventory directory>')
 
 
 def delete_hosts(opts, args):
@@ -68,17 +68,24 @@ def print_warning(msg):
 
 def create_ifconfig_file(output_path, servers, clients):
     with open("{}/ifconfig.txt".format(output_path), 'w') as ifconfig_file:
-
+        nid = 0
         if len(servers) == 0:
             print_warning("Warning: Server IPs list is empty")
 
         for n in servers:
-            print(servers[n]['vm'].ext_ip, file=ifconfig_file)
+            # print(n['address'], file=ifconfig_file)
+            print(n['int_ip'], file=ifconfig_file)
+            n['nid'] = nid
+            nid += 1
 
         if len(clients) == 0:
             print_warning("Warning: Client IPs list is empty")
         for n in clients:
-            print(clients[n]['vm'].ext_ip, file=ifconfig_file)
+            # print(n['address'], file=ifconfig_file)
+            print(n['int_ip'], file=ifconfig_file)
+            n['nid'] = nid
+            nid += 1
+    return servers, clients
 
 
 def deploy_vms_and_create_hosts_file(args, cloud):
@@ -90,9 +97,9 @@ def deploy_vms_and_create_hosts_file(args, cloud):
 
         prefix = site['prefix']
 
-        servers = {}
-        clients = {}
-        zookeepers = {}
+        servers = []
+        clients = []
+        zookeepers = []
         default_group = {}
 
         for n in site['nodes']:
@@ -101,47 +108,55 @@ def deploy_vms_and_create_hosts_file(args, cloud):
             status, vm, err = cloud.create_instance(vm_name, n['template'], n['zone'])
             if status:
                 final_vm = {}
-                final_vm['vm'] = GCVM(vm[0])
+                tvm = GCVM(vm[0])
+                # final_vm['vm'] = GCVM(vm[0])
                 # final_vm['vm_raw'] = vm[0]
                 final_vm['conf'] = n
+                final_vm['address'] = tvm.ext_ip
+                final_vm['int_ip'] = tvm.int_ip
 
-                if group == 'clients':
-                    clients[vm_name] = final_vm
+                if group == 'servers':
+                    servers.append(final_vm)
+
+                elif group == 'clients':
+                    clients.append(final_vm)
+
                 elif group == 'zookeeper':
-                    zookeepers[vm_name] = final_vm
-                elif group == 'servers':
-                    servers[vm_name] = final_vm
+                    zookeepers.append(final_vm)
+
                 else:
                     # default is server group
-                    vm_name = "{}-{}".format(prefix, n['name'])
-                    default_group[vm_name] = final_vm
+                    default_group.append(final_vm)
             else:
                 print("Error in create instance.")
                 pprint(err)
+
+        # TODO(tq): we are writing two files with the same content but different format
+        # Can we consolidate that to one?
 
         # Create hosts file for Ansible
         with open('./{}/hosts'.format(args[0]), 'w') as hosts_file:
 
             for n in default_group:
-                print(default_group[n]['vm'].ext_ip, file=hosts_file)
+                print("{} int_ip={} vm_name={}".format(n['address'], n['int_ip'], n['conf']['name']), file=hosts_file)
 
             if len(servers) > 0:
                 print("[servers]", file=hosts_file)
             for n in servers:
-                print(servers[n]['vm'].ext_ip, file=hosts_file)
+                print("{} int_ip={} vm_name={}".format(n['address'], n['int_ip'], n['conf']['name']), file=hosts_file)
 
             if len(clients) > 0:
                 print("[clients]", file=hosts_file)
             for n in clients:
-                print(clients[n]['vm'].ext_ip, file=hosts_file)
+                print("{} int_ip={} vm_name={}".format(n['address'], n['int_ip'], n['conf']['name']), file=hosts_file)
 
             if len(zookeepers) > 0:
                 print("[zookeeper]", file=hosts_file)
             for n in zookeepers:
-                print(zookeepers[n]['vm'].ext_ip, file=hosts_file)
+                print("{} int_ip={} vm_name={}".format(n['address'], n['int_ip'], n['conf']['name']), file=hosts_file)
 
-        # Create ifconfig.txt for ExpoDB
-        create_ifconfig_file("..", servers, clients)
+        # Create ifconfig.txt for ExpoDB and update node objects with nid value
+        servers, clients = create_ifconfig_file("..", servers, clients)
 
         # Create site_deploy.yml
         try:

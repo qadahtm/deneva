@@ -1,0 +1,27 @@
+- hosts: all
+  vars:
+    build_dir: "~/expodb-build"
+  tasks:
+    - name: RSync ExpoDB Codebase
+      synchronize:
+        src: ../../
+        dest: ~/expodb
+
+    - name: Create build directory
+      file:
+        state: directory
+        path: ~/expodb-build
+
+    - name: Build code
+      command: "{{ item }} chdir={{ build_dir }}"
+      with_items:
+        - cmake ~/expodb
+        - make
+
+    - name: Start node
+      command: "python3 start_node.py {{ int_ip }} chdir={{ build_dir }}"
+      register: command_result
+      failed_when: "'FAILED' in command_result.stderr"
+    - local_action: "copy content='{{ command_result.stdout }}' dest=./logs/{{ vm_name }}.out"
+    - local_action: "copy content='{{ command_result.stderr }}' dest=./logs/{{ vm_name }}.err"
+
