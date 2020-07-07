@@ -3,14 +3,34 @@
 import sys, getopt
 import yaml
 
+# TODO(tq): all interaction with cloud is synchrounous, we should convert them to asynchronous
 
 def usage():
     print('provision.py [-h, --ceploy-home=/path/to/ceploy, --conf-file=/path/to/ceploy-conf] <inventory directory>')
 
 
-def delete_hosts(opts, args):
-    pass
+def delete_hosts(opts, args, cloud):
 
+    with open("../conf/site_deploy.yml") as sf:
+        conf = yaml.full_load(sf)
+        for vm in conf['servers']:
+            name = vm['conf']['vm_name']
+            zone = vm['conf']['zone']
+            cloud.delete_instance(name, zone)
+
+
+        for vm in conf['clients']:
+            name = vm['conf']['vm_name']
+            zone = vm['conf']['zone']
+            cloud.delete_instance(name, zone)
+
+        for vm in conf['zookeeper']:
+            name = vm['conf']['vm_name']
+            zone = vm['conf']['zone']
+            cloud.delete_instance(name, zone)
+
+    print("Done deleting VMs")
+    sys.exit(0)
 
 def get_vm_name(prefix, n):
     return "{}-{}-{}".format(prefix, n['group'], n['name'])
@@ -18,7 +38,7 @@ def get_vm_name(prefix, n):
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "hd", ["help", "delete-hosts", "ceploy-home=", "conf-file="])
+        opts, args = getopt.getopt(argv, "hd", ["help", "delete", "ceploy-home=", "conf-file="])
     except getopt.GetoptError:
         usage()
         sys.exit(2)
@@ -32,18 +52,7 @@ def main(argv):
         usage()
         sys.exit(1)
 
-    for o, a in opts:
-        if o == '--conf-file':
-            cloud_conf_file = a
-        elif o == '--ceploy-home':
-            ceploy_home = a
-        elif o == '--delete-hosts':
-            delete_hosts(opts, args)
-        elif o == '-h':
-            usage()
-
     sys.path.append("{}/src".format(ceploy_home))
-
     from ceploy.cloud import Cloud
     from ceploy.constants import Provider
 
@@ -52,6 +61,16 @@ def main(argv):
 
     # initiate Cloud context
     cloud = Cloud.make(Provider.GCLOUD, cloud_conf_file)
+
+    for o, a in opts:
+        if o == '--conf-file':
+            cloud_conf_file = a
+        elif o == '--ceploy-home':
+            ceploy_home = a
+        elif o == '--delete':
+            delete_hosts(opts, args, cloud)
+        elif o == '-h':
+            usage()
 
     deploy_vms_and_create_hosts_file(args, cloud)
 
@@ -114,6 +133,7 @@ def deploy_vms_and_create_hosts_file(args, cloud):
                 final_vm['conf'] = n
                 final_vm['address'] = tvm.ext_ip
                 final_vm['int_ip'] = tvm.int_ip
+                final_vm['conf']['vm_name'] = vm_name
 
                 if group == 'servers':
                     servers.append(final_vm)
