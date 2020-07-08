@@ -3,34 +3,14 @@
 import sys, getopt
 import yaml
 
-# TODO(tq): all interaction with cloud is synchrounous, we should convert them to asynchronous
 
 def usage():
     print('provision.py [-h, --ceploy-home=/path/to/ceploy, --conf-file=/path/to/ceploy-conf] <inventory directory>')
 
 
-def delete_hosts(opts, args, cloud):
+def delete_hosts(opts, args):
+    pass
 
-    with open("../conf/site_deploy.yml") as sf:
-        conf = yaml.full_load(sf)
-        for vm in conf['servers']:
-            name = vm['conf']['vm_name']
-            zone = vm['conf']['zone']
-            cloud.delete_instance(name, zone)
-
-
-        for vm in conf['clients']:
-            name = vm['conf']['vm_name']
-            zone = vm['conf']['zone']
-            cloud.delete_instance(name, zone)
-
-        for vm in conf['zookeeper']:
-            name = vm['conf']['vm_name']
-            zone = vm['conf']['zone']
-            cloud.delete_instance(name, zone)
-
-    print("Done deleting VMs")
-    sys.exit(0)
 
 def get_vm_name(prefix, n):
     return "{}-{}-{}".format(prefix, n['group'], n['name'])
@@ -38,7 +18,7 @@ def get_vm_name(prefix, n):
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "hd", ["help", "delete", "mock", "ceploy-home=", "conf-file="])
+        opts, args = getopt.getopt(argv, "hd", ["help", "delete-hosts", "ceploy-home=", "conf-file="])
     except getopt.GetoptError:
         usage()
         sys.exit(2)
@@ -52,7 +32,18 @@ def main(argv):
         usage()
         sys.exit(1)
 
+    for o, a in opts:
+        if o == '--conf-file':
+            cloud_conf_file = a
+        elif o == '--ceploy-home':
+            ceploy_home = a
+        elif o == '--delete-hosts':
+            delete_hosts(opts, args)
+        elif o == '-h':
+            usage()
+
     sys.path.append("{}/src".format(ceploy_home))
+
     from ceploy.cloud import Cloud
     from ceploy.constants import Provider
 
@@ -61,21 +52,8 @@ def main(argv):
 
     # initiate Cloud context
     cloud = Cloud.make(Provider.GCLOUD, cloud_conf_file)
-    mock = False
 
-    for o, a in opts:
-        if o == '--conf-file':
-            cloud_conf_file = a
-        elif o == '--ceploy-home':
-            ceploy_home = a
-        elif o == '--delete':
-            delete_hosts(opts, args, cloud)
-        elif o == '--mock':
-            mock = True
-        elif o == '-h':
-            usage()
-
-    deploy_vms_and_create_hosts_file(args, cloud, mock)
+    deploy_vms_and_create_hosts_file(args, cloud)
 
 
 def print_error(msg):
@@ -87,13 +65,6 @@ def print_warning(msg):
     from ceploy.constants import OutputColors
     print("{}{}{}".format(OutputColors.COLOR_YELLOW, msg, OutputColors.COLOR_RESET))
 
-def add_replica_mapping(servers, replica_groups):
-    servers_res = []
-    for s in servers:
-        s['replicas'] = replica_groups[s['replica_group']].copy()
-        s['replicas'].remove(s['nid'])
-        servers_res.append(s)
-    return servers_res
 
 def create_ifconfig_file(output_path, servers, clients):
     with open("{}/ifconfig.txt".format(output_path), 'w') as ifconfig_file:
@@ -104,7 +75,7 @@ def create_ifconfig_file(output_path, servers, clients):
         for n in servers:
             # print(n['address'], file=ifconfig_file)
             print(n['int_ip'], file=ifconfig_file)
-            assert (n['nid'] == nid)
+            n['nid'] = nid
             nid += 1
 
         if len(clients) == 0:
@@ -112,40 +83,12 @@ def create_ifconfig_file(output_path, servers, clients):
         for n in clients:
             # print(n['address'], file=ifconfig_file)
             print(n['int_ip'], file=ifconfig_file)
-            assert(n['nid'] == nid)
+            n['nid'] = nid
             nid += 1
     return servers, clients
 
 
-def simplify_servers(servers):
-    res = []
-    sn = {}
-    for s in servers:
-        sn['address'] = s['address']
-        sn['nid'] = s['nid']
-        replica_set = set()
-        for r in servers:
-            if r['replica_group'] == s['replica_group']:
-                replica_set.add(r['nid'])
-        sn['replicas'] = sorted(list(replica_set))
-        sn['replicas'].remove(s['nid'])
-        res.append(sn.copy())
-        sn = {}
-    return res
-
-def simplify_clients(clients):
-    res = []
-    for s in clients:
-        res.append(s['address'])
-    return res
-
-def simplify_zk(zk_nodes):
-    res = []
-    for s in zk_nodes:
-        res.append("{}:{}".format(s['address'], s['port']))
-    return res
-
-def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
+def deploy_vms_and_create_hosts_file(args, cloud):
     from ceploy.providers.gcloud import GCVM
 
     with open('../conf/site.yml') as site_file:
@@ -155,7 +98,6 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
         prefix = site['prefix']
 
         servers = []
-        replica_groups = {}
         clients = []
         zookeepers = []
         default_group = {}
@@ -163,44 +105,23 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
         for n in site['nodes']:
             group = n['group']
             vm_name = get_vm_name(prefix, n)
-            if not mock:
-                status, vm, err = cloud.create_instance(vm_name, n['template'], n['zone'])
-            else:
-                status = True
-
+            status, vm, err = cloud.create_instance(vm_name, n['template'], n['zone'])
             if status:
                 final_vm = {}
-                tvm = {}
-                if not mock:
-                    tvm = GCVM(vm[0])
-                else:
-                    tvm['ext_ip'] = "127.0.0.1"
-                    tvm['int_ip'] = "127.0.0.1"
+                tvm = GCVM(vm[0])
                 # final_vm['vm'] = GCVM(vm[0])
                 # final_vm['vm_raw'] = vm[0]
                 final_vm['conf'] = n
-                final_vm['address'] = tvm['ext_ip']
-                final_vm['int_ip'] = tvm['int_ip']
-                final_vm['conf']['vm_name'] = vm_name
+                final_vm['address'] = tvm.ext_ip
+                final_vm['int_ip'] = tvm.int_ip
 
                 if group == 'servers':
-                    if (len(clients) > 0):
-                        raise RuntimeError("Servers must be all declared before clients in site.yaml")
-
-                    final_vm['replica_group'] = n['replica_group']
-                    final_vm['nid'] = len(servers)
-                    if n['replica_group'] in replica_groups.keys():
-                        replica_groups[n['replica_group']].append(final_vm['nid'])
-                    else:
-                        replica_groups[n['replica_group']] = [final_vm['nid']]
                     servers.append(final_vm)
 
                 elif group == 'clients':
-                    final_vm['nid'] = len(clients)+len(servers)
                     clients.append(final_vm)
 
                 elif group == 'zookeeper':
-                    final_vm['port'] = n['port']
                     zookeepers.append(final_vm)
 
                 else:
@@ -237,29 +158,13 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
         # Create ifconfig.txt for ExpoDB and update node objects with nid value
         servers, clients = create_ifconfig_file("..", servers, clients)
 
-        #Add replica mapping
-        servers = add_replica_mapping(servers, replica_groups)
-
-        # Create site_deploy_details.yml
-        try:
-            with open("../conf/site_deploy_details.yml", "w") as site_deploy:
-                doc = {}
-                doc['servers'] = servers
-                doc['clients'] = clients
-                doc['zookeeper'] = zookeepers
-                doc['replica_groups'] = replica_groups
-                yaml.dump(doc, site_deploy)
-        except Exception as e:
-            print_error("Could not dump YAML site_deploy file")
-            print_error(e)
-
         # Create site_deploy.yml
         try:
             with open("../conf/site_deploy.yml", "w") as site_deploy:
                 doc = {}
-                doc['servers'] = simplify_servers(servers)
-                doc['clients'] = simplify_clients(clients)
-                doc['zookeeper'] = simplify_zk(zookeepers)
+                doc['servers'] = servers
+                doc['clients'] = clients
+                doc['zookeeper'] = zookeepers
                 yaml.dump(doc, site_deploy)
         except Exception as e:
             print_error("Could not dump YAML site_deploy file")
