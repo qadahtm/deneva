@@ -40,7 +40,7 @@ void Paxos::init(const string &zookeeper_config_file, bool reader, const string 
     this->batchPathPrefix = (rootPath + string("/batch-"));
     this->traceNodeCreation = traceNodeCreation;
 
-    auto conf = new config_yaml(false);
+    auto conf = new config_yaml();
     int rc = conf->load(zookeeper_config_file);
     if (rc == 1) {
         printf("Loading Zookeeper config failed.\n");
