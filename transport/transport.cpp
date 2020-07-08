@@ -184,7 +184,7 @@ void Transport::init() {
     _sock_cnt = get_socket_count();
 
     // Loading YAML-based config
-    _yaml_conf = new config_yaml(true);
+    _yaml_conf = new config_yaml();
 //    _yaml_conf->load(get_yaml_conf_path().c_str());
 
     rr = 0;

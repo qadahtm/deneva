@@ -101,7 +101,7 @@ add_sources(
 )
 #Important note:
 # When running on Ubuntu 18.04 we need to install dependent packages via apt/apt-get using the following command (See INSTALL.md for details).
-# $ sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-dev libnanomsg-dev libjemalloc-dev python3
+# $ sudo apt-get install -y cmake libboost-atomic-dev libnuma-dev libyaml-cpp-dev libnanomsg-dev libjemalloc-dev python3
 
 
 if(APPLE)
@@ -135,10 +135,7 @@ if (DEV_ENV)
 endif ()
 
 
-#using libyaml installed by apt-get on host
-target_link_libraries(expodb yaml)
-
-#using libyaml installed by apt-get on host
+#using libyaml-cpp installed by apt-get on host
 target_link_libraries(expodb yaml-cpp)
 
 
