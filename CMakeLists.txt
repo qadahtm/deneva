@@ -4,6 +4,7 @@ project(expodb-qcd)
 set(CMAKE_CXX_STANDARD 11)
 #set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set(CMAKE_BUILD_TYPE Debug)
+set(DEV_ENV OFF)
 
 macro (add_sources)
     file (RELATIVE_PATH _relPath "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -126,10 +127,12 @@ else()
     target_link_libraries(expodb jemalloc nanomsg pthread)
 endif()
 
-# Copy scripts
-configure_file(run_local_test.sh run_local_test.sh COPYONLY)
-configure_file(start_node.py start_node.py COPYONLY)
-configure_file(ifconfig.txt ifconfig.txt COPYONLY)
+if (DEV_ENV)
+    # Copy scripts
+    configure_file(run_local_test.sh run_local_test.sh COPYONLY)
+    configure_file(start_node.py start_node.py COPYONLY)
+    configure_file(ifconfig.txt ifconfig.txt COPYONLY)
+endif ()
 
 
 #using libyaml installed by apt-get on host
