@@ -105,16 +105,16 @@ add_sources(
 
 
 if(APPLE)
-    include_directories("/usr/local/Cellar/boost/1.67.0_1/include")
-    include_directories("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1")
-    include_directories("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/8.1.0/include")
+    include_directories("/usr/local/Cellar/boost/1.72.0_3/include")
+    include_directories("/Applications/Xcode.app/Contents//Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include")
+    include_directories("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.3/include")
     include_directories(../deps/zookeeper_mac/include)
 
     include_directories("../deps/jemalloc_mac/include")
     include_directories("../deps/nanomsg_mac/include")
     link_directories(../deps/jemalloc_mac/lib)
     link_directories(../deps/nanomsg_mac/lib)
-    link_directories("/usr/local/Cellar/boost/1.67.0_1/lib")
+    link_directories("/usr/local/Cellar/boost/1.72.0_3/lib")
 
 endif()
 

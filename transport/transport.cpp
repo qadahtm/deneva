@@ -29,7 +29,7 @@ void Transport::read_ifconfig(const char *ifaddr_file) {
 
     ifaddr = new char *[g_total_node_cnt];
 
-    uint64_t cnt = 0;
+    UInt32 cnt = 0;
     printf("Reading ifconfig file: %s\n", ifaddr_file);
     ifstream fin(ifaddr_file);
     string line;
@@ -37,10 +37,10 @@ void Transport::read_ifconfig(const char *ifaddr_file) {
         //memcpy(ifaddr[cnt],&line[0],12);
         ifaddr[cnt] = new char[line.length() + 1];
         strcpy(ifaddr[cnt], &line[0]);
-        printf("%ld: %s\n", cnt, ifaddr[cnt]);
+        printf("%u: %s\n", cnt, ifaddr[cnt]);
         cnt++;
     }
-    assert(cnt == g_total_node_cnt);
+    M_ASSERT_V(cnt == g_total_node_cnt, "ifconfig_cnt=%u, g_total_node_cnt=%u\n", cnt, g_total_node_cnt)
 }
 
 uint64_t Transport::get_socket_count() {
@@ -95,7 +95,7 @@ uint64_t Transport::get_port_id(uint64_t src_node_id, uint64_t dest_node_id) {
     uint64_t port_id = TPORT_PORT;
     port_id += g_total_node_cnt * dest_node_id;
     port_id += src_node_id;
-    DEBUG("Port ID:  %ld -> %ld : %ld\n", src_node_id, dest_node_id, port_id);
+    DEBUG("Port ID:  %lu -> %lu : %lu\n", src_node_id, dest_node_id, port_id);
     return port_id;
 }
 
@@ -185,7 +185,7 @@ void Transport::init() {
 
     // Loading YAML-based config
     _yaml_conf = new config_yaml();
-//    _yaml_conf->load(get_yaml_conf_path().c_str());
+    _yaml_conf->load(get_yaml_conf_path().c_str());
 
     rr = 0;
     printf("Tport Init %d: %ld\n", g_node_id, _sock_cnt);
@@ -193,6 +193,7 @@ void Transport::init() {
     string path = get_path();
     read_ifconfig(path.c_str());
 
+    //TQ: this part where we connect to all nodes
     for (uint64_t node_id = 0; node_id < g_total_node_cnt; node_id++) {
         if (node_id == g_node_id)
             continue;

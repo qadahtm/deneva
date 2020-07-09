@@ -5,7 +5,8 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define NODE_CNT 2
+// We need to count all servers including replicas in NODE_CNT
+#define NODE_CNT 4
 //#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
 #define THREAD_CNT 4
 #define REM_THREAD_CNT 2
