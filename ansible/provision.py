@@ -95,13 +95,13 @@ def add_replica_mapping(servers, replica_groups):
         servers_res.append(s)
     return servers_res
 
-def create_ifconfig_file(output_path, servers, clients):
+def create_ifconfig_file(output_path, primaries, replicas, clients):
     with open("{}/ifconfig.txt".format(output_path), 'w') as ifconfig_file:
         nid = 0
-        if len(servers) == 0:
+        if len(primaries) == 0:
             print_warning("Warning: Server IPs list is empty")
 
-        for n in servers:
+        for n in primaries:
             # print(n['address'], file=ifconfig_file)
             print(n['int_ip'], file=ifconfig_file)
             assert (n['nid'] == nid)
@@ -109,12 +109,23 @@ def create_ifconfig_file(output_path, servers, clients):
 
         if len(clients) == 0:
             print_warning("Warning: Client IPs list is empty")
+
         for n in clients:
             # print(n['address'], file=ifconfig_file)
             print(n['int_ip'], file=ifconfig_file)
             assert(n['nid'] == nid)
             nid += 1
-    return servers, clients
+
+        if len(replicas) == 0:
+            print_warning("Warning: Replica IPs list is empty")
+
+        for n in replicas:
+            # print(n['address'], file=ifconfig_file)
+            print(n['int_ip'], file=ifconfig_file)
+            assert (n['nid'] == nid)
+            nid += 1
+
+
 
 
 def simplify_servers(servers):
@@ -156,10 +167,13 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
 
         servers = []
         replica_groups = {}
+        primaries = []
+        replicas = []
         clients = []
         zookeepers = []
         default_group = {}
 
+        si = 1
         for n in site['nodes']:
             group = n['group']
             vm_name = get_vm_name(prefix, n)
@@ -174,8 +188,10 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
                 if not mock:
                     tvm = GCVM(vm[0])
                 else:
-                    tvm['ext_ip'] = "127.0.0.1"
-                    tvm['int_ip'] = "127.0.0.1"
+                    # si += 1
+                    tvm['ext_ip'] = "127.0.0.{}".format(si)
+                    tvm['int_ip'] = "127.0.0.{}".format(si)
+
                 # final_vm['vm'] = GCVM(vm[0])
                 # final_vm['vm_raw'] = vm[0]
                 final_vm['conf'] = n
@@ -188,15 +204,19 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
                         raise RuntimeError("Servers must be all declared before clients in site.yaml")
 
                     final_vm['replica_group'] = n['replica_group']
-                    final_vm['nid'] = len(servers)
                     if n['replica_group'] in replica_groups.keys():
-                        replica_groups[n['replica_group']].append(final_vm['nid'])
+                        final_vm['nid'] = -1 # set invalid nid for now
+                        replicas.append(final_vm)
+
                     else:
+                        final_vm['nid'] = len(primaries)
                         replica_groups[n['replica_group']] = [final_vm['nid']]
+                        primaries.append(final_vm)
+
                     servers.append(final_vm)
 
                 elif group == 'clients':
-                    final_vm['nid'] = len(clients)+len(servers)
+                    final_vm['nid'] = len(clients)+len(primaries)
                     clients.append(final_vm)
 
                 elif group == 'zookeeper':
@@ -209,6 +229,14 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
             else:
                 print("Error in create instance.")
                 pprint(err)
+
+        # We have not assigned nid to replicas replica list
+        # Replica's ids should be after clients
+        ri = 0
+        for r in replicas:
+            r['nid'] = len(primaries)+len(clients)+ri
+            replica_groups[r['replica_group']].append(r['nid'])
+            ri += 1
 
         # TODO(tq): we are writing two files with the same content but different format
         # Can we consolidate that to one?
@@ -235,7 +263,7 @@ def deploy_vms_and_create_hosts_file(args, cloud, mock=True):
                 print("{} int_ip={} vm_name={}".format(n['address'], n['int_ip'], n['conf']['name']), file=hosts_file)
 
         # Create ifconfig.txt for ExpoDB and update node objects with nid value
-        servers, clients = create_ifconfig_file("..", servers, clients)
+        create_ifconfig_file("..", primaries, replicas, clients)
 
         #Add replica mapping
         servers = add_replica_mapping(servers, replica_groups)
