@@ -56,7 +56,9 @@ void InputThread::setup() {
                   continue;
                 }
                 if( msg->rtype == RDONE || msg->rtype == CL_QRY) {
-                  assert(ISSERVERN(msg->get_return_id()));
+                    M_ASSERT_V(ISSERVERN(msg->get_return_id()),
+                               "return nid=%lu\n", msg->get_return_id())
+//                  assert(ISSERVERN(msg->get_return_id()));
                   work_queue.sched_enqueue(get_thd_id(),msg);
                   msgs->erase(msgs->begin());
                   continue;
@@ -200,6 +202,14 @@ RC InputThread::server_recv_loop() {
                 msgs->erase(msgs->begin());
                 continue;
             }
+
+            if (ISREPLICAN(g_node_id) && !is_leader && msg->rtype == CL_QRY){
+                // This  case is when a follower receives a client transaction
+                DEBUG_Q("N_%d: I am a replica, got a client query. Should forward that to leader with id= %d\n",
+                        g_node_id, g_node_id-(g_client_node_cnt+g_node_cnt));
+                // FIXME(tq): forward to leader sequencer
+                assert(false);
+            }
 #if CC_ALG == CALVIN
             if(msg->rtype == CALVIN_ACK ||(msg->rtype == CL_QRY && ISCLIENTN(msg->get_return_id()))) {
               work_queue.sequencer_enqueue(get_thd_id(),msg);
@@ -207,7 +217,10 @@ RC InputThread::server_recv_loop() {
               continue;
             }
             if( msg->rtype == RDONE || msg->rtype == CL_QRY) {
-              assert(ISSERVERN(msg->get_return_id()));
+              //TODO(tq): RDONE is sent by sequencers so eventually
+              // this assertion should be removed especially when there is
+              // a dynamic configuration for leaders/follower replicas
+                assert(ISSERVERN(msg->get_return_id()));
               work_queue.sched_enqueue(get_thd_id(),msg);
               msgs->erase(msgs->begin());
               continue;
@@ -221,7 +234,7 @@ RC InputThread::server_recv_loop() {
                 // assume 1 input thread
                 // FIXME(tq): if there are > 1 input threads planner_msg_cnt risks a race condition and must inc atomically
                 uint64_t dplan_id = planner_msg_cnt % g_plan_thread_cnt;
-                planner_enq_msg_cnt[dplan_id]++;
+//                planner_enq_msg_cnt[dplan_id]++;
                 work_queue.plan_enqueue(dplan_id, msg);
                 planner_msg_cnt++;
 #if DEBUG_QUECC & false

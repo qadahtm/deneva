@@ -308,7 +308,7 @@ void QWorkQueue::sequencer_enqueue(uint64_t thd_id, Message * msg) {
 Message * QWorkQueue::sequencer_dequeue(uint64_t thd_id) {
   assert(CC_ALG == CALVIN);
 
-  assert(ISSERVER);
+  assert(ISSERVER || ISREPLICA);
   Message * msg = NULL;
 #if CC_ALG == CALVIN
   uint64_t starttime = get_sys_clock();

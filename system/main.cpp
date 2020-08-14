@@ -207,6 +207,17 @@ int main(int argc, char* argv[])
   txn_table.init();
   printf("Done\n");
 
+#if REPLICATION_ENABLED
+  // Initially, server nodes are leaders
+  // TODO(tq): fix this after implementing leader election
+  if (ISSERVERN(g_node_id)){
+      is_leader = true;
+  }
+  else{
+      is_leader = false;
+  }
+#endif
+
 
 #if CC_ALG == HSTORE
     printf("Initializing partition lock manager... ");

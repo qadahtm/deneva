@@ -5,10 +5,10 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-// We need to count all servers including replicas in NODE_CNT
-#define NODE_CNT 4
-//#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
-#define THREAD_CNT 4
+// Primary Servers nodes without replicas
+#define NODE_CNT 2
+#define THREAD_CNT 2 // For calvin use smaller worker thread count since sequencer + scheduler occupy 2 threads already
+//#define THREAD_CNT 4
 #define REM_THREAD_CNT 2
 #define SEND_THREAD_CNT 2
 #define CORE_CNT 8
@@ -33,9 +33,10 @@
 #define LOAD_PER_SERVER 100
 
 // Replication
-#define REPLICA_CNT 0
+#define REPLICA_CNT 1 // Assume each server has this amount of replicas/followers
 // AA (Active-Active), AP (Active-Passive)
 #define REPL_TYPE AP
+#define REPLICATION_ENABLED (REPLICA_CNT>0)
 
 // each transaction only accesses only 1 virtual partition. But the lock/ts manager and index are not aware of such partitioning. VIRTUAL_PART_CNT describes the request distribution and is only used to generate queries. For HSTORE, VIRTUAL_PART_CNT should be the same as PART_CNT.
 #define VIRTUAL_PART_CNT    PART_CNT  
@@ -127,9 +128,9 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, TIMESTAMP, MVCC,OCC, CALVIN, MAAT, QUECC, DUMMY_CC, HSTORE, SILO, LADS
 //#define CC_ALG NO_WAIT
-#define CC_ALG QUECC
+//#define CC_ALG QUECC
 //#define CC_ALG MAAT
-//#define CC_ALG CALVIN
+#define CC_ALG CALVIN
 #define ISOLATION_LEVEL SERIALIZABLE
 //#define ISOLATION_LEVEL READ_COMMITTED
 #define YCSB_ABORT_MODE false
@@ -393,7 +394,7 @@
 #define FIELD_PER_TUPLE       10
 #define YCSB_DO_OPERATION true
 
-#define YCSB_LONG_READS_TXN_ENABLED true
+#define YCSB_LONG_READS_TXN_ENABLED false
 #define YCSB_LONG_READS_TXN_PERC 0.5
 #define YCSB_LONG_READS_DB_PERC 0.1
 #define YCSB_LONG_READS_DB_PERC_MAX 0.8
@@ -504,7 +505,7 @@ enum PPSTxnType {PPS_ALL = 0,
 #define DEBUG_LATENCY       false
 
 // For QueCC
-#define DEBUG_QUECC false
+#define DEBUG_QUECC true
 // FOr Workload Debugging
 #define DEBUG_WLOAD false
 
@@ -609,8 +610,8 @@ enum PPSTxnType {PPS_ALL = 0,
 //#define SEQ_BATCH_TIMER 200 * 1 * MILLION // ~5ms -- same as CALVIN paper
 //#define DONE_TIMER 1 * 60 * BILLION // ~1 minutes
 //#define WARMUP_TIMER 1 * 60 * BILLION // ~1 minutes
-#define DONE_TIMER 1 * 10 * BILLION // debugging
-#define WARMUP_TIMER 1 * 10 * BILLION // debugging
+#define DONE_TIMER 1 * 3 * BILLION // debugging
+#define WARMUP_TIMER 1 * 3 * BILLION // debugging
 
 #define SEED 0
 #define SHMEM_ENV false

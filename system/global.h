@@ -272,6 +272,10 @@ extern double g_perc_updatepart;
 // CALVIN
 extern UInt32 g_seq_thread_cnt;
 
+#if REPLICATION_ENABLED
+extern bool is_leader;
+#endif
+
 // QUECC
 #if CC_ALG == QUECC || CC_ALG == LADS
 extern const UInt32 g_plan_thread_cnt;

@@ -199,6 +199,10 @@ UInt64 g_his_recycle_len = HIS_RECYCLE_LEN;
 // CALVIN
 UInt32 g_seq_thread_cnt = SEQ_THREAD_CNT;
 
+#if REPLICATION_ENABLED
+bool is_leader = false;
+#endif
+
 // QUECC
 #if CC_ALG == QUECC || CC_ALG == LADS
 #if PIPELINED

@@ -396,6 +396,12 @@ void Sequencer::send_next_batch(uint64_t thd_id) {
     en->batch_send_time = prof_stat;
   }
 
+  if (ISREPLICAN(g_node_id)){
+      return;
+  }
+
+  assert(ISSERVERN(g_node_id));
+
   Message * msg;
 
 #if SINGLE_NODE
@@ -409,6 +415,7 @@ void Sequencer::send_next_batch(uint64_t thd_id) {
     msg->batch_id = simulation->get_seq_epoch();
     work_queue.sched_enqueue(thd_id,msg);
 #else
+    //Send batch to schedulers. This is done once the batch is agreed upon (e.g., after sending it to Zookeeper)
   for(uint64_t j = 0; j < g_node_cnt; j++) {
     while(fill_queue[j].pop(msg)) {
       if(j == g_node_id) {
